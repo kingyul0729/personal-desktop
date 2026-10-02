@@ -148,6 +148,22 @@ button { cursor: pointer; }
 .program-actions button, .notepad button { color: var(--shell-ink); border-color: #e3adcd; }
 .program-actions button:hover, .notepad button:hover { background: #fce1f0; }
 .notepad textarea { background: #fffdfd; color: #43343f; border-radius: 8px; }
+.notepad-title { min-height: 40px; padding: 6px 12px; border: 1px solid #f0cfe2; border-radius: 8px; background: #fffdfd; color: #43343f; font-weight: 600; outline: none; }
+.notepad-title:focus-visible, .notepad textarea:focus-visible { box-shadow: 0 0 0 2px #f2a9d1; }
+.notepad-title::placeholder { color: #b18aa1; font-weight: 400; }
+.notepad-signin { margin-left: auto; font-size: .8125rem; color: #a2457a; text-decoration: underline; }
+.notepad-error { padding: 8px 16px; background: #fde4ef; color: #9b2c5c; border-bottom: 1px solid #eac1da; font-size: .875rem; }
+.notepad-list ul { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.notepad-list li { display: flex; align-items: stretch; gap: 6px; }
+.notepad-list .notepad-open { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; flex: 1; min-width: 0; min-height: 44px; padding: 10px 14px; text-align: left; background: #fffdfd; border: 1px solid #efc6dd; border-radius: 10px; color: #43343f; cursor: pointer; }
+.notepad-list .notepad-open[aria-current] { border-color: #d77aae; box-shadow: inset 0 0 0 1px #d77aae; }
+.notepad-list time { font-size: .8125rem; color: #a2457a; font-variant-numeric: tabular-nums; }
+.notepad-list strong { font-weight: 600; }
+.notepad-list span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #6d5866; font-size: .875rem; }
+.notepad-list .notepad-delete { flex: 0 0 44px; display: grid; place-items: center; background: #fffdfd; border: 1px solid #efc6dd; border-radius: 10px; color: #a2457a; cursor: pointer; }
+.notepad-list .notepad-delete:hover:not(:disabled) { background: #fde4ef; color: #9b2c5c; }
+.notepad-list button:focus-visible { outline: 2px solid var(--shell-accent); outline-offset: 2px; }
+.notepad-empty { margin: 24px auto; max-width: 32ch; text-align: center; color: #8c6b7f; }
 .terminal { background: #382431; color: #f9c8e4; }
 .terminal input { color: #fff3fb; caret-color: #ff95d0; }
 .document-viewer { background: #fbe9f4; }
@@ -473,3 +489,5 @@ button { cursor: pointer; }
   .pf-address { font-size: 12px; padding-inline: 8px; }
   .pf-image-grid { grid-template-columns: minmax(0, 1fr); }
 }
+.notepad > .border-t > span:first-child { flex-shrink: 0; white-space: nowrap; }
+.notepad > .border-t > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

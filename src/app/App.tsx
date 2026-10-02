@@ -88,7 +88,7 @@ export default function App() {
       <Window title="Program Manager" icon={<Monitor size={18} />} defaultPosition={{ x: 440, y: 120 }} defaultSize={{ width: 680, height: 500 }} {...shared('programManager')}>
         <ProgramManager />
       </Window>
-      <Window title="Notepad" icon={<FileText size={18} />} defaultPosition={{ x: 300, y: 135 }} defaultSize={{ width: 680, height: 480 }} {...shared('notepad')}>
+      <Window title="메모장" icon={<FileText size={18} />} defaultPosition={{ x: 300, y: 135 }} defaultSize={{ width: 680, height: 480 }} {...shared('notepad')}>
         <Notepad />
       </Window>
       <Window title="금액 계산" icon={<Calculator size={18} />} defaultPosition={{ x: 250, y: 52 }} defaultSize={{ width: 980, height: 680 }} {...shared('priceCalculator')}>

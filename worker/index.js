@@ -104,13 +104,83 @@ export function imageType(bytes) {
   return null;
 }
 
+const MEMO_LIMIT = 100000;
+const memoId = value => typeof value === 'string' && /^[A-Za-z0-9-]{8,64}$/.test(value) ? value : null;
+const memoTitle = value => typeof value === 'string' ? value.trim().slice(0, 100) : '';
+const memoPreview = content => content.replace(/\s+/g, ' ').trim().slice(0, 80);
+const memoBody = body => body && typeof body === 'object' && typeof body.content === 'string'
+  ? { title: memoTitle(body.title), content: body.content } : null;
+async function memoState(env, owner) {
+  const [rows, draft] = await Promise.all([
+    statement(env, 'SELECT id, title, content, created_at AS createdAt, saved_at AS savedAt FROM memos WHERE owner = ? ORDER BY saved_at DESC, rowid DESC', owner).all(),
+    statement(env, 'SELECT memo_id AS memoId, title, content, updated_at AS updatedAt FROM memo_drafts WHERE owner = ?', owner).first(),
+  ]);
+  return { authenticated: true, draft,
+    memos: rows.results.map(({ content, ...memo }) => ({ ...memo, preview: memoPreview(content) })) };
+}
+async function handleMemos(request, env, owner, url) {
+  if (url.pathname === '/api/memos' && request.method === 'GET') return json(await memoState(env, owner));
+  if (url.pathname === '/api/memo-draft' && request.method === 'PUT') {
+    const body = await request.json().catch(() => null);
+    const id = memoId(body?.memoId);
+    const memo = memoBody(body);
+    if (!id || !memo) return json({ error: '요청을 확인할 수 없습니다.' }, 400);
+    if (memo.content.length > MEMO_LIMIT) return json({ error: '메모는 10만 자까지 저장할 수 있습니다.' }, 413);
+    await statement(env, `INSERT INTO memo_drafts (owner, memo_id, title, content, updated_at) VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(owner) DO UPDATE SET memo_id = excluded.memo_id, title = excluded.title, content = excluded.content, updated_at = excluded.updated_at`,
+      owner, id, memo.title, memo.content, Date.now()).run();
+    return json({ ok: true });
+  }
+  const match = url.pathname.match(/^\/api\/memos\/([^/]+)$/);
+  const id = match && memoId(decodeId(match[1]));
+  if (match && !id) return json({ error: '메모를 찾을 수 없습니다.' }, 404);
+  if (id && request.method === 'GET') {
+    const row = await statement(env, 'SELECT id, title, content, created_at AS createdAt, saved_at AS savedAt FROM memos WHERE id = ? AND owner = ?', id, owner).first();
+    return row ? json(row) : json({ error: '메모를 찾을 수 없습니다.' }, 404);
+  }
+  if (id && request.method === 'PUT') {
+    const memo = memoBody(await request.json().catch(() => null));
+    if (!memo) return json({ error: '요청을 확인할 수 없습니다.' }, 400);
+    if (!memo.content.trim()) return json({ error: '메모 내용을 입력해 주세요.' }, 400);
+    if (memo.content.length > MEMO_LIMIT) return json({ error: '메모는 10만 자까지 저장할 수 있습니다.' }, 413);
+    const now = Date.now();
+    // The id comes from the editor, so saving again updates the same memo instead of adding a copy.
+    const [saved] = await env.DB.batch([
+      statement(env, `INSERT INTO memos (id, owner, title, content, created_at, saved_at) VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET title = excluded.title, content = excluded.content, saved_at = excluded.saved_at WHERE memos.owner = excluded.owner`,
+        id, owner, memo.title, memo.content, now, now),
+      statement(env, `INSERT INTO memo_drafts (owner, memo_id, title, content, updated_at) SELECT ?, ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM memos WHERE id = ? AND owner = ?)
+        ON CONFLICT(owner) DO UPDATE SET memo_id = excluded.memo_id, title = excluded.title, content = excluded.content, updated_at = excluded.updated_at`,
+        owner, id, memo.title, memo.content, now, id, owner),
+    ]);
+    if (!saved.meta.changes) return json({ error: '메모를 찾을 수 없습니다.' }, 404);
+    const row = await statement(env, 'SELECT id, title, content, created_at AS createdAt, saved_at AS savedAt FROM memos WHERE id = ? AND owner = ?', id, owner).first();
+    return json({ memo: row, ...(await memoState(env, owner)) });
+  }
+  if (id && request.method === 'DELETE') {
+    // Drop the draft too when it belongs to this memo, so another device does not bring it back.
+    const [removed] = await env.DB.batch([
+      statement(env, 'DELETE FROM memos WHERE id = ? AND owner = ?', id, owner),
+      statement(env, 'DELETE FROM memo_drafts WHERE owner = ? AND memo_id = ?', owner, id),
+    ]);
+    if (!removed.meta.changes) return json({ error: '메모를 찾을 수 없습니다.' }, 404);
+    return json(await memoState(env, owner));
+  }
+  return null;
+}
+
 export async function handleApi(request, env) {
   const url = new URL(request.url);
   const owner = request.headers.get('oai-authenticated-user-id');
   const signedIn = owner && request.headers.get('oai-authenticated-user-email');
-  if (!signedIn) return request.method === 'GET' && url.pathname === '/api/price-files'
-    ? json(publicFiles()) : json({ error: '로그인 후 이용해 주세요.' }, 401);
+  if (!signedIn) return request.method === 'GET' && url.pathname === '/api/price-files' ? json(publicFiles())
+    : request.method === 'GET' && url.pathname === '/api/memos' ? json({ authenticated: false, memos: [], draft: null })
+      : json({ error: '로그인 후 이용해 주세요.' }, 401);
   if (!['GET', 'HEAD'].includes(request.method) && request.headers.get('Origin') !== url.origin) return json({ error: '요청을 확인할 수 없습니다.' }, 403);
+  if (url.pathname.startsWith('/api/memo')) {
+    const response = await handleMemos(request, env, owner, url);
+    if (response) return response;
+  }
   if (url.pathname === '/api/price-files' && request.method === 'GET') return json(await list(env, owner));
 
   const imageMatch = url.pathname.match(/^\/api\/price-images\/([^/]+)$/);
@@ -180,7 +250,7 @@ export default {
     const url = new URL(request.url);
     if (url.pathname.startsWith('/api/')) {
       try { return await handleApi(request, env); }
-      catch (error) { console.error('Price image storage failed', error); return json({ error: '저장 공간에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.' }, 503); }
+      catch (error) { console.error('Storage request failed', error); return json({ error: '저장 공간에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.' }, 503); }
     }
     const response = await env.ASSETS.fetch(request);
     if (response.status !== 404 || url.pathname.includes('.')) return response;
