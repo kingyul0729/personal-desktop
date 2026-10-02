@@ -1,0 +1,1 @@
+ALTER TABLE `price_folders` ADD `catalog_version` integer DEFAULT 0 NOT NULL;
