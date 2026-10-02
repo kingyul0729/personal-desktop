@@ -1,4 +1,4 @@
-export const WINDOW_IDS = ['terminal', 'fileExplorer', 'controlPanel', 'programManager', 'notepad', 'priceCalculator'] as const;
+export const WINDOW_IDS = ['terminal', 'fileExplorer', 'controlPanel', 'programManager', 'notepad', 'priceCalculator', 'trash', 'files'] as const;
 export type WindowId = typeof WINDOW_IDS[number];
 
 export interface DesktopState {

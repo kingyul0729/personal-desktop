@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Menu } from 'lucide-react';
 import { activeWindow, type DesktopState, type WindowId } from '../desktopState';
-import { programs } from '../programs';
+import { programs, windowLabel } from '../programs';
 import { PinkFolderIcon } from './PinkFolderIcon';
 
 interface TaskbarProps {
@@ -53,7 +53,7 @@ export function Taskbar({ desktop, onOpenWindow, onTaskClick, currentTime }: Tas
     <div className="taskbar-divider" />
     <div className="taskbar-tasks" ref={tasksRef} role="group" aria-label="실행 중인 프로그램">
       {desktop.running.map((id) => {
-        const item = programs.find((program) => program.id === id)!;
+        const item = { label: windowLabel(id) };
         const minimized = desktop.minimized.includes(id);
         return <button type="button" key={id} className={`taskbar-task${minimized ? ' is-minimized' : ''}`}
           aria-label={`${item.label}${minimized ? ' 복원' : ''}`} aria-pressed={active === id}

@@ -1,0 +1,227 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { DatabaseSync } from 'node:sqlite';
+import { readFileSync, readdirSync } from 'node:fs';
+import { handleApi } from '../worker/index.js';
+
+const migrationFiles = readdirSync(new URL('../drizzle/', import.meta.url)).filter(name => name.endsWith('.sql')).sort();
+function environment(migrations = migrationFiles) {
+  const sqlite = new DatabaseSync(':memory:');
+  const apply = files => { for (const file of files) sqlite.exec(readFileSync(new URL(`../drizzle/${file}`, import.meta.url), 'utf8')); };
+  apply(migrations);
+  const objects = new Map();
+  const DB = {
+    prepare(sql) {
+      const statement = sqlite.prepare(sql);
+      return { bind(...values) { return {
+        async first() { return statement.get(...values) ?? null; },
+        async all() { return { results: statement.all(...values) }; },
+        async run() { const result = statement.run(...values); return { meta: { changes: result.changes } }; },
+      }; } };
+    },
+    async batch(statements) { sqlite.exec('BEGIN'); try { const result = []; for (const statement of statements) result.push(await statement.run()); sqlite.exec('COMMIT'); return result; } catch (error) { sqlite.exec('ROLLBACK'); throw error; } },
+  };
+  return { sqlite, apply, objects, DB, BUCKET: { async put(key, value) { objects.set(key, value); }, async get(key) { return objects.has(key) ? { body: objects.get(key) } : null; }, async delete(key) { objects.delete(key); } } };
+}
+function request(path, { method = 'GET', body, owner = 'me', tokens = [] } = {}) {
+  const headers = new Headers({ Origin: 'https://site.test' });
+  if (owner) { headers.set('oai-authenticated-user-id', owner); headers.set('oai-authenticated-user-email', `${owner}@test.invalid`); }
+  if (tokens.length) headers.set('X-Unlock-Tokens', tokens.join(','));
+  if (body && !(body instanceof FormData)) headers.set('Content-Type', 'application/json');
+  return new Request(`https://site.test${path}`, { method, headers, body: body instanceof FormData ? body : body ? JSON.stringify(body) : undefined });
+}
+const call = async (env, path, options) => { const response = await handleApi(request(path, options), env); return { status: response.status, data: response.headers.get('content-type')?.includes('json') ? await response.json() : response } };
+const act = (env, body, options = {}) => call(env, '/api/desktop', { method: 'POST', body, ...options });
+const png = () => new File([new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 1, 2])], 'a.png', { type: 'image/png' });
+const upload = async (env, kind) => { const form = new FormData(); form.set('file', png()); form.set('kind', kind); return call(env, '/api/desktop-assets', { method: 'POST', body: form }); };
+const program = (state, id) => state.items.find(item => item.target === `program:${id}`);
+
+test('signed-out visitors see the default desktop and cannot change it', async () => {
+  const env = environment();
+  const state = (await call(env, '/api/desktop', { owner: '' })).data;
+  assert.equal(state.authenticated, false);
+  assert.deepEqual(state.items.map(item => item.label), ['Terminal', '가격표 보관함', '환경설정', 'Programs', '메모장', '금액 계산', '휴지통']);
+  assert.equal((await act(env, { action: 'set-fit', fit: 'contain' }, { owner: '' })).status, 401);
+});
+
+test('wallpaper upload, choice and fit persist on the server for every device', async () => {
+  const env = environment();
+  const uploaded = await upload(env, 'wallpaper');
+  assert.equal(uploaded.status, 201);
+  const assetId = uploaded.data.asset.id;
+  await act(env, { action: 'set-wallpaper', assetId });
+  await act(env, { action: 'set-fit', fit: 'contain' });
+  const reloaded = (await call(env, '/api/desktop')).data;
+  assert.deepEqual(reloaded.settings, { wallpaper: { assetId, src: `/api/desktop-assets/${assetId}` }, fit: 'contain' });
+  assert.equal((await call(env, reloaded.settings.wallpaper.src)).status, 200);
+  assert.equal((await call(env, reloaded.settings.wallpaper.src, { owner: 'someone-else' })).status, 404);
+  assert.equal((await call(env, '/api/desktop', { owner: 'someone-else' })).data.settings.wallpaper, null);
+  await act(env, { action: 'set-wallpaper', assetId: null });
+  assert.deepEqual((await call(env, '/api/desktop')).data.settings, { wallpaper: null, fit: 'contain' });
+  assert.equal((await act(env, { action: 'set-wallpaper', assetId: 'aaaaaaaa-unknown' })).status, 404);
+});
+
+test('desktop labels, icons, visibility and order change without changing what an item opens', async () => {
+  const env = environment();
+  let state = (await call(env, '/api/desktop')).data;
+  const memo = program(state, 'notepad');
+  const icon = (await upload(env, 'icon')).data.asset.id;
+  state = (await act(env, { action: 'update-item', id: memo.id, label: '업무 메모', icon: `asset:${icon}` })).data;
+  assert.equal(program(state, 'notepad').label, '업무 메모');
+  assert.equal(program(state, 'notepad').icon, `asset:${icon}`);
+  assert.equal(program(state, 'notepad').target, 'program:notepad');
+  state = (await act(env, { action: 'update-item', id: memo.id, icon: 'folder:cherry' })).data;
+  assert.equal(program(state, 'notepad').icon, 'folder:cherry');
+  assert.equal(program(state, 'notepad').label, '업무 메모');
+  state = (await act(env, { action: 'update-item', id: memo.id, hidden: true })).data;
+  assert.equal(program(state, 'notepad').hidden, true);
+  state = (await act(env, { action: 'update-item', id: memo.id, hidden: false, label: '' })).data;
+  assert.equal(program(state, 'notepad').label, '메모장');
+  assert.equal((await act(env, { action: 'update-item', id: memo.id, icon: 'javascript:alert(1)' })).status, 400);
+  const before = state.items.map(item => item.target);
+  state = (await act(env, { action: 'move-item', id: memo.id, direction: -1 })).data;
+  const after = state.items.map(item => item.target);
+  assert.equal(after.indexOf('program:notepad'), before.indexOf('program:notepad') - 1);
+  assert.equal((await act(env, { action: 'remove-shortcut', id: memo.id })).status, 400);
+  assert.equal((await call(env, '/api/desktop')).data.items.filter(item => item.kind === 'program').length, 7);
+});
+
+test('new shortcuts link to a program or file; removing one never touches the target', async () => {
+  const env = environment();
+  let state = (await act(env, { action: 'create-file', kind: 'folder', name: '자료' })).data;
+  const folder = state.created;
+  state = (await act(env, { action: 'add-shortcut', label: '자료 바로가기', icon: 'folder:flower', target: `file:${folder}`, hidden: false })).data;
+  const shortcut = state.items.find(item => item.kind === 'shortcut');
+  assert.equal(shortcut.target, `file:${folder}`);
+  state = (await act(env, { action: 'add-shortcut', label: '계산', target: 'program:priceCalculator', hidden: true })).data;
+  assert.equal(state.items.find(item => item.label === '계산').hidden, true);
+  assert.equal((await act(env, { action: 'add-shortcut', label: '없음', target: 'program:nothing' })).status, 400);
+  state = (await act(env, { action: 'remove-shortcut', id: shortcut.id })).data;
+  assert.ok(!state.items.some(item => item.id === shortcut.id));
+  assert.ok(state.files.some(file => file.id === folder));
+});
+
+test('renaming a file keeps its id, content and desktop link; display labels stay separate', async () => {
+  const env = environment();
+  const id = (await act(env, { action: 'create-file', kind: 'file', name: '새 파일' })).data.created;
+  await act(env, { action: 'save-file', id, content: '본문' });
+  let state = (await act(env, { action: 'rename-file', id, name: '회의록' })).data;
+  assert.equal(state.files.find(file => file.id === id).name, '회의록');
+  assert.equal(state.items.find(item => item.target === `file:${id}`).label, '회의록');
+  assert.equal((await call(env, `/api/files/${id}`)).data.content, '본문');
+  const desktopFile = state.items.find(item => item.target === `file:${id}`);
+  assert.equal((await act(env, { action: 'update-item', id: desktopFile.id, label: '다른 이름' })).status, 400);
+  state = (await act(env, { action: 'update-item', id: desktopFile.id, hidden: true })).data;
+  assert.equal(state.items.find(item => item.id === desktopFile.id).hidden, true);
+  assert.equal((await call(env, `/api/files/${id}`)).data.content, '본문');
+  assert.equal((await call(env, `/api/files/${id}`, { owner: 'someone-else' })).status, 404);
+});
+
+test('folders hold files, moves keep data, and a folder cannot move into itself', async () => {
+  const env = environment();
+  const folder = (await act(env, { action: 'create-file', kind: 'folder', name: '폴더' })).data.created;
+  const inner = (await act(env, { action: 'create-file', kind: 'file', name: '안쪽', parentId: folder })).data.created;
+  let state = (await call(env, '/api/desktop')).data;
+  assert.ok(!state.items.some(item => item.target === `file:${inner}`));
+  assert.equal(state.files.find(file => file.id === inner).parentId, folder);
+  state = (await act(env, { action: 'move-file', id: inner, parentId: null })).data;
+  assert.ok(state.items.some(item => item.target === `file:${inner}`));
+  assert.equal((await act(env, { action: 'move-file', id: folder, parentId: folder })).status, 400);
+});
+
+test('locked files and folders are refused by the server until the right password unlocks them', async () => {
+  const env = environment();
+  const folder = (await act(env, { action: 'create-file', kind: 'folder', name: '비밀 폴더' })).data.created;
+  const inner = (await act(env, { action: 'create-file', kind: 'file', name: '안쪽 문서', parentId: folder })).data.created;
+  await act(env, { action: 'save-file', id: inner, content: '비밀 내용' });
+  assert.equal((await act(env, { action: 'lock-set', id: folder, password: '12' })).status, 400);
+  await act(env, { action: 'lock-set', id: folder, password: 'pink1234' });
+  const hidden = (await call(env, '/api/desktop')).data;
+  assert.equal(hidden.files.find(file => file.id === folder).locked, true);
+  assert.ok(!hidden.files.some(file => file.id === inner));
+  const blocked = await call(env, `/api/files/${inner}`);
+  assert.equal(blocked.status, 423);
+  assert.equal(blocked.data.lockedId, folder);
+  assert.ok(!JSON.stringify(blocked.data).includes('비밀 내용'));
+  for (const action of [{ action: 'rename-file', id: inner, name: 'x' }, { action: 'save-file', id: inner, content: 'x' }, { action: 'trash-file', id: folder }])
+    assert.equal((await act(env, action)).status, 423);
+  assert.equal((await act(env, { action: 'unlock', id: folder, password: 'wrong' })).status, 403);
+  const opened = await act(env, { action: 'unlock', id: folder, password: 'pink1234' });
+  assert.equal(opened.status, 200);
+  const tokens = [opened.data.token];
+  assert.ok(opened.data.files.some(file => file.id === inner));
+  assert.equal((await call(env, `/api/files/${inner}`, { tokens })).data.content, '비밀 내용');
+  assert.equal((await call(env, `/api/files/${inner}`, { tokens: ['forged'] })).status, 423);
+  assert.equal((await call(env, `/api/files/${inner}`, { tokens, owner: 'someone-else' })).status, 404);
+  const row = env.sqlite.prepare('SELECT lock_hash, lock_salt FROM user_files WHERE id = ?').get(folder);
+  assert.ok(row.lock_hash && !row.lock_hash.includes('pink1234') && row.lock_salt);
+  assert.ok(!JSON.stringify(env.sqlite.prepare('SELECT * FROM file_unlocks').all()).includes(tokens[0]));
+  assert.equal((await act(env, { action: 'lock-change', id: folder, current: 'wrong', next: 'newpass' })).status, 403);
+  await act(env, { action: 'lock-change', id: folder, current: 'pink1234', next: 'newpass' });
+  assert.equal((await call(env, `/api/files/${inner}`, { tokens })).status, 423, 'changing the password ends earlier access');
+  await act(env, { action: 'lock-remove', id: folder, password: 'newpass' });
+  assert.equal((await call(env, `/api/files/${inner}`)).data.content, '비밀 내용');
+});
+
+test('repeated wrong passwords pause further attempts', async () => {
+  const env = environment();
+  const id = (await act(env, { action: 'create-file', kind: 'file', name: '잠금' })).data.created;
+  await act(env, { action: 'lock-set', id, password: 'right-one' });
+  for (let i = 0; i < 5; i++) assert.equal((await act(env, { action: 'unlock', id, password: `bad${i}` })).status, 403);
+  assert.equal((await act(env, { action: 'unlock', id, password: 'right-one' })).status, 429);
+});
+
+test('trash keeps data until purge; restore returns to the original folder or the desktop', async () => {
+  const env = environment();
+  const folder = (await act(env, { action: 'create-file', kind: 'folder', name: '보관' })).data.created;
+  const inner = (await act(env, { action: 'create-file', kind: 'file', name: '문서', parentId: folder })).data.created;
+  await act(env, { action: 'save-file', id: inner, content: '남아 있어야 함' });
+  let state = (await act(env, { action: 'trash-file', id: inner })).data;
+  assert.ok(!state.files.some(file => file.id === inner));
+  assert.equal(state.trash[0].id, inner);
+  assert.equal(state.trash[0].location, '보관');
+  assert.ok(state.trash[0].trashedAt > 0);
+  assert.equal(env.sqlite.prepare('SELECT content FROM user_files WHERE id = ?').get(inner).content, '남아 있어야 함');
+  state = (await act(env, { action: 'restore-file', id: inner })).data;
+  assert.equal(state.restoredTo, folder);
+  assert.equal(state.files.find(file => file.id === inner).parentId, folder);
+  await act(env, { action: 'trash-file', id: inner });
+  await act(env, { action: 'trash-file', id: folder });
+  state = (await act(env, { action: 'restore-file', id: inner })).data;
+  assert.equal(state.restoredTo, null, 'the folder is in the trash, so the file returns to the desktop');
+  assert.ok(state.items.some(item => item.target === `file:${inner}`));
+  state = (await act(env, { action: 'purge-file', id: folder })).data;
+  assert.equal(state.trash.length, 0);
+  assert.equal(env.sqlite.prepare('SELECT count(*) AS n FROM user_files WHERE id = ?').get(folder).n, 0);
+  assert.equal((await act(env, { action: 'purge-file', id: inner })).status, 404, 'only trashed items can be purged');
+  await act(env, { action: 'trash-file', id: inner });
+  const locked = (await act(env, { action: 'create-file', kind: 'file', name: '잠금' })).data.created;
+  await act(env, { action: 'lock-set', id: locked, password: 'pink1234' });
+  const token = (await act(env, { action: 'unlock', id: locked, password: 'pink1234' })).data.token;
+  await act(env, { action: 'trash-file', id: locked }, { tokens: [token] });
+  state = (await act(env, { action: 'empty-trash' })).data;
+  assert.equal(state.skipped, 1);
+  assert.deepEqual(state.trash.map(item => item.id), [locked]);
+  assert.equal((await act(env, { action: 'purge-file', id: locked })).status, 423);
+  state = (await act(env, { action: 'purge-file', id: locked }, { tokens: [token] })).data;
+  assert.equal(state.trash.length, 0);
+  assert.ok(!state.items.some(item => item.target === `file:${inner}`));
+});
+
+test('adding the desktop tables keeps price lists, memos and drafts exactly as they were', async () => {
+  const before = migrationFiles.filter(name => !name.startsWith('0003'));
+  const env = environment(before);
+  for (const owner of ['me', 'other']) await call(env, '/api/price-files', { owner });
+  await call(env, '/api/price-files', { method: 'POST', body: { action: 'create-folder', name: '내 폴더', variant: 'flower' } });
+  const memo = '44444444-4444-4444-8444-444444444444';
+  await call(env, `/api/memos/${memo}`, { method: 'PUT', body: { title: '메모', content: '기존 메모' } });
+  await call(env, '/api/memo-draft', { method: 'PUT', body: { memoId: memo, title: '', content: '작성 중' } });
+  const snapshot = () => JSON.stringify(['price_folders', 'price_images', 'memos', 'memo_drafts'].map(table => env.sqlite.prepare(`SELECT * FROM ${table} ORDER BY rowid`).all()));
+  const saved = snapshot();
+  env.apply(migrationFiles.filter(name => name.startsWith('0003')));
+  assert.equal(snapshot(), saved);
+  await act(env, { action: 'create-file', kind: 'file', name: '새 파일' });
+  assert.equal(snapshot(), saved);
+  assert.equal((await call(env, '/api/memos')).data.memos[0].preview, '기존 메모');
+  assert.ok((await call(env, '/api/price-files')).data.folders.some(folder => folder.name === '내 폴더'));
+});

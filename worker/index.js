@@ -169,14 +169,378 @@ async function handleMemos(request, env, owner, url) {
   return null;
 }
 
+// Desktop: fixed programs can only be hidden or relabelled; shortcuts can be removed without
+// touching their target; user files go to trash first and are deleted only by purge.
+const PROGRAMS = [['terminal', 'Terminal'], ['fileExplorer', '가격표 보관함'], ['controlPanel', '환경설정'],
+  ['programManager', 'Programs'], ['notepad', '메모장'], ['priceCalculator', '금액 계산'], ['trash', '휴지통']];
+const FILE_LIMIT = 100000;
+const UNLOCK_MS = 30 * 60 * 1000;
+const LOCK_ATTEMPTS = 5;
+const LOCKOUT_MS = 60 * 1000;
+const validIcon = value => value === null || (typeof value === 'string' && /^(folder:(heart|kitty|flower|cherry)|asset:[A-Za-z0-9-]{8,64})$/.test(value));
+const fileId = value => typeof value === 'string' && /^[A-Za-z0-9-]{8,64}$/.test(value) ? value : null;
+const programTarget = target => typeof target === 'string' && PROGRAMS.some(([id]) => target === `program:${id}`);
+const assetSrc = id => `/api/desktop-assets/${encodeURIComponent(id)}`;
+const fail = (error, status = 400, extra = {}) => ({ error, status, ...extra });
+const hex = bytes => [...new Uint8Array(bytes)].map(b => b.toString(16).padStart(2, '0')).join('');
+async function sha256(text) { return hex(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text))); }
+async function hashPassword(password, salt) {
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveBits']);
+  return hex(await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt: new TextEncoder().encode(salt), iterations: 100000 }, key, 256));
+}
+function sameText(a, b) { if (a.length !== b.length) return false; let diff = 0; for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i); return diff === 0; }
+const validPassword = value => typeof value === 'string' && value.length >= 4 && value.length <= 64;
+
+export function publicDesktop() {
+  return { authenticated: false, settings: { wallpaper: null, fit: 'cover' }, assets: [], files: [], trash: [],
+    items: PROGRAMS.map(([id, label], sort) => ({ id: `program:${id}`, kind: 'program', target: `program:${id}`, label, defaultLabel: label, icon: null, hidden: false, sort })) };
+}
+async function seedDesktop(env, owner) {
+  const now = Date.now();
+  await env.DB.batch(PROGRAMS.map(([id], sort) => statement(env,
+    'INSERT OR IGNORE INTO desktop_items (id, owner, kind, target, label, icon, hidden, sort, created_at) VALUES (?, ?, ?, ?, NULL, NULL, 0, ?, ?)',
+    `${owner}:program:${id}`, owner, 'program', `program:${id}`, sort, now)));
+}
+async function unlockedIds(env, owner, request) {
+  const tokens = (request.headers.get('X-Unlock-Tokens') || '').split(',').map(t => t.trim()).filter(Boolean).slice(0, 20);
+  if (!tokens.length) return new Set();
+  const hashes = await Promise.all(tokens.map(sha256));
+  const rows = await statement(env, `SELECT file_id FROM file_unlocks WHERE owner = ? AND expires_at > ? AND token_hash IN (${hashes.map(() => '?').join(',')})`,
+    owner, Date.now(), ...hashes).all();
+  return new Set(rows.results.map(row => row.file_id));
+}
+async function loadFiles(env, owner) {
+  const rows = await statement(env, `SELECT id, parent_id AS parentId, kind, name, created_at AS createdAt, updated_at AS updatedAt,
+    trashed_at AS trashedAt, lock_hash IS NOT NULL AS locked FROM user_files WHERE owner = ?`, owner).all();
+  return new Map(rows.results.map(row => [row.id, { ...row, locked: !!row.locked }]));
+}
+// Walk from a file to the desktop; stops on a missing parent so a broken chain cannot loop forever.
+function ancestors(files, id) {
+  const chain = []; const seen = new Set();
+  for (let current = files.get(id); current && !seen.has(current.id); current = current.parentId ? files.get(current.parentId) : null) {
+    seen.add(current.id); chain.push(current);
+  }
+  return chain;
+}
+const blockedBy = (files, unlocked, id, includeSelf = true) =>
+  ancestors(files, id).slice(includeSelf ? 0 : 1).find(item => item.locked && !unlocked.has(item.id))?.id ?? null;
+const inTrash = (files, id) => ancestors(files, id).some(item => item.trashedAt);
+const fileView = (file, unlocked) => ({ id: file.id, parentId: file.parentId, kind: file.kind, name: file.name,
+  updatedAt: file.updatedAt, locked: file.locked, unlocked: file.locked && unlocked.has(file.id) });
+
+async function desktopState(env, owner, unlocked) {
+  await seedDesktop(env, owner);
+  const [files, items, settings, assets] = await Promise.all([
+    loadFiles(env, owner),
+    statement(env, 'SELECT id, kind, target, label, icon, hidden, sort FROM desktop_items WHERE owner = ? ORDER BY sort, rowid', owner).all(),
+    statement(env, 'SELECT wallpaper_asset_id AS assetId, wallpaper_fit AS fit FROM desktop_settings WHERE owner = ?', owner).first(),
+    statement(env, 'SELECT id, kind FROM desktop_assets WHERE owner = ? ORDER BY created_at, rowid', owner).all(),
+  ]);
+  const programLabel = target => PROGRAMS.find(([id]) => target === `program:${id}`)?.[1] ?? '';
+  const desktop = [];
+  for (const item of items.results) {
+    const base = { id: item.id, kind: item.kind, target: item.target, icon: item.icon, hidden: !!item.hidden, sort: item.sort };
+    if (item.kind === 'program') { desktop.push({ ...base, label: item.label || programLabel(item.target), defaultLabel: programLabel(item.target) }); continue; }
+    const linked = item.target.startsWith('file:') ? files.get(item.target.slice(5)) : null;
+    if (item.kind === 'file') {
+      // A desktop file shows only while the file itself sits on the desktop and is not in the trash.
+      if (!linked || linked.parentId || inTrash(files, linked.id) || blockedBy(files, unlocked, linked.id, false)) continue;
+      desktop.push({ ...base, label: linked.name, fileKind: linked.kind, locked: linked.locked });
+      continue;
+    }
+    const missing = item.target.startsWith('file:') && (!linked || inTrash(files, linked.id));
+    desktop.push({ ...base, label: item.label || programLabel(item.target), missing, fileKind: linked?.kind, locked: !!linked?.locked });
+  }
+  const visible = [...files.values()].filter(file => !inTrash(files, file.id) && !blockedBy(files, unlocked, file.id, false));
+  const trash = [...files.values()].filter(file => file.trashedAt).sort((a, b) => b.trashedAt - a.trashedAt).map(file => {
+    const parent = file.parentId ? files.get(file.parentId) : null;
+    return { id: file.id, kind: file.kind, name: file.name, trashedAt: file.trashedAt, locked: file.locked,
+      location: parent && !inTrash(files, parent.id) ? parent.name : '바탕화면' };
+  });
+  const wallpaper = settings?.assetId && assets.results.some(asset => asset.id === settings.assetId) ? { assetId: settings.assetId, src: assetSrc(settings.assetId) } : null;
+  return { authenticated: true, items: desktop, trash,
+    files: visible.map(file => fileView(file, unlocked)).sort((a, b) => (a.kind === b.kind ? 0 : a.kind === 'folder' ? -1 : 1) || a.name.localeCompare(b.name, 'ko')),
+    settings: { wallpaper, fit: settings?.fit === 'contain' ? 'contain' : 'cover' },
+    assets: assets.results.map(asset => ({ id: asset.id, kind: asset.kind, src: assetSrc(asset.id) })) };
+}
+
+async function checkPassword(env, owner, id, password) {
+  const row = await statement(env, 'SELECT lock_hash AS hash, lock_salt AS salt, lock_failures AS failures, lock_retry_at AS retryAt FROM user_files WHERE id = ? AND owner = ?', id, owner).first();
+  if (!row) return fail('파일을 찾을 수 없습니다.', 404);
+  if (!row.hash) return fail('잠겨 있지 않은 항목입니다.');
+  if (row.retryAt > Date.now()) return fail('비밀번호를 여러 번 틀렸습니다. 1분 뒤 다시 시도해 주세요.', 429);
+  if (typeof password === 'string' && sameText(await hashPassword(password, row.salt), row.hash)) {
+    if (row.failures) await statement(env, 'UPDATE user_files SET lock_failures = 0 WHERE id = ? AND owner = ?', id, owner).run();
+    return null;
+  }
+  const failures = row.failures + 1;
+  await statement(env, 'UPDATE user_files SET lock_failures = ?, lock_retry_at = ? WHERE id = ? AND owner = ?',
+    failures >= LOCK_ATTEMPTS ? 0 : failures, failures >= LOCK_ATTEMPTS ? Date.now() + LOCKOUT_MS : 0, id, owner).run();
+  return fail('비밀번호가 맞지 않습니다.', 403);
+}
+async function ensureDesktopFile(env, owner, id) {
+  const next = await statement(env, 'SELECT COALESCE(MAX(sort), -1) + 1 AS sort FROM desktop_items WHERE owner = ?', owner).first();
+  await statement(env, 'INSERT OR IGNORE INTO desktop_items (id, owner, kind, target, label, icon, hidden, sort, created_at) VALUES (?, ?, ?, ?, NULL, NULL, 0, ?, ?)',
+    `${owner}:file:${id}`, owner, 'file', `file:${id}`, next.sort, Date.now()).run();
+}
+function descendants(files, id) {
+  const ids = [id];
+  for (let i = 0; i < ids.length; i++) for (const file of files.values()) if (file.parentId === ids[i] && !ids.includes(file.id)) ids.push(file.id);
+  return ids;
+}
+async function purge(env, owner, ids) {
+  await env.DB.batch(ids.flatMap(id => [
+    statement(env, 'DELETE FROM user_files WHERE id = ? AND owner = ?', id, owner),
+    statement(env, 'DELETE FROM desktop_items WHERE owner = ? AND target = ?', owner, `file:${id}`),
+    statement(env, 'DELETE FROM file_unlocks WHERE owner = ? AND file_id = ?', owner, id),
+  ]));
+}
+
+// Each action returns null on success or a fail(...) object; the caller then returns fresh state.
+async function desktopAction(env, owner, body, unlocked) {
+  const files = await loadFiles(env, owner);
+  const target = fileId(body.id) && files.get(body.id);
+  const needAccess = () => {
+    if (!target) return fail('파일을 찾을 수 없습니다.', 404);
+    const locked = blockedBy(files, unlocked, target.id);
+    return locked ? fail('잠긴 항목입니다. 비밀번호를 입력해 주세요.', 423, { lockedId: locked }) : null;
+  };
+  const item = typeof body.id === 'string' ? await statement(env, 'SELECT id, kind, target FROM desktop_items WHERE id = ? AND owner = ?', body.id, owner).first() : null;
+  switch (body.action) {
+    case 'set-wallpaper': {
+      if (body.assetId !== null && !(await statement(env, 'SELECT id FROM desktop_assets WHERE id = ? AND owner = ?', body.assetId, owner).first())) return fail('배경 이미지를 찾을 수 없습니다.', 404);
+      await statement(env, `INSERT INTO desktop_settings (owner, wallpaper_asset_id, wallpaper_fit, updated_at) VALUES (?, ?, 'cover', ?)
+        ON CONFLICT(owner) DO UPDATE SET wallpaper_asset_id = excluded.wallpaper_asset_id, updated_at = excluded.updated_at`, owner, body.assetId, Date.now()).run();
+      return null;
+    }
+    case 'set-fit': {
+      if (!['cover', 'contain'].includes(body.fit)) return fail('표시 방식을 확인해 주세요.');
+      await statement(env, `INSERT INTO desktop_settings (owner, wallpaper_asset_id, wallpaper_fit, updated_at) VALUES (?, NULL, ?, ?)
+        ON CONFLICT(owner) DO UPDATE SET wallpaper_fit = excluded.wallpaper_fit, updated_at = excluded.updated_at`, owner, body.fit, Date.now()).run();
+      return null;
+    }
+    case 'update-item': {
+      if (!item) return fail('바탕화면 항목을 찾을 수 없습니다.', 404);
+      if ('icon' in body && !validIcon(body.icon)) return fail('아이콘을 확인해 주세요.');
+      if (typeof body.icon === 'string' && body.icon.startsWith('asset:') && !(await statement(env, 'SELECT id FROM desktop_assets WHERE id = ? AND owner = ?', body.icon.slice(6), owner).first())) return fail('아이콘 이미지를 찾을 수 없습니다.', 404);
+      let label;
+      if ('label' in body) {
+        // A desktop label is only a display name; real files are renamed with rename-file.
+        if (item.kind === 'file') return fail('파일 이름은 파일 이름 변경으로 바꿔 주세요.');
+        label = cleanName(body.label);
+        if (!label && item.kind === 'shortcut') return fail('이름을 입력해 주세요.');
+      }
+      await statement(env, `UPDATE desktop_items SET label = CASE WHEN ? THEN ? ELSE label END, icon = CASE WHEN ? THEN ? ELSE icon END,
+        hidden = CASE WHEN ? THEN ? ELSE hidden END WHERE id = ? AND owner = ?`,
+        'label' in body ? 1 : 0, label || null, 'icon' in body ? 1 : 0, body.icon ?? null,
+        typeof body.hidden === 'boolean' ? 1 : 0, body.hidden ? 1 : 0, item.id, owner).run();
+      return null;
+    }
+    case 'move-item': {
+      if (!item || ![-1, 1].includes(body.direction)) return fail('바탕화면 항목을 찾을 수 없습니다.', 404);
+      const rows = (await statement(env, 'SELECT id FROM desktop_items WHERE owner = ? ORDER BY sort, rowid', owner).all()).results.map(row => row.id);
+      const at = rows.indexOf(item.id); const to = at + body.direction;
+      if (to < 0 || to >= rows.length) return null;
+      [rows[at], rows[to]] = [rows[to], rows[at]];
+      await env.DB.batch(rows.map((id, sort) => statement(env, 'UPDATE desktop_items SET sort = ? WHERE id = ? AND owner = ?', sort, id, owner)));
+      return null;
+    }
+    case 'add-shortcut': {
+      const label = cleanName(body.label);
+      if (!label) return fail('이름을 입력해 주세요.');
+      if (!validIcon(body.icon ?? null)) return fail('아이콘을 확인해 주세요.');
+      const linked = typeof body.target === 'string' && body.target.startsWith('file:') ? files.get(body.target.slice(5)) : null;
+      if (!programTarget(body.target) && (!linked || inTrash(files, linked.id))) return fail('연결할 대상을 선택해 주세요.');
+      const next = await statement(env, 'SELECT COALESCE(MAX(sort), -1) + 1 AS sort FROM desktop_items WHERE owner = ?', owner).first();
+      await statement(env, 'INSERT INTO desktop_items (id, owner, kind, target, label, icon, hidden, sort, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        crypto.randomUUID(), owner, 'shortcut', body.target, label, body.icon ?? null, body.hidden ? 1 : 0, next.sort, Date.now()).run();
+      return null;
+    }
+    case 'remove-shortcut': {
+      // Only shortcuts are removed; programs are hidden and real files go to the trash.
+      if (!item) return fail('바탕화면 항목을 찾을 수 없습니다.', 404);
+      if (item.kind !== 'shortcut') return fail(item.kind === 'program' ? '고정 프로그램은 숨기기만 할 수 있습니다.' : '파일은 휴지통으로 이동해 주세요.');
+      await statement(env, 'DELETE FROM desktop_items WHERE id = ? AND owner = ? AND kind = ?', item.id, owner, 'shortcut').run();
+      return null;
+    }
+    case 'create-file': {
+      const name = cleanName(body.name);
+      if (!['file', 'folder'].includes(body.kind) || !name) return fail('이름을 입력해 주세요.');
+      const parentId = body.parentId ?? null;
+      if (parentId !== null) {
+        const parent = fileId(parentId) && files.get(parentId);
+        if (!parent || parent.kind !== 'folder' || inTrash(files, parentId)) return fail('폴더를 찾을 수 없습니다.', 404);
+        const locked = blockedBy(files, unlocked, parentId);
+        if (locked) return fail('잠긴 폴더입니다. 비밀번호를 입력해 주세요.', 423, { lockedId: locked });
+      }
+      const id = crypto.randomUUID(); const now = Date.now();
+      await statement(env, 'INSERT INTO user_files (id, owner, parent_id, kind, name, content, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        id, owner, parentId, body.kind, name, '', now, now).run();
+      if (parentId === null) await ensureDesktopFile(env, owner, id);
+      return { created: id };
+    }
+    case 'rename-file': {
+      const name = cleanName(body.name);
+      if (!name) return fail('이름을 입력해 주세요.');
+      const denied = needAccess(); if (denied) return denied;
+      // Only the name changes; the id, content and every link to the file stay the same.
+      await statement(env, 'UPDATE user_files SET name = ?, updated_at = ? WHERE id = ? AND owner = ?', name, Date.now(), target.id, owner).run();
+      return null;
+    }
+    case 'move-file': {
+      const denied = needAccess(); if (denied) return denied;
+      const parentId = body.parentId ?? null;
+      if (parentId !== null) {
+        const parent = fileId(parentId) && files.get(parentId);
+        if (!parent || parent.kind !== 'folder' || inTrash(files, parentId)) return fail('폴더를 찾을 수 없습니다.', 404);
+        if (descendants(files, target.id).includes(parentId)) return fail('폴더를 자기 안으로 옮길 수 없습니다.');
+        const locked = blockedBy(files, unlocked, parentId);
+        if (locked) return fail('잠긴 폴더입니다. 비밀번호를 입력해 주세요.', 423, { lockedId: locked });
+      }
+      await statement(env, 'UPDATE user_files SET parent_id = ?, updated_at = ? WHERE id = ? AND owner = ?', parentId, Date.now(), target.id, owner).run();
+      if (parentId === null) await ensureDesktopFile(env, owner, target.id);
+      return null;
+    }
+    case 'save-file': {
+      const denied = needAccess(); if (denied) return denied;
+      if (target.kind !== 'file' || typeof body.content !== 'string') return fail('파일 내용을 확인해 주세요.');
+      if (body.content.length > FILE_LIMIT) return fail('파일은 10만 자까지 저장할 수 있습니다.', 413);
+      await statement(env, 'UPDATE user_files SET content = ?, updated_at = ? WHERE id = ? AND owner = ?', body.content, Date.now(), target.id, owner).run();
+      return null;
+    }
+    case 'trash-file': {
+      const denied = needAccess(); if (denied) return denied;
+      if (inTrash(files, target.id)) return null;
+      // The row and its content stay; parent_id is kept as the original location for restore.
+      await statement(env, 'UPDATE user_files SET trashed_at = ? WHERE id = ? AND owner = ?', Date.now(), target.id, owner).run();
+      return null;
+    }
+    case 'restore-file': {
+      if (!target || !target.trashedAt) return fail('휴지통에서 항목을 찾을 수 없습니다.', 404);
+      const parent = target.parentId ? files.get(target.parentId) : null;
+      const parentId = parent && parent.kind === 'folder' && !inTrash(files, parent.id) ? parent.id : null;
+      await statement(env, 'UPDATE user_files SET trashed_at = NULL, parent_id = ? WHERE id = ? AND owner = ?', parentId, target.id, owner).run();
+      if (parentId === null) await ensureDesktopFile(env, owner, target.id);
+      return { restoredTo: parentId };
+    }
+    case 'purge-file': {
+      if (!target || !target.trashedAt) return fail('휴지통에서 항목을 찾을 수 없습니다.', 404);
+      const denied = needAccess(); if (denied) return denied;
+      // A locked file inside a folder is not deleted without its own password either.
+      const inner = descendants(files, target.id).find(id => files.get(id).locked && !unlocked.has(id));
+      if (inner) return fail('잠긴 항목이 들어 있습니다. 비밀번호를 입력해 주세요.', 423, { lockedId: inner });
+      await purge(env, owner, descendants(files, target.id));
+      return null;
+    }
+    case 'empty-trash': {
+      let skipped = 0;
+      for (const file of files.values()) {
+        if (!file.trashedAt) continue;
+        if (descendants(files, file.id).some(id => blockedBy(files, unlocked, id))) { skipped++; continue; }
+        await purge(env, owner, descendants(files, file.id));
+      }
+      return { skipped };
+    }
+    case 'lock-set': {
+      const denied = needAccess(); if (denied) return denied;
+      if (target.locked) return fail('이미 잠긴 항목입니다.');
+      if (!validPassword(body.password)) return fail('비밀번호는 4~64자로 입력해 주세요.');
+      const salt = crypto.randomUUID();
+      await statement(env, 'UPDATE user_files SET lock_hash = ?, lock_salt = ?, lock_failures = 0, lock_retry_at = 0 WHERE id = ? AND owner = ?',
+        await hashPassword(body.password, salt), salt, target.id, owner).run();
+      await statement(env, 'DELETE FROM file_unlocks WHERE owner = ? AND file_id = ?', owner, target.id).run();
+      return null;
+    }
+    case 'lock-change': {
+      if (!target) return fail('파일을 찾을 수 없습니다.', 404);
+      if (!validPassword(body.next)) return fail('새 비밀번호는 4~64자로 입력해 주세요.');
+      const wrong = await checkPassword(env, owner, target.id, body.current); if (wrong) return wrong;
+      const salt = crypto.randomUUID();
+      await statement(env, 'UPDATE user_files SET lock_hash = ?, lock_salt = ? WHERE id = ? AND owner = ?', await hashPassword(body.next, salt), salt, target.id, owner).run();
+      await statement(env, 'DELETE FROM file_unlocks WHERE owner = ? AND file_id = ?', owner, target.id).run();
+      return null;
+    }
+    case 'lock-remove': {
+      if (!target) return fail('파일을 찾을 수 없습니다.', 404);
+      const wrong = await checkPassword(env, owner, target.id, body.password); if (wrong) return wrong;
+      await statement(env, 'UPDATE user_files SET lock_hash = NULL, lock_salt = NULL, lock_failures = 0, lock_retry_at = 0 WHERE id = ? AND owner = ?', target.id, owner).run();
+      await statement(env, 'DELETE FROM file_unlocks WHERE owner = ? AND file_id = ?', owner, target.id).run();
+      return null;
+    }
+    case 'unlock': {
+      if (!target) return fail('파일을 찾을 수 없습니다.', 404);
+      const wrong = await checkPassword(env, owner, target.id, body.password); if (wrong) return wrong;
+      const token = `${crypto.randomUUID()}${crypto.randomUUID()}`.replace(/-/g, '');
+      await statement(env, 'DELETE FROM file_unlocks WHERE owner = ? AND expires_at <= ?', owner, Date.now()).run();
+      await statement(env, 'INSERT INTO file_unlocks (token_hash, owner, file_id, expires_at) VALUES (?, ?, ?, ?)', await sha256(token), owner, target.id, Date.now() + UNLOCK_MS).run();
+      return { token, fileId: target.id };
+    }
+    default: return fail('지원하지 않는 작업입니다.');
+  }
+}
+
+async function handleDesktop(request, env, owner, url) {
+  const unlocked = await unlockedIds(env, owner, request);
+  if (url.pathname === '/api/desktop' && request.method === 'GET') return json(await desktopState(env, owner, unlocked));
+  if (url.pathname === '/api/desktop' && request.method === 'POST') {
+    const body = await request.json().catch(() => null);
+    if (!body || typeof body !== 'object') return json({ error: '요청을 확인할 수 없습니다.' }, 400);
+    const result = await desktopAction(env, owner, body, unlocked);
+    if (result?.error) { const { status, ...rest } = result; return json(rest, status); }
+    if (result?.token) unlocked.add(result.fileId);
+    return json({ ...(result ?? {}), ...(await desktopState(env, owner, unlocked)) });
+  }
+  const fileMatch = url.pathname.match(/^\/api\/files\/([^/]+)$/);
+  if (fileMatch && request.method === 'GET') {
+    const id = fileId(decodeId(fileMatch[1]));
+    const files = await loadFiles(env, owner);
+    if (!id || !files.has(id)) return json({ error: '파일을 찾을 수 없습니다.' }, 404);
+    // The server, not the window, decides: locked content is never sent without a valid unlock token.
+    const locked = blockedBy(files, unlocked, id);
+    if (locked) return json({ error: '잠긴 항목입니다. 비밀번호를 입력해 주세요.', lockedId: locked }, 423);
+    const row = await statement(env, 'SELECT id, kind, name, content, updated_at AS updatedAt FROM user_files WHERE id = ? AND owner = ?', id, owner).first();
+    return json(row);
+  }
+  const assetMatch = url.pathname.match(/^\/api\/desktop-assets\/([^/]+)$/);
+  if (assetMatch && request.method === 'GET') {
+    const row = await statement(env, 'SELECT object_key, mime FROM desktop_assets WHERE id = ? AND owner = ?', decodeId(assetMatch[1]) ?? '', owner).first();
+    const object = row && await env.BUCKET.get(row.object_key);
+    if (!object) return json({ error: '이미지를 찾을 수 없습니다.' }, 404);
+    return new Response(object.body, { headers: { 'Content-Type': row.mime, 'Cache-Control': 'private, max-age=86400', 'X-Content-Type-Options': 'nosniff' } });
+  }
+  if (url.pathname === '/api/desktop-assets' && request.method === 'POST') {
+    if (Number(request.headers.get('Content-Length') || 0) > 12 * 1024 * 1024) return json({ error: '이미지는 10MB 이하로 추가해 주세요.' }, 413);
+    const form = await request.formData().catch(() => null);
+    const file = form?.get('file');
+    const kind = form?.get('kind');
+    if (!(file instanceof File) || file.size === 0 || file.size > 10 * 1024 * 1024 || !['wallpaper', 'icon'].includes(kind)) return json({ error: '10MB 이하 이미지를 선택해 주세요.' }, 400);
+    const bytes = await file.arrayBuffer();
+    const mime = imageType(bytes);
+    if (!mime) return json({ error: 'JPG, PNG, WEBP 이미지만 추가할 수 있습니다.' }, 400);
+    const id = crypto.randomUUID();
+    const objectKey = `desktop-assets/${owner}/${id}`;
+    await env.BUCKET.put(objectKey, bytes, { httpMetadata: { contentType: mime } });
+    try {
+      await statement(env, 'INSERT INTO desktop_assets (id, owner, kind, object_key, mime, created_at) VALUES (?, ?, ?, ?, ?, ?)', id, owner, kind, objectKey, mime, Date.now()).run();
+    } catch (error) { await env.BUCKET.delete(objectKey); throw error; }
+    return json({ asset: { id, kind, src: assetSrc(id) }, ...(await desktopState(env, owner, unlocked)) }, 201);
+  }
+  return null;
+}
+
 export async function handleApi(request, env) {
   const url = new URL(request.url);
   const owner = request.headers.get('oai-authenticated-user-id');
   const signedIn = owner && request.headers.get('oai-authenticated-user-email');
   if (!signedIn) return request.method === 'GET' && url.pathname === '/api/price-files' ? json(publicFiles())
     : request.method === 'GET' && url.pathname === '/api/memos' ? json({ authenticated: false, memos: [], draft: null })
-      : json({ error: '로그인 후 이용해 주세요.' }, 401);
+      : request.method === 'GET' && url.pathname === '/api/desktop' ? json(publicDesktop())
+        : json({ error: '로그인 후 이용해 주세요.' }, 401);
   if (!['GET', 'HEAD'].includes(request.method) && request.headers.get('Origin') !== url.origin) return json({ error: '요청을 확인할 수 없습니다.' }, 403);
+  if (url.pathname.startsWith('/api/desktop') || url.pathname.startsWith('/api/files/')) {
+    const response = await handleDesktop(request, env, owner, url);
+    if (response) return response;
+  }
   if (url.pathname.startsWith('/api/memo')) {
     const response = await handleMemos(request, env, owner, url);
     if (response) return response;
