@@ -6,7 +6,7 @@ const programs = [
   { icon: TerminalIcon, name: 'Terminal', version: '1.0', size: '2.4 MB' },
   { icon: FolderOpen, name: 'File Explorer', version: '1.0', size: '5.1 MB' },
   { icon: Settings, name: 'Control Panel', version: '1.0', size: '3.2 MB' },
-  { icon: FileText, name: 'Notepad', version: '1.0', size: '1.8 MB' },
+  { icon: FileText, name: '메모장', version: '1.0', size: '1.8 MB' },
   { icon: Calculator, name: 'Calculator', version: '1.0', size: '2.0 MB' },
   { icon: Image, name: 'Image Viewer', version: '1.0', size: '4.5 MB' },
   { icon: Music, name: 'Media Player', version: '1.0', size: '6.8 MB' },
