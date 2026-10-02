@@ -45,6 +45,8 @@ const imageVariants = {
 const imageSources = src => imageVariants[src] ? { src: imageVariants[src].landscape, variants: imageVariants[src] } : { src };
 const cleanName = value => typeof value === 'string' ? value.trim().slice(0, 100) : '';
 const statement = (env, sql, ...args) => env.DB.prepare(sql).bind(...args);
+// Malformed requests are client errors, not storage outages.
+const decodeId = value => { try { return decodeURIComponent(value); } catch { return null; } };
 const publicFiles = () => ({ authenticated: false,
   folders: defaults.map(([id, name, variant]) => ({ id, name, variant })),
   images: defaultImages.map(([id, name, folderId, src]) => ({ id, name, folderId, ...imageSources(src) })),
@@ -113,7 +115,9 @@ export async function handleApi(request, env) {
 
   const imageMatch = url.pathname.match(/^\/api\/price-images\/([^/]+)$/);
   if (imageMatch && request.method === 'GET') {
-    const row = await statement(env, 'SELECT object_key, mime FROM price_images WHERE id = ? AND owner = ?', decodeURIComponent(imageMatch[1]), owner).first();
+    const id = decodeId(imageMatch[1]);
+    if (id === null) return json({ error: '이미지를 찾을 수 없습니다.' }, 404);
+    const row = await statement(env, 'SELECT object_key, mime FROM price_images WHERE id = ? AND owner = ?', id, owner).first();
     if (!row?.object_key) return json({ error: '이미지를 찾을 수 없습니다.' }, 404);
     const object = await env.BUCKET.get(row.object_key);
     if (!object) return json({ error: '이미지를 불러오지 못했습니다.' }, 404);
@@ -121,7 +125,8 @@ export async function handleApi(request, env) {
   }
   if (url.pathname === '/api/price-images' && request.method === 'POST') {
     if (Number(request.headers.get('Content-Length') || 0) > 12 * 1024 * 1024) return json({ error: '이미지는 10MB 이하로 추가해 주세요.' }, 413);
-    const form = await request.formData();
+    const form = await request.formData().catch(() => null);
+    if (!form) return json({ error: '이름과 10MB 이하 이미지를 확인해 주세요.' }, 400);
     const file = form.get('file');
     const name = cleanName(form.get('name'));
     const folderId = form.get('folderId');
@@ -141,7 +146,8 @@ export async function handleApi(request, env) {
     return json(await list(env, owner), 201);
   }
   if (url.pathname === '/api/price-files' && request.method === 'POST') {
-    const body = await request.json();
+    const body = await request.json().catch(() => null);
+    if (!body || typeof body !== 'object') return json({ error: '요청을 확인할 수 없습니다.' }, 400);
     const name = cleanName(body.name);
     if (body.action === 'create-folder') {
       if (!name) return json({ error: '폴더 이름을 입력해 주세요.' }, 400);

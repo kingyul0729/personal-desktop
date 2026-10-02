@@ -206,3 +206,16 @@ test('existing saved images receive orientation pairs without duplicating record
   const removed = await (await handleApi(request('/api/price-files'), env)).json();
   assert.ok(!removed.images.some(item => item.id === paired.id));
 });
+
+test('malformed requests are rejected as client errors instead of storage outages', async () => {
+  const env = environment();
+  const post = (path, body, type) => new Request(`https://site.test${path}`, { method: 'POST', body, headers: {
+    Origin: 'https://site.test', 'Content-Type': type, 'oai-authenticated-user-id': 'owner-one', 'oai-authenticated-user-email': 'owner-one@test.invalid' } });
+  for (const body of ['{bad', 'null', '"text"']) {
+    const response = await worker.fetch(post('/api/price-files', body, 'application/json'), env);
+    assert.equal(response.status, 400);
+    assert.match((await response.json()).error, /요청을 확인/);
+  }
+  assert.equal((await worker.fetch(post('/api/price-images', 'x', 'text/plain'), env)).status, 400);
+  assert.equal((await worker.fetch(request('/api/price-images/%E0%A4%A'), env)).status, 404);
+});

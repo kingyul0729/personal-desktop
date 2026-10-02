@@ -22,13 +22,15 @@ export function FileExplorer() {
   const [pending, setPending] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  // Only a failed list load offers reloading; other messages are not fixed by it.
+  const [canRetry, setCanRetry] = useState(false);
   const [notice, setNotice] = useState('');
   const [preview, setPreview] = useState('');
   const upload = useRef<HTMLInputElement>(null);
   const currentFolder = files.folders.find(folder => folder.id === location);
 
   async function refresh(signal?: AbortSignal) {
-    setLoading(true); setError('');
+    setLoading(true); setError(''); setCanRetry(false);
     try {
       const response = await fetch('/api/price-files', { signal, cache: 'no-store' });
       const data = await response.json();
@@ -37,7 +39,7 @@ export function FileExplorer() {
       const resolveFolder = (value: string) => data.folders.find((folder: PriceFolder) => folder.id === value || folder.id.endsWith(`:${value}`))?.id ?? value;
       setLocation(resolveFolder);
       setTrail(previous => previous.map(resolveFolder));
-    } catch (e) { if ((e as Error).name !== 'AbortError') setError('가격표를 불러오지 못했습니다. 다시 불러오기를 눌러 주세요.'); }
+    } catch (e) { if ((e as Error).name !== 'AbortError') { setError('가격표를 불러오지 못했습니다. 다시 불러오기를 눌러 주세요.'); setCanRetry(true); } }
     finally { if (!signal?.aborted) setLoading(false); }
   }
   useEffect(() => { const controller = new AbortController(); void refresh(controller.signal); return () => controller.abort(); }, []);
@@ -58,7 +60,7 @@ export function FileExplorer() {
     setCursor(next); setLocation(trail[next]); setGallery(null); setQuery('');
   };
   const openEditor = (next: Editor) => {
-    setError(''); setNotice(''); setEditor(next);
+    setError(''); setCanRetry(false); setNotice(''); setEditor(next);
     setName(next.type === 'folder' ? next.folder?.name ?? '' : next.type === 'upload' ? next.file.name.replace(/\.[^.]+$/, '') : next.image.name);
     setFolderId(next.type === 'image' ? next.image.folderId : currentFolder?.id ?? files.folders[0]?.id ?? '');
     setVariant(next.type === 'folder' ? next.folder?.variant ?? 'heart' : 'heart');
@@ -78,8 +80,9 @@ export function FileExplorer() {
             : { action: 'edit-image', id: editor.image.id, name, folderId };
         response = await fetch('/api/price-files', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       }
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || '저장하지 못했습니다. 다시 시도해 주세요.');
+      // A gateway can answer with an HTML error page; never show its parse error.
+      const data = await response.json().catch(() => null);
+      if (!response.ok || !data) throw new Error(data?.error || '저장하지 못했습니다. 다시 시도해 주세요.');
       setFiles(data); setNotice(editor.type === 'delete' ? '삭제했습니다.' : '저장했습니다.'); setEditor(null);
     } catch (e) { setError((e as Error).message || '저장하지 못했습니다. 다시 시도해 주세요.'); }
     finally { setPending(false); }
@@ -115,11 +118,11 @@ export function FileExplorer() {
           <input ref={upload} type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={event => {
             const file = event.target.files?.[0]; event.target.value = '';
             if (!file) return;
-            if (file.size > 10 * 1024 * 1024) { setError('10MB 이하의 이미지를 선택해 주세요.'); return; }
+            if (file.size > 10 * 1024 * 1024) { setError('10MB 이하의 이미지를 선택해 주세요.'); setCanRetry(false); return; }
             openEditor({ type: 'upload', file });
           }} />
         </div>
-        {error && !editor && <div role="alert" className="pf-feedback">{error}<button type="button" onClick={() => void refresh()}>다시 불러오기</button></div>}
+        {error && !editor && <div role="alert" className="pf-feedback">{error}{canRetry && <button type="button" onClick={() => void refresh()}>다시 불러오기</button>}</div>}
         <div className="pf-scroll">
           {showFolders ? <div className="pf-folder-grid">{files.folders.map(folder => <article key={folder.id} className="pf-folder-card">
             <button type="button" className="pf-folder-open" onClick={() => navigate(folder.id)}><PinkFolderIcon variant={folder.variant} /><span>{folder.name}</span><small>{files.images.filter(image => image.folderId === folder.id).length}개</small></button>
