@@ -153,13 +153,13 @@ export function Notepad() {
     }}>
       {/* Menu Bar */}
       <div className="border-b border-gray-300 bg-gray-50 p-2 flex items-center gap-2">
-        <Button variant="ghost" size="sm" className="gap-2" onClick={startNew} disabled={busy || !ready}>
-          <File className="h-4 w-4" />
-          New
-        </Button>
         <Button variant="ghost" size="sm" className="gap-2" aria-label={view === 'list' ? '작성 중인 메모로' : '저장된 메모 목록'}
           title={view === 'list' ? '작성 중인 메모로' : '저장된 메모 목록'} onClick={() => view === 'list' ? setView('editor') : void showList()} disabled={!ready}>
           <ArrowLeft className="h-4 w-4" />
+        </Button>
+        <Button variant="ghost" size="sm" className="gap-2" onClick={startNew} disabled={busy || !ready}>
+          <File className="h-4 w-4" />
+          New
         </Button>
         <Button variant="ghost" size="sm" className="gap-2" onClick={() => void save()} disabled={busy || !ready || !authenticated || view !== 'editor'}>
           <Save className="h-4 w-4" />
