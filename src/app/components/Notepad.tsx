@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Save, ArrowLeft, File } from 'lucide-react';
+import { Save, ArrowLeft, File, Trash2 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Textarea } from './ui/textarea';
 import { KittyDialog } from './KittyDialog';
@@ -29,6 +29,7 @@ export function Notepad() {
   const [restoredAt, setRestoredAt] = useState(0);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [deleting, setDeleting] = useState<MemoSummary | null>(null);
   const [pendingAction, setPendingAction] = useState<(() => void | Promise<void>) | null>(null);
   const draftPayload = JSON.stringify({ memoId, title, content });
   const latest = useRef({ payload: draftPayload, sent: draftPayload, enabled: false });
@@ -119,6 +120,20 @@ export function Notepad() {
       finally { setBusy(false); }
     });
   };
+  const remove = async () => {
+    if (!deleting || busy) return;
+    setBusy(true); setError('');
+    try {
+      const data: MemoState = await readJson(await fetch(`/api/memos/${encodeURIComponent(deleting.id)}`, { method: 'DELETE' }));
+      setMemos(data.memos);
+      // The open memo is gone, so the editor starts a fresh one instead of re-saving it.
+      if (deleting.id === memoId) { openMemo(null); setView('list'); }
+      setDeleting(null);
+    } catch (e) { setError((e as Error).message); }
+    finally { setBusy(false); }
+  };
+  // Untitled memos are named by their opening words; several can share the same minute.
+  const memoLabel = (item: MemoSummary) => item.title || (item.preview.length > 24 ? `${item.preview.slice(0, 24)}…` : item.preview);
   const resolvePending = async (saveFirst: boolean) => {
     const action = pendingAction;
     if (!action || (saveFirst && !(await save()))) return;
@@ -171,10 +186,14 @@ export function Notepad() {
         <div className="notepad-list flex-1 min-h-0 overflow-auto p-4" aria-label="저장된 메모">
           {memos.length ? <ul>{memos.map(item => (
             <li key={item.id}>
-              <button type="button" aria-current={item.id === memoId || undefined} disabled={busy} onClick={() => pick(item)}>
+              <button type="button" className="notepad-open" aria-current={item.id === memoId || undefined} disabled={busy} onClick={() => pick(item)}>
                 <time dateTime={new Date(item.savedAt).toISOString()}>{formatMemoTime(item.savedAt)}</time>
                 {item.title && <strong>{item.title}</strong>}
                 <span>{item.preview}</span>
+              </button>
+              <button type="button" className="notepad-delete" aria-label={`${memoLabel(item)} 메모 삭제`} title="삭제" disabled={busy}
+                onClick={() => { setError(''); setDeleting(item); }}>
+                <Trash2 size={17} />
               </button>
             </li>
           ))}</ul> : <p className="notepad-empty">{authenticated ? '아직 저장한 메모가 없습니다. 메모를 쓰고 Save를 누르면 여기에 쌓입니다.' : '로그인하면 저장한 메모를 볼 수 있습니다.'}</p>}
@@ -188,6 +207,15 @@ export function Notepad() {
         </span>
         <span className="text-gray-600" role="status">{view === 'editor' ? statusText : ''}</span>
       </div>
+
+      {deleting && <KittyDialog title="삭제 확인" busy={busy} onClose={() => setDeleting(null)}>
+        <p className="kitty-question">‘{memoLabel(deleting)}’ 메모를 삭제할까요? 삭제하면 되돌릴 수 없습니다.</p>
+        {error && <p className="kitty-error" role="alert">{error}</p>}
+        <footer className="kitty-dialog-actions">
+          <button type="button" onClick={() => setDeleting(null)} disabled={busy}>취소</button>
+          <button type="button" className="kitty-primary" onClick={() => void remove()} disabled={busy}>{busy ? '삭제 중…' : '삭제'}</button>
+        </footer>
+      </KittyDialog>}
 
       {pendingAction && <KittyDialog title="저장 확인" busy={busy} onClose={() => setPendingAction(null)}>
         <p className="kitty-question">Save하지 않은 내용이 있습니다. 어떻게 할까요?</p>

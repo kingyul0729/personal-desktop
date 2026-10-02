@@ -157,6 +157,15 @@ async function handleMemos(request, env, owner, url) {
     const row = await statement(env, 'SELECT id, title, content, created_at AS createdAt, saved_at AS savedAt FROM memos WHERE id = ? AND owner = ?', id, owner).first();
     return json({ memo: row, ...(await memoState(env, owner)) });
   }
+  if (id && request.method === 'DELETE') {
+    // Drop the draft too when it belongs to this memo, so another device does not bring it back.
+    const [removed] = await env.DB.batch([
+      statement(env, 'DELETE FROM memos WHERE id = ? AND owner = ?', id, owner),
+      statement(env, 'DELETE FROM memo_drafts WHERE owner = ? AND memo_id = ?', owner, id),
+    ]);
+    if (!removed.meta.changes) return json({ error: '메모를 찾을 수 없습니다.' }, 404);
+    return json(await memoState(env, owner));
+  }
   return null;
 }
 

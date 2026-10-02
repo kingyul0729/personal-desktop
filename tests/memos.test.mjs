@@ -94,3 +94,23 @@ test('memo times read as year.month.day hour:minute and changes compare against 
   assert.equal(memoChanged(' 제목 ', '글', { title: '제목', content: '글' }), false);
   assert.equal(memoChanged('제목', '글 수정', { title: '제목', content: '글' }), true);
 });
+
+test('deleting a memo removes it and its draft for the owner only', async () => {
+  const env = environment();
+  await call(env, `/api/memos/${ID_A}`, { method: 'PUT', body: { content: '지울 메모' } });
+  await call(env, `/api/memos/${ID_B}`, { method: 'PUT', body: { content: '남길 메모' } });
+  await call(env, '/api/memo-draft', { method: 'PUT', body: { memoId: ID_A, content: '지울 메모 수정 중' } });
+  assert.equal((await call(env, `/api/memos/${ID_A}`, { method: 'DELETE', owner: 'someone-else' })).status, 404);
+  assert.equal((await call(env, `/api/memos/${ID_A}`, { method: 'DELETE', origin: 'https://elsewhere.test' })).status, 403);
+  const deleted = await call(env, `/api/memos/${ID_A}`, { method: 'DELETE' });
+  assert.equal(deleted.status, 200);
+  assert.deepEqual(deleted.data.memos.map(memo => memo.id), [ID_B]);
+  assert.equal(deleted.data.draft, null);
+  assert.equal((await call(env, `/api/memos/${ID_A}`)).status, 404);
+  assert.equal((await call(env, `/api/memos/${ID_A}`, { method: 'DELETE' })).status, 404);
+  // A draft for another memo survives deleting a different one.
+  await call(env, '/api/memo-draft', { method: 'PUT', body: { memoId: ID_B, content: '남길 메모 수정 중' } });
+  await call(env, `/api/memos/${ID_A}`, { method: 'PUT', body: { content: '다시 만든 메모' } });
+  await call(env, '/api/memo-draft', { method: 'PUT', body: { memoId: ID_B, content: '남길 메모 수정 중' } });
+  assert.equal((await call(env, `/api/memos/${ID_A}`, { method: 'DELETE' })).data.draft.memoId, ID_B);
+});
