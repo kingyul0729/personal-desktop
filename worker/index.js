@@ -173,7 +173,7 @@ async function handleMemos(request, env, owner, url) {
 // Desktop: fixed programs can only be hidden or relabelled; shortcuts can be removed without
 // touching their target; user files go to trash first and are deleted only by purge.
 const PROGRAMS = [['terminal', 'Terminal'], ['fileExplorer', '가격표 보관함'], ['controlPanel', '환경설정'],
-  ['programManager', 'Programs'], ['notepad', '메모장'], ['priceCalculator', '금액 계산'], ['trash', '휴지통']];
+  ['programManager', '작업 캡슐'], ['notepad', '메모장'], ['priceCalculator', '금액 계산'], ['trash', '휴지통']];
 const FILE_LIMIT = 100000;
 const UNLOCK_MS = 30 * 60 * 1000;
 const LOCK_ATTEMPTS = 5;
@@ -529,6 +529,55 @@ async function handleDesktop(request, env, owner, url) {
   return null;
 }
 
+// Work capsules store a window arrangement and nothing else; opening one never rewrites app data.
+const CAPSULE_WINDOWS = ['terminal', 'fileExplorer', 'controlPanel', 'notepad', 'priceCalculator', 'trash', 'files'];
+const CAPSULE_LIMIT = 100;
+export function cleanLayout(value) {
+  if (!value || typeof value !== 'object' || !Array.isArray(value.windows)) return null;
+  const number = v => typeof v === 'number' && Number.isFinite(v) ? Math.round(Math.max(-10000, Math.min(10000, v))) : null;
+  const windows = [];
+  for (const item of value.windows.slice(0, 20)) {
+    if (!item || !CAPSULE_WINDOWS.includes(item.id) || windows.some(window => window.id === item.id)) continue;
+    const [x, y, width, height] = ['x', 'y', 'width', 'height'].map(key => number(item[key]));
+    if ([x, y, width, height].includes(null)) continue;
+    windows.push({ id: item.id, x, y, width, height, minimized: item.minimized === true, maximized: item.maximized === true });
+  }
+  if (!windows.length) return null;
+  const view = {};
+  if (['wallpaper', 'desktop', 'files', 'security'].includes(value.view?.settingsTab)) view.settingsTab = value.view.settingsTab;
+  if (value.view && 'filesViewing' in value.view && (value.view.filesViewing === null || fileId(value.view.filesViewing))) view.filesViewing = value.view.filesViewing;
+  return { windows, active: windows.some(window => window.id === value.active) ? value.active : null, view };
+}
+async function capsuleList(env, owner) {
+  const rows = await statement(env, 'SELECT id, name, layout, created_at AS createdAt FROM work_capsules WHERE owner = ? ORDER BY created_at DESC, rowid DESC', owner).all();
+  return { authenticated: true, capsules: rows.results.map(({ layout, ...row }) => ({ ...row, layout: JSON.parse(layout) })) };
+}
+async function handleCapsules(request, env, owner) {
+  if (request.method === 'GET') return json(await capsuleList(env, owner));
+  if (request.method !== 'POST') return json({ error: '요청한 기능을 찾을 수 없습니다.' }, 404);
+  const body = await request.json().catch(() => null);
+  if (!body || typeof body !== 'object') return json({ error: '요청을 확인할 수 없습니다.' }, 400);
+  const name = cleanName(body.name);
+  if (body.action === 'create') {
+    const layout = cleanLayout(body.layout);
+    if (!layout) return json({ error: '저장할 창이 없습니다. 창을 연 뒤 저장해 주세요.' }, 400);
+    if (!name) return json({ error: '작업 이름을 입력해 주세요.' }, 400);
+    const count = await statement(env, 'SELECT count(*) AS n FROM work_capsules WHERE owner = ?', owner).first();
+    if (count.n >= CAPSULE_LIMIT) return json({ error: `작업은 ${CAPSULE_LIMIT}개까지 저장할 수 있습니다.` }, 400);
+    const now = Date.now();
+    await statement(env, 'INSERT INTO work_capsules (id, owner, name, layout, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+      crypto.randomUUID(), owner, name, JSON.stringify(layout), now, now).run();
+  } else if (body.action === 'rename') {
+    if (!name) return json({ error: '작업 이름을 입력해 주세요.' }, 400);
+    const result = await statement(env, 'UPDATE work_capsules SET name = ?, updated_at = ? WHERE id = ? AND owner = ?', name, Date.now(), body.id, owner).run();
+    if (!result.meta.changes) return json({ error: '작업을 찾을 수 없습니다.' }, 404);
+  } else if (body.action === 'delete') {
+    const result = await statement(env, 'DELETE FROM work_capsules WHERE id = ? AND owner = ?', body.id, owner).run();
+    if (!result.meta.changes) return json({ error: '작업을 찾을 수 없습니다.' }, 404);
+  } else return json({ error: '지원하지 않는 작업입니다.' }, 400);
+  return json(await capsuleList(env, owner));
+}
+
 export async function handleApi(request, env) {
   const url = new URL(request.url);
   const owner = request.headers.get('oai-authenticated-user-id');
@@ -536,8 +585,10 @@ export async function handleApi(request, env) {
   if (!signedIn) return request.method === 'GET' && url.pathname === '/api/price-files' ? json(publicFiles())
     : request.method === 'GET' && url.pathname === '/api/memos' ? json({ authenticated: false, memos: [], draft: null })
       : request.method === 'GET' && url.pathname === '/api/desktop' ? json(publicDesktop())
-        : json({ error: '로그인 후 이용해 주세요.' }, 401);
+        : request.method === 'GET' && url.pathname === '/api/capsules' ? json({ authenticated: false, capsules: [] })
+          : json({ error: '로그인 후 이용해 주세요.' }, 401);
   if (!['GET', 'HEAD'].includes(request.method) && request.headers.get('Origin') !== url.origin) return json({ error: '요청을 확인할 수 없습니다.' }, 403);
+  if (url.pathname === '/api/capsules') return handleCapsules(request, env, owner);
   if (url.pathname.startsWith('/api/desktop') || url.pathname.startsWith('/api/files/')) {
     const response = await handleDesktop(request, env, owner, url);
     if (response) return response;

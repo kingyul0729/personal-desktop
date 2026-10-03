@@ -4,7 +4,7 @@ import {
   FileText,
   FolderOpen,
   Heart,
-  Monitor,
+  Layers,
   Settings,
   Terminal as TerminalIcon,
   Trash2,
@@ -15,13 +15,14 @@ import { Window } from './components/Window';
 import { Terminal } from './components/Terminal';
 import { FileExplorer } from './components/FileExplorer';
 import { ControlPanel } from './components/ControlPanel';
-import { ProgramManager } from './components/ProgramManager';
+import { WorkCapsule } from './components/WorkCapsule';
+import { CAPSULE_WINDOW, type CapsuleLayout } from './workCapsules';
 import { Notepad } from './components/Notepad';
 import { PriceCalculator } from './components/PriceCalculator';
 import { FileWindow } from './components/FileWindow';
 import { TrashWindow } from './components/TrashWindow';
 import { EntryBadge } from './components/EntryIcon';
-import { activeWindow, desktopReducer, initialDesktop, type WindowId } from './desktopState';
+import { activeWindow, desktopReducer, initialDesktop, type WindowId, type WindowRect } from './desktopState';
 import { createLongPress, desktopMenu, entryKind, iconArt, menuFor, type DesktopEntry } from './desktopModel';
 import { DesktopProvider, useDesktop } from './useDesktop';
 import { DEFAULT_ICONS, libraryIconSrc } from './iconLibrary';
@@ -104,6 +105,27 @@ function DesktopShell({ desktop, dispatch }: { desktop: typeof initialDesktop; d
   const onBlank = (target: EventTarget) => !(target as HTMLElement).closest('.os-window, .desktop-icon, .context-menu');
   const wallpaper = data.settings.wallpaper;
 
+  // Work capsules reuse the window system above: each Window reports its geometry here and
+  // takes a saved one back through `layout`; open/minimized/order go through the reducer.
+  const geometry = useRef<Partial<Record<WindowId, { rect: WindowRect; maximized: boolean }>>>({});
+  const [layouts, setLayouts] = useState<Partial<Record<WindowId, { rect: WindowRect; maximized: boolean; nonce: number }>>>({});
+  const currentLayout = (): CapsuleLayout => {
+    const ids = desktop.stack.filter((id) => id !== CAPSULE_WINDOW && desktop.running.includes(id) && geometry.current[id]);
+    const front = [...desktop.stack].reverse().find((id) => ids.includes(id) && !desktop.minimized.includes(id)) ?? null;
+    return {
+      windows: ids.map((id) => ({ id, ...geometry.current[id]!.rect, maximized: geometry.current[id]!.maximized, minimized: desktop.minimized.includes(id) })),
+      active: front,
+      view: { ...(ids.includes('controlPanel') ? { settingsTab: shell.settingsTab } : {}), ...(ids.includes('files') ? { filesViewing: shell.viewing } : {}) },
+    };
+  };
+  const openLayout = (layout: CapsuleLayout) => {
+    const nonce = Date.now();
+    setLayouts((current) => ({ ...current, ...Object.fromEntries(layout.windows.map(({ id, x, y, width, height, maximized }) => [id, { rect: { x, y, width, height }, maximized, nonce }])) }));
+    if (layout.view.settingsTab) shell.setSettingsTab(layout.view.settingsTab);
+    if ('filesViewing' in layout.view) shell.setViewing(layout.view.filesViewing ?? null);
+    dispatch({ type: 'layout', windows: layout.windows.map((window) => window.id), minimized: layout.windows.filter((window) => window.minimized).map((window) => window.id), active: layout.active ?? undefined });
+  };
+
   const shared = (id: WindowId) => ({
     isOpen: desktop.running.includes(id),
     isMinimized: desktop.minimized.includes(id),
@@ -113,6 +135,8 @@ function DesktopShell({ desktop, dispatch }: { desktop: typeof initialDesktop; d
     onMinimize: () => dispatch({ type: 'minimize', id }),
     zIndex: 10 + desktop.stack.indexOf(id),
     onFocus: () => dispatch({ type: 'focus', id }),
+    layout: layouts[id],
+    onLayout: (rect: WindowRect, maximized: boolean) => { geometry.current[id] = { rect, maximized }; },
   });
 
   return (
@@ -145,8 +169,8 @@ function DesktopShell({ desktop, dispatch }: { desktop: typeof initialDesktop; d
       <Window title="환경설정" className="settings-window" icon={<Settings size={18} />} defaultPosition={{ x: 390, y: 190 }} defaultSize={{ width: 720, height: 500 }} {...shared('controlPanel')}>
         <ControlPanel />
       </Window>
-      <Window title="Program Manager" icon={<Monitor size={18} />} defaultPosition={{ x: 440, y: 120 }} defaultSize={{ width: 680, height: 500 }} {...shared('programManager')}>
-        <ProgramManager />
+      <Window title="작업 캡슐" icon={<Layers size={18} />} defaultPosition={{ x: 440, y: 120 }} defaultSize={{ width: 560, height: 520 }} {...shared('programManager')}>
+        <WorkCapsule currentLayout={currentLayout} openLayout={openLayout} />
       </Window>
       <Window title="메모장" icon={<FileText size={18} />} defaultPosition={{ x: 300, y: 135 }} defaultSize={{ width: 680, height: 480 }} {...shared('notepad')}>
         <Notepad />

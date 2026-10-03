@@ -58,3 +58,10 @@ export const fileUnlocks = sqliteTable('file_unlocks', {
   tokenHash: text('token_hash').primaryKey(), owner: text('owner').notNull(), fileId: text('file_id').notNull(),
   expiresAt: integer('expires_at').notNull(),
 }, (t) => [index('idx_file_unlocks_owner_file').on(t.owner, t.fileId)]);
+
+// Saved window arrangements only (which windows, where, how big). They never hold app data,
+// so opening one shows today's memos, files and price lists.
+export const workCapsules = sqliteTable('work_capsules', {
+  id: text('id').primaryKey(), owner: text('owner').notNull(), name: text('name').notNull(),
+  layout: text('layout').notNull(), createdAt: integer('created_at').notNull(), updatedAt: integer('updated_at').notNull(),
+}, (t) => [index('idx_work_capsules_owner').on(t.owner)]);

@@ -584,3 +584,24 @@ button { cursor: pointer; }
   .settings-nav button { padding: 0 10px; }
   .settings-body { padding: 16px 12px 20px; }
 }
+
+/* 작업 캡슐: one save button and a list of saved window arrangements. */
+.work-capsule { display: flex; flex-direction: column; gap: 12px; height: 100%; padding: 18px 20px; background: #fff6fb; color: #63334e; }
+.work-capsule header h2 { margin: 0; color: #a53676; font-size: 18px; font-weight: 600; }
+.work-capsule header p { margin: 4px 0 0; color: #a0708c; font-size: 14px; }
+.capsule-save { display: grid; gap: 2px; justify-items: center; min-height: 64px; padding: 10px 16px; border: 1px solid #d77aae; border-radius: 12px; background: var(--shell-raised); color: #843c65; box-shadow: inset 0 1px 0 #fff, 0 2px 6px #b6578c26; }
+.capsule-save strong { font-size: 16px; font-weight: 600; }
+.capsule-save small { color: #a0708c; font-size: 13px; }
+.capsule-save:disabled { opacity: .5; }
+.capsule-save:focus-visible, .capsule-list button:focus-visible { outline: 2px solid #d0559a; outline-offset: 2px; }
+.work-capsule h3 { margin: 6px 0 0; color: #a0537e; font-size: 14px; font-weight: 600; }
+.capsule-list { flex: 1; min-height: 0; overflow: auto; display: grid; align-content: start; gap: 8px; margin: 0; padding: 0 2px 2px 0; list-style: none; }
+.capsule-list > li:not(.settings-empty) { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 12px; border: 1px solid #f0c9de; border-radius: 10px; background: #fffdfd; }
+.capsule-text { flex: 1 1 180px; min-width: 0; display: grid; gap: 2px; }
+.capsule-text strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; color: #63334e; }
+.capsule-text span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #843c65; font-size: 14px; }
+.capsule-text small { color: #a0708c; font-size: 12px; }
+.capsule-list button { min-height: 40px; display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border: 1px solid #e3adcd; border-radius: 8px; background: #fffafd; color: #843c65; font-size: 14px; }
+.capsule-list button:hover { background: #fce1f0; }
+.capsule-list .capsule-open { background: #f7c4df; border-color: #d77aae; font-weight: 600; }
+.capsule-list .capsule-more { width: 40px; justify-content: center; padding: 0; }
