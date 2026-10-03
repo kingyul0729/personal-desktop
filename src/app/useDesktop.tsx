@@ -6,7 +6,7 @@ import { PasswordDialog } from './components/PasswordDialog';
 import { IconPicker } from './components/IconPicker';
 import { useTrashChange } from './trash';
 
-export type SettingsTab = 'wallpaper' | 'desktop' | 'files' | 'security';
+export type SettingsTab = 'wallpaper' | 'font' | 'desktop' | 'files' | 'security';
 type Result<T = DesktopData & Record<string, unknown>> = { ok: true; data: T } | { ok: false; error: string };
 export interface OpenedFile { id: string; kind: 'file' | 'folder'; name: string; content: string; updatedAt: number }
 
@@ -63,6 +63,12 @@ export function DesktopProvider({ openWindow, children }: { openWindow: (id: Win
     finally { setLoaded(true); }
   }, [headers]);
   useEffect(() => { void refresh(); }, [refresh]);
+  // The saved font applies to the whole desktop through a data attribute (see os.css).
+  const font = data.settings.font;
+  useEffect(() => {
+    const root = document.documentElement;
+    if (font) root.dataset.font = font; else delete root.dataset.font;
+  }, [font]);
   // A memo, price image or work capsule moved to the trash fills the trash icon and list.
   useTrashChange(null, () => { void refresh(); });
 

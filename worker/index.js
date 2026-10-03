@@ -194,7 +194,7 @@ function sameText(a, b) { if (a.length !== b.length) return false; let diff = 0;
 const validPassword = value => typeof value === 'string' && value.length >= 4 && value.length <= 64;
 
 export function publicDesktop() {
-  return { authenticated: false, settings: { wallpaper: null, fit: 'cover' }, assets: [], files: [], trash: [],
+  return { authenticated: false, settings: { wallpaper: null, fit: 'cover', font: null }, assets: [], files: [], trash: [],
     items: PROGRAMS.map(([id, label], sort) => ({ id: `program:${id}`, kind: 'program', target: `program:${id}`, label, defaultLabel: label, icon: null, hidden: false, sort })) };
 }
 async function seedDesktop(env, owner) {
@@ -232,6 +232,8 @@ const fileView = (file, unlocked) => ({ id: file.id, parentId: file.parentId, ki
 
 // Memos, price images and work capsules share the trash with files: deleting only marks
 // trashed_at, and the row (and stored image) is removed when purged from the trash.
+// Fonts bundled in public/fonts; the setting stores only one of these ids.
+const FONTS = ['bccard', 'beomseok-neo', 'adultkid', 'nanum-sinhonbubu'];
 const TRASH_TYPES = ['memo', 'price', 'capsule'];
 async function appTrash(env, owner) {
   const [memos, prices, capsules] = await Promise.all([
@@ -277,7 +279,7 @@ async function desktopState(env, owner, unlocked) {
   const [files, items, settings, assets] = await Promise.all([
     loadFiles(env, owner),
     statement(env, 'SELECT id, kind, target, label, icon, hidden, sort FROM desktop_items WHERE owner = ? ORDER BY sort, rowid', owner).all(),
-    statement(env, 'SELECT wallpaper_asset_id AS assetId, wallpaper_fit AS fit FROM desktop_settings WHERE owner = ?', owner).first(),
+    statement(env, 'SELECT wallpaper_asset_id AS assetId, wallpaper_fit AS fit, font FROM desktop_settings WHERE owner = ?', owner).first(),
     statement(env, 'SELECT id, kind FROM desktop_assets WHERE owner = ? ORDER BY created_at, rowid', owner).all(),
   ]);
   const programLabel = target => PROGRAMS.find(([id]) => target === `program:${id}`)?.[1] ?? '';
@@ -304,7 +306,7 @@ async function desktopState(env, owner, unlocked) {
   const wallpaper = settings?.assetId && assets.results.some(asset => asset.id === settings.assetId) ? { assetId: settings.assetId, src: assetSrc(settings.assetId) } : null;
   return { authenticated: true, items: desktop, trash,
     files: visible.map(file => fileView(file, unlocked)).sort((a, b) => (a.kind === b.kind ? 0 : a.kind === 'folder' ? -1 : 1) || a.name.localeCompare(b.name, 'ko')),
-    settings: { wallpaper, fit: settings?.fit === 'contain' ? 'contain' : 'cover' },
+    settings: { wallpaper, fit: settings?.fit === 'contain' ? 'contain' : 'cover', font: FONTS.includes(settings?.font) ? settings.font : null },
     assets: assets.results.map(asset => ({ id: asset.id, kind: asset.kind, src: assetSrc(asset.id) })) };
 }
 
@@ -360,6 +362,12 @@ async function desktopAction(env, owner, body, unlocked) {
       if (body.assetId !== null && !(await statement(env, 'SELECT id FROM desktop_assets WHERE id = ? AND owner = ?', body.assetId, owner).first())) return fail('배경 이미지를 찾을 수 없습니다.', 404);
       await statement(env, `INSERT INTO desktop_settings (owner, wallpaper_asset_id, wallpaper_fit, updated_at) VALUES (?, ?, 'cover', ?)
         ON CONFLICT(owner) DO UPDATE SET wallpaper_asset_id = excluded.wallpaper_asset_id, updated_at = excluded.updated_at`, owner, body.assetId, Date.now()).run();
+      return null;
+    }
+    case 'set-font': {
+      if (body.font !== null && !FONTS.includes(body.font)) return fail('글씨체를 확인해 주세요.');
+      await statement(env, `INSERT INTO desktop_settings (owner, wallpaper_asset_id, wallpaper_fit, font, updated_at) VALUES (?, NULL, 'cover', ?, ?)
+        ON CONFLICT(owner) DO UPDATE SET font = excluded.font, updated_at = excluded.updated_at`, owner, body.font, Date.now()).run();
       return null;
     }
     case 'set-fit': {
@@ -593,7 +601,7 @@ export function cleanLayout(value) {
   }
   if (!windows.length) return null;
   const view = {};
-  if (['wallpaper', 'desktop', 'files', 'security'].includes(value.view?.settingsTab)) view.settingsTab = value.view.settingsTab;
+  if (['wallpaper', 'font', 'desktop', 'files', 'security'].includes(value.view?.settingsTab)) view.settingsTab = value.view.settingsTab;
   if (value.view && 'filesViewing' in value.view && (value.view.filesViewing === null || fileId(value.view.filesViewing))) view.filesViewing = value.view.filesViewing;
   return { windows, active: windows.some(window => window.id === value.active) ? value.active : null, view };
 }

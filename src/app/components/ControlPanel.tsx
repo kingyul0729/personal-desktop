@@ -7,8 +7,9 @@ import { DEFAULT_ICONS, libraryIconSrc } from '../iconLibrary';
 import { DesktopIconArt } from './DesktopIcon';
 import { EntryBadge } from './EntryIcon';
 import { InlineRename } from './InlineRename';
+import { FONTS } from '../fonts';
 
-const TABS: [SettingsTab, string][] = [['wallpaper', '배경화면'], ['desktop', '바탕화면'], ['files', '파일 설정'], ['security', '보안 설정']];
+const TABS: [SettingsTab, string][] = [['wallpaper', '배경화면'], ['font', '글씨체'], ['desktop', '바탕화면'], ['files', '파일 설정'], ['security', '보안 설정']];
 const DEFAULT_WALLPAPER = '/wallpapers/pink-cloud-grid.png';
 
 export function ControlPanel() {
@@ -20,6 +21,7 @@ export function ControlPanel() {
     <section className="settings-body" id="settings-panel" role="tabpanel" aria-labelledby={`settings-tab-${settingsTab}`}>
       {loaded && !data.authenticated ? <p className="settings-empty">로그인하면 설정이 저장되고 다른 기기에서도 그대로 보입니다. <a href="/signin-with-chatgpt?return_to=%2F" target="_top">로그인</a></p>
         : settingsTab === 'wallpaper' ? <WallpaperSettings />
+          : settingsTab === 'font' ? <FontSettings />
           : settingsTab === 'desktop' ? <DesktopSettings />
             : settingsTab === 'files' ? <FileSettings /> : <SecuritySettings />}
     </section>
@@ -67,6 +69,27 @@ function WallpaperSettings() {
         return uploaded.ok ? act({ action: 'set-wallpaper', assetId: uploaded.data.id }) : uploaded;
       }, '배경화면을 바꿨습니다.');
     }} />
+  </>;
+}
+
+const FONT_SAMPLE = '가나다라 안녕하세요 ABC 123';
+
+function FontSettings() {
+  const { data, act } = useDesktop();
+  const feedback = useFeedback();
+  const current = data.settings.font;
+  const choose = (font: string | null, label: string) => current !== font && feedback.run(() => act({ action: 'set-font', font }), `글씨체를 ${label}(으)로 바꿨습니다.`);
+  return <>
+    <p className="settings-hint">고른 글씨체는 바탕화면과 모든 창에 적용되고, 다른 기기에서도 그대로 보입니다.</p>
+    <div className="font-options" role="group" aria-label="글씨체">
+      <button type="button" className="font-preview" aria-pressed={!current} disabled={feedback.busy} onClick={() => choose(null, '기본 글씨체')}>
+        <strong>기본 글씨체</strong><span style={{ fontFamily: 'Inter, Pretendard, "Noto Sans KR", system-ui, sans-serif' }}>{FONT_SAMPLE}</span>
+      </button>
+      {FONTS.map(font => <button key={font.id} type="button" className="font-preview" aria-pressed={current === font.id} disabled={feedback.busy} onClick={() => choose(font.id, font.label)}>
+        <strong>{font.label}</strong><span style={{ fontFamily: `"${font.family}", system-ui, sans-serif` }}>{FONT_SAMPLE}</span>
+      </button>)}
+    </div>
+    {feedback.view}
   </>;
 }
 
