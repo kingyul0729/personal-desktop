@@ -91,7 +91,7 @@ async function list(env, owner) {
   await seed(env, owner);
   const [folders, images] = await Promise.all([
     statement(env, 'SELECT id, name, variant FROM price_folders WHERE owner = ? ORDER BY created_at, rowid', owner).all(),
-    statement(env, 'SELECT id, name, folder_id AS folderId, source FROM price_images WHERE owner = ? ORDER BY created_at, rowid', owner).all(),
+    statement(env, 'SELECT id, name, folder_id AS folderId, source FROM price_images WHERE owner = ? AND trashed_at IS NULL ORDER BY created_at, rowid', owner).all(),
   ]);
   return { authenticated: true, folders: folders.results,
     images: images.results.map(({ source, ...image }) => ({ ...image, ...imageSources(source || `/api/price-images/${encodeURIComponent(image.id)}`) })) };
@@ -113,7 +113,7 @@ const memoBody = body => body && typeof body === 'object' && typeof body.content
   ? { title: memoTitle(body.title), content: body.content } : null;
 async function memoState(env, owner) {
   const [rows, draft] = await Promise.all([
-    statement(env, 'SELECT id, title, content, created_at AS createdAt, saved_at AS savedAt FROM memos WHERE owner = ? ORDER BY saved_at DESC, rowid DESC', owner).all(),
+    statement(env, 'SELECT id, title, content, created_at AS createdAt, saved_at AS savedAt FROM memos WHERE owner = ? AND trashed_at IS NULL ORDER BY saved_at DESC, rowid DESC', owner).all(),
     statement(env, 'SELECT memo_id AS memoId, title, content, updated_at AS updatedAt FROM memo_drafts WHERE owner = ?', owner).first(),
   ]);
   return { authenticated: true, draft,
@@ -136,7 +136,7 @@ async function handleMemos(request, env, owner, url) {
   const id = match && memoId(decodeId(match[1]));
   if (match && !id) return json({ error: '메모를 찾을 수 없습니다.' }, 404);
   if (id && request.method === 'GET') {
-    const row = await statement(env, 'SELECT id, title, content, created_at AS createdAt, saved_at AS savedAt FROM memos WHERE id = ? AND owner = ?', id, owner).first();
+    const row = await statement(env, 'SELECT id, title, content, created_at AS createdAt, saved_at AS savedAt FROM memos WHERE id = ? AND owner = ? AND trashed_at IS NULL', id, owner).first();
     return row ? json(row) : json({ error: '메모를 찾을 수 없습니다.' }, 404);
   }
   if (id && request.method === 'PUT') {
@@ -146,22 +146,23 @@ async function handleMemos(request, env, owner, url) {
     if (memo.content.length > MEMO_LIMIT) return json({ error: '메모는 10만 자까지 저장할 수 있습니다.' }, 413);
     const now = Date.now();
     // The id comes from the editor, so saving again updates the same memo instead of adding a copy.
+    // Saving a memo that another device moved to the trash brings it back rather than losing the text.
     const [saved] = await env.DB.batch([
       statement(env, `INSERT INTO memos (id, owner, title, content, created_at, saved_at) VALUES (?, ?, ?, ?, ?, ?)
-        ON CONFLICT(id) DO UPDATE SET title = excluded.title, content = excluded.content, saved_at = excluded.saved_at WHERE memos.owner = excluded.owner`,
+        ON CONFLICT(id) DO UPDATE SET title = excluded.title, content = excluded.content, saved_at = excluded.saved_at, trashed_at = NULL WHERE memos.owner = excluded.owner`,
         id, owner, memo.title, memo.content, now, now),
       statement(env, `INSERT INTO memo_drafts (owner, memo_id, title, content, updated_at) SELECT ?, ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM memos WHERE id = ? AND owner = ?)
         ON CONFLICT(owner) DO UPDATE SET memo_id = excluded.memo_id, title = excluded.title, content = excluded.content, updated_at = excluded.updated_at`,
         owner, id, memo.title, memo.content, now, id, owner),
     ]);
     if (!saved.meta.changes) return json({ error: '메모를 찾을 수 없습니다.' }, 404);
-    const row = await statement(env, 'SELECT id, title, content, created_at AS createdAt, saved_at AS savedAt FROM memos WHERE id = ? AND owner = ?', id, owner).first();
+    const row = await statement(env, 'SELECT id, title, content, created_at AS createdAt, saved_at AS savedAt FROM memos WHERE id = ? AND owner = ? AND trashed_at IS NULL', id, owner).first();
     return json({ memo: row, ...(await memoState(env, owner)) });
   }
   if (id && request.method === 'DELETE') {
-    // Drop the draft too when it belongs to this memo, so another device does not bring it back.
+    // The memo goes to the trash. Its draft is dropped so another device does not reopen it.
     const [removed] = await env.DB.batch([
-      statement(env, 'DELETE FROM memos WHERE id = ? AND owner = ?', id, owner),
+      statement(env, 'UPDATE memos SET trashed_at = ? WHERE id = ? AND owner = ? AND trashed_at IS NULL', Date.now(), id, owner),
       statement(env, 'DELETE FROM memo_drafts WHERE owner = ? AND memo_id = ?', owner, id),
     ]);
     if (!removed.meta.changes) return json({ error: '메모를 찾을 수 없습니다.' }, 404);
@@ -229,6 +230,48 @@ const inTrash = (files, id) => ancestors(files, id).some(item => item.trashedAt)
 const fileView = (file, unlocked) => ({ id: file.id, parentId: file.parentId, kind: file.kind, name: file.name,
   updatedAt: file.updatedAt, locked: file.locked, unlocked: file.locked && unlocked.has(file.id) });
 
+// Memos, price images and work capsules share the trash with files: deleting only marks
+// trashed_at, and the row (and stored image) is removed when purged from the trash.
+const TRASH_TYPES = ['memo', 'price', 'capsule'];
+async function appTrash(env, owner) {
+  const [memos, prices, capsules] = await Promise.all([
+    statement(env, 'SELECT id, title, content, trashed_at AS trashedAt FROM memos WHERE owner = ? AND trashed_at IS NOT NULL', owner).all(),
+    statement(env, `SELECT i.id, i.name, i.trashed_at AS trashedAt, f.name AS folder FROM price_images i
+      LEFT JOIN price_folders f ON f.id = i.folder_id AND f.owner = i.owner WHERE i.owner = ? AND i.trashed_at IS NOT NULL`, owner).all(),
+    statement(env, 'SELECT id, name, trashed_at AS trashedAt FROM work_capsules WHERE owner = ? AND trashed_at IS NOT NULL', owner).all(),
+  ]);
+  const entry = (type, row, name, location) => ({ type, id: row.id, kind: type, name, trashedAt: row.trashedAt, locked: false, location });
+  return [
+    ...memos.results.map(row => entry('memo', row, row.title || memoPreview(row.content).slice(0, 30) || '제목 없는 메모', '메모장')),
+    ...prices.results.map(row => entry('price', row, row.name, row.folder ? `가격표 보관함 › ${row.folder}` : '가격표 보관함')),
+    ...capsules.results.map(row => entry('capsule', row, row.name, '작업 캡슐')),
+  ];
+}
+async function restoreApp(env, owner, type, id) {
+  const table = { memo: 'memos', price: 'price_images', capsule: 'work_capsules' }[type];
+  const result = await statement(env, `UPDATE ${table} SET trashed_at = NULL WHERE id = ? AND owner = ? AND trashed_at IS NOT NULL`, id, owner).run();
+  return result.meta.changes ? { restoredTo: null } : fail('휴지통에서 항목을 찾을 수 없습니다.', 404);
+}
+async function purgeApp(env, owner, type, id) {
+  if (type === 'memo') {
+    const [removed] = await env.DB.batch([
+      statement(env, 'DELETE FROM memos WHERE id = ? AND owner = ? AND trashed_at IS NOT NULL', id, owner),
+      statement(env, 'DELETE FROM memo_drafts WHERE owner = ? AND memo_id = ? AND NOT EXISTS (SELECT 1 FROM memos WHERE id = ? AND owner = ?)', owner, id, id, owner),
+    ]);
+    return removed.meta.changes > 0;
+  }
+  if (type === 'price') {
+    const row = await statement(env, 'SELECT object_key FROM price_images WHERE id = ? AND owner = ? AND trashed_at IS NOT NULL', id, owner).first();
+    if (!row) return false;
+    // Remove the record first so a storage cleanup failure never leaves a broken image behind.
+    await statement(env, 'DELETE FROM price_images WHERE id = ? AND owner = ?', id, owner).run();
+    if (row.object_key) await env.BUCKET.delete(row.object_key).catch(error => console.error('Image cleanup failed', error));
+    return true;
+  }
+  const result = await statement(env, 'DELETE FROM work_capsules WHERE id = ? AND owner = ? AND trashed_at IS NOT NULL', id, owner).run();
+  return result.meta.changes > 0;
+}
+
 async function desktopState(env, owner, unlocked) {
   await seedDesktop(env, owner);
   const [files, items, settings, assets] = await Promise.all([
@@ -253,11 +296,11 @@ async function desktopState(env, owner, unlocked) {
     desktop.push({ ...base, label: item.label || programLabel(item.target), missing, fileKind: linked?.kind, locked: !!linked?.locked });
   }
   const visible = [...files.values()].filter(file => !inTrash(files, file.id) && !blockedBy(files, unlocked, file.id, false));
-  const trash = [...files.values()].filter(file => file.trashedAt).sort((a, b) => b.trashedAt - a.trashedAt).map(file => {
+  const trash = [...[...files.values()].filter(file => file.trashedAt).map(file => {
     const parent = file.parentId ? files.get(file.parentId) : null;
-    return { id: file.id, kind: file.kind, name: file.name, trashedAt: file.trashedAt, locked: file.locked,
+    return { type: 'file', id: file.id, kind: file.kind, name: file.name, trashedAt: file.trashedAt, locked: file.locked,
       location: parent && !inTrash(files, parent.id) ? parent.name : '바탕화면' };
-  });
+  }), ...(await appTrash(env, owner))].sort((a, b) => b.trashedAt - a.trashedAt);
   const wallpaper = settings?.assetId && assets.results.some(asset => asset.id === settings.assetId) ? { assetId: settings.assetId, src: assetSrc(settings.assetId) } : null;
   return { authenticated: true, items: desktop, trash,
     files: visible.map(file => fileView(file, unlocked)).sort((a, b) => (a.kind === b.kind ? 0 : a.kind === 'folder' ? -1 : 1) || a.name.localeCompare(b.name, 'ko')),
@@ -299,6 +342,11 @@ async function purge(env, owner, ids) {
 
 // Each action returns null on success or a fail(...) object; the caller then returns fresh state.
 async function desktopAction(env, owner, body, unlocked) {
+  if (TRASH_TYPES.includes(body.type) && ['restore-file', 'purge-file'].includes(body.action)) {
+    if (typeof body.id !== 'string') return fail('휴지통에서 항목을 찾을 수 없습니다.', 404);
+    if (body.action === 'restore-file') return restoreApp(env, owner, body.type, body.id);
+    return await purgeApp(env, owner, body.type, body.id) ? null : fail('휴지통에서 항목을 찾을 수 없습니다.', 404);
+  }
   const files = await loadFiles(env, owner);
   const target = fileId(body.id) && files.get(body.id);
   const needAccess = () => {
@@ -440,6 +488,7 @@ async function desktopAction(env, owner, body, unlocked) {
         if (descendants(files, file.id).some(id => blockedBy(files, unlocked, id))) { skipped++; continue; }
         await purge(env, owner, descendants(files, file.id));
       }
+      for (const entry of await appTrash(env, owner)) await purgeApp(env, owner, entry.type, entry.id);
       return { skipped };
     }
     case 'lock-set': {
@@ -549,7 +598,7 @@ export function cleanLayout(value) {
   return { windows, active: windows.some(window => window.id === value.active) ? value.active : null, view };
 }
 async function capsuleList(env, owner) {
-  const rows = await statement(env, 'SELECT id, name, layout, created_at AS createdAt FROM work_capsules WHERE owner = ? ORDER BY created_at DESC, rowid DESC', owner).all();
+  const rows = await statement(env, 'SELECT id, name, layout, created_at AS createdAt FROM work_capsules WHERE owner = ? AND trashed_at IS NULL ORDER BY created_at DESC, rowid DESC', owner).all();
   return { authenticated: true, capsules: rows.results.map(({ layout, ...row }) => ({ ...row, layout: JSON.parse(layout) })) };
 }
 async function handleCapsules(request, env, owner) {
@@ -562,17 +611,17 @@ async function handleCapsules(request, env, owner) {
     const layout = cleanLayout(body.layout);
     if (!layout) return json({ error: '저장할 창이 없습니다. 창을 연 뒤 저장해 주세요.' }, 400);
     if (!name) return json({ error: '작업 이름을 입력해 주세요.' }, 400);
-    const count = await statement(env, 'SELECT count(*) AS n FROM work_capsules WHERE owner = ?', owner).first();
+    const count = await statement(env, 'SELECT count(*) AS n FROM work_capsules WHERE owner = ? AND trashed_at IS NULL', owner).first();
     if (count.n >= CAPSULE_LIMIT) return json({ error: `작업은 ${CAPSULE_LIMIT}개까지 저장할 수 있습니다.` }, 400);
     const now = Date.now();
     await statement(env, 'INSERT INTO work_capsules (id, owner, name, layout, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
       crypto.randomUUID(), owner, name, JSON.stringify(layout), now, now).run();
   } else if (body.action === 'rename') {
     if (!name) return json({ error: '작업 이름을 입력해 주세요.' }, 400);
-    const result = await statement(env, 'UPDATE work_capsules SET name = ?, updated_at = ? WHERE id = ? AND owner = ?', name, Date.now(), body.id, owner).run();
+    const result = await statement(env, 'UPDATE work_capsules SET name = ?, updated_at = ? WHERE id = ? AND owner = ? AND trashed_at IS NULL', name, Date.now(), body.id, owner).run();
     if (!result.meta.changes) return json({ error: '작업을 찾을 수 없습니다.' }, 404);
   } else if (body.action === 'delete') {
-    const result = await statement(env, 'DELETE FROM work_capsules WHERE id = ? AND owner = ?', body.id, owner).run();
+    const result = await statement(env, 'UPDATE work_capsules SET trashed_at = ? WHERE id = ? AND owner = ? AND trashed_at IS NULL', Date.now(), body.id, owner).run();
     if (!result.meta.changes) return json({ error: '작업을 찾을 수 없습니다.' }, 404);
   } else return json({ error: '지원하지 않는 작업입니다.' }, 400);
   return json(await capsuleList(env, owner));
@@ -603,7 +652,7 @@ export async function handleApi(request, env) {
   if (imageMatch && request.method === 'GET') {
     const id = decodeId(imageMatch[1]);
     if (id === null) return json({ error: '이미지를 찾을 수 없습니다.' }, 404);
-    const row = await statement(env, 'SELECT object_key, mime FROM price_images WHERE id = ? AND owner = ?', id, owner).first();
+    const row = await statement(env, 'SELECT object_key, mime FROM price_images WHERE id = ? AND owner = ? AND trashed_at IS NULL', id, owner).first();
     if (!row?.object_key) return json({ error: '이미지를 찾을 수 없습니다.' }, 404);
     const object = await env.BUCKET.get(row.object_key);
     if (!object) return json({ error: '이미지를 불러오지 못했습니다.' }, 404);
@@ -643,18 +692,16 @@ export async function handleApi(request, env) {
       if (!name) return json({ error: '가격표 이름을 입력해 주세요.' }, 400);
       const folder = await statement(env, 'SELECT id FROM price_folders WHERE id = ? AND owner = ?', body.folderId, owner).first();
       if (!folder) return json({ error: '저장할 폴더를 선택해 주세요.' }, 400);
-      const result = await statement(env, 'UPDATE price_images SET name = ?, folder_id = ? WHERE id = ? AND owner = ?', name, body.folderId, body.id, owner).run();
+      const result = await statement(env, 'UPDATE price_images SET name = ?, folder_id = ? WHERE id = ? AND owner = ? AND trashed_at IS NULL', name, body.folderId, body.id, owner).run();
       if (!result.meta.changes) return json({ error: '가격표를 찾을 수 없습니다.' }, 404);
     } else if (body.action === 'rename-folder') {
       if (!name) return json({ error: '폴더 이름을 입력해 주세요.' }, 400);
       const result = await statement(env, 'UPDATE price_folders SET name = ? WHERE id = ? AND owner = ?', name, body.id, owner).run();
       if (!result.meta.changes) return json({ error: '폴더를 찾을 수 없습니다.' }, 404);
     } else if (body.action === 'delete-image') {
-      const row = await statement(env, 'SELECT object_key FROM price_images WHERE id = ? AND owner = ?', body.id, owner).first();
-      if (!row) return json({ error: '가격표를 찾을 수 없습니다.' }, 404);
-      // Remove the record first so a storage cleanup failure never leaves a broken visible image.
-      await statement(env, 'DELETE FROM price_images WHERE id = ? AND owner = ?', body.id, owner).run();
-      if (row.object_key) await env.BUCKET.delete(row.object_key).catch(error => console.error('Image cleanup failed', error));
+      // Goes to the trash; the record and stored image are removed only when purged there.
+      const result = await statement(env, 'UPDATE price_images SET trashed_at = ? WHERE id = ? AND owner = ? AND trashed_at IS NULL', Date.now(), body.id, owner).run();
+      if (!result.meta.changes) return json({ error: '가격표를 찾을 수 없습니다.' }, 404);
     } else return json({ error: '지원하지 않는 작업입니다.' }, 400);
     return json(await list(env, owner));
   }

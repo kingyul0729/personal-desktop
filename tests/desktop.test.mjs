@@ -280,3 +280,78 @@ test('capsule layouts are cleaned: unknown windows, the capsule window and bad n
   assert.deepEqual(cleaned.view, {});
   assert.ok(!('extra' in cleaned.windows[1]));
 });
+
+test('memos, price images and work capsules go to the trash first; restore brings them back, purge and emptying delete for good', async () => {
+  const env = environment();
+  const memo = '66666666-6666-4666-8666-666666666666';
+  await call(env, `/api/memos/${memo}`, { method: 'PUT', body: { title: '', content: '휴지통에 갈 메모 내용' } });
+  await call(env, '/api/memo-draft', { method: 'PUT', body: { memoId: memo, title: '', content: '작성 중' } });
+  await call(env, '/api/price-files');
+  const form = new FormData();
+  form.set('file', png()); form.set('name', '내 가격표'); form.set('folderId', 'me:toning');
+  const price = (await call(env, '/api/price-images', { method: 'POST', body: form })).data.images.find(image => image.name === '내 가격표');
+  const capsule = (await call(env, '/api/capsules', { method: 'POST', body: { action: 'create', name: '상담 준비', layout: layout([win('notepad')]) } })).data.capsules[0];
+  const counts = () => ['memos', 'price_images', 'work_capsules'].map(table => env.sqlite.prepare(`SELECT count(*) AS n FROM ${table} WHERE owner = 'me'`).get().n);
+  const before = counts();
+
+  assert.equal((await call(env, `/api/memos/${memo}`, { method: 'DELETE' })).data.memos.length, 0);
+  assert.ok(!(await call(env, '/api/price-files', { method: 'POST', body: { action: 'delete-image', id: price.id } })).data.images.some(image => image.id === price.id));
+  assert.equal((await call(env, '/api/capsules', { method: 'POST', body: { action: 'delete', id: capsule.id } })).data.capsules.length, 0);
+  assert.deepEqual(counts(), before, 'moving to the trash deletes nothing');
+  assert.equal(env.objects.size, 1, 'the stored image stays while in the trash');
+  assert.equal((await call(env, `/api/memos/${memo}`)).status, 404);
+  assert.equal((await call(env, '/api/memos')).data.draft, null, 'the draft does not reopen the trashed memo');
+
+  let state = (await call(env, '/api/desktop')).data;
+  assert.deepEqual(state.trash.map(item => [item.type, item.name, item.location]).sort(), [
+    ['capsule', '상담 준비', '작업 캡슐'], ['memo', '휴지통에 갈 메모 내용', '메모장'], ['price', '내 가격표', '가격표 보관함 › 색소·토닝']]);
+  assert.equal((await call(env, '/api/desktop', { owner: 'someone-else' })).data.trash.length, 0);
+  assert.equal((await act(env, { action: 'purge-file', type: 'memo', id: memo }, { owner: 'someone-else' })).status, 404);
+
+  state = (await act(env, { action: 'restore-file', type: 'memo', id: memo })).data;
+  assert.equal((await call(env, `/api/memos/${memo}`)).data.content, '휴지통에 갈 메모 내용');
+  await act(env, { action: 'restore-file', type: 'price', id: price.id });
+  assert.ok((await call(env, '/api/price-files')).data.images.some(image => image.id === price.id && image.folderId === 'me:toning'));
+  await act(env, { action: 'restore-file', type: 'capsule', id: capsule.id });
+  assert.deepEqual((await call(env, '/api/capsules')).data.capsules[0].layout, capsule.layout);
+  assert.equal((await call(env, '/api/desktop')).data.trash.length, 0);
+  assert.equal((await act(env, { action: 'restore-file', type: 'memo', id: memo })).status, 404, 'only trashed items can be restored');
+  assert.equal((await act(env, { action: 'purge-file', type: 'memo', id: memo })).status, 404, 'only trashed items can be purged');
+
+  // Saving a memo another device trashed keeps the text instead of losing it.
+  await call(env, `/api/memos/${memo}`, { method: 'DELETE' });
+  await call(env, `/api/memos/${memo}`, { method: 'PUT', body: { title: '', content: '다른 기기에서 저장' } });
+  assert.equal((await call(env, '/api/memos')).data.memos.length, 1);
+
+  await call(env, `/api/memos/${memo}`, { method: 'DELETE' });
+  await act(env, { action: 'purge-file', type: 'memo', id: memo });
+  assert.equal(counts()[0], before[0] - 1);
+  await call(env, '/api/price-files', { method: 'POST', body: { action: 'delete-image', id: price.id } });
+  await call(env, '/api/capsules', { method: 'POST', body: { action: 'delete', id: capsule.id } });
+  const file = (await act(env, { action: 'create-file', kind: 'file', name: '문서' })).data.created;
+  await act(env, { action: 'trash-file', id: file });
+  state = (await act(env, { action: 'empty-trash' })).data;
+  assert.equal(state.trash.length, 0);
+  assert.deepEqual(counts(), [before[0] - 1, before[1] - 1, before[2] - 1]);
+  assert.equal(env.objects.size, 0, 'emptying the trash removes the stored image');
+});
+
+test('adding the trash columns keeps memos, price lists and work capsules exactly as they were', async () => {
+  const env = environment(migrationFiles.filter(name => !name.startsWith('0005')));
+  // Rows written the way the server stored them before the trash columns existed.
+  env.sqlite.exec(`INSERT INTO price_folders (id, owner, name, variant, created_at, catalog_version) VALUES ('me:mine', 'me', '내 폴더', 'heart', 1, 1);
+    INSERT INTO price_images (id, owner, folder_id, name, object_key, mime, created_at) VALUES ('img', 'me', 'me:mine', '기존 가격표', 'k', 'image/png', 1);
+    INSERT INTO memos (id, owner, title, content, created_at, saved_at) VALUES ('77777777-7777-4777-8777-777777777777', 'me', '메모', '기존 메모', 1, 1);
+    INSERT INTO memo_drafts (owner, memo_id, title, content, updated_at) VALUES ('me', '77777777-7777-4777-8777-777777777777', '', '작성 중', 2);
+    INSERT INTO work_capsules (id, owner, name, layout, created_at, updated_at) VALUES ('cap', 'me', '기존 작업', '{"windows":[{"id":"notepad","x":1,"y":2,"width":300,"height":200,"minimized":false,"maximized":false}],"active":"notepad","view":{}}', 1, 1);`);
+  const snapshot = () => JSON.stringify(['price_folders', 'price_images', 'memos', 'memo_drafts', 'work_capsules'].map(table =>
+    env.sqlite.prepare(`SELECT * FROM ${table} ORDER BY rowid`).all().map(({ trashed_at, ...row }) => row)));
+  const saved = snapshot();
+  env.apply(migrationFiles.filter(name => name.startsWith('0005')));
+  assert.equal(snapshot(), saved);
+  assert.equal(env.sqlite.prepare('SELECT count(*) AS n FROM memos WHERE trashed_at IS NOT NULL').get().n, 0);
+  assert.equal((await call(env, '/api/memos')).data.memos[0].preview, '기존 메모');
+  assert.ok((await call(env, '/api/price-files')).data.images.some(image => image.name === '기존 가격표'));
+  assert.equal((await call(env, '/api/memos')).data.draft.content, '작성 중');
+  assert.equal((await call(env, '/api/capsules')).data.capsules[0].name, '기존 작업');
+});

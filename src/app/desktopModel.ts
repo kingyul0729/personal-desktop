@@ -7,7 +7,7 @@ export interface DesktopEntry {
   icon: string | null; hidden: boolean; sort: number; fileKind?: 'file' | 'folder'; locked?: boolean; missing?: boolean;
 }
 export interface UserFile { id: string; parentId: string | null; kind: 'file' | 'folder'; name: string; updatedAt: number; locked: boolean; unlocked: boolean; }
-export interface TrashEntry { id: string; kind: 'file' | 'folder'; name: string; trashedAt: number; locked: boolean; location: string; }
+export interface TrashEntry { type: 'file' | 'memo' | 'price' | 'capsule'; id: string; kind: 'file' | 'folder' | 'memo' | 'price' | 'capsule'; name: string; trashedAt: number; locked: boolean; location: string; }
 export interface DesktopAsset { id: string; kind: 'wallpaper' | 'icon'; src: string; }
 export interface DesktopData {
   authenticated: boolean; items: DesktopEntry[]; files: UserFile[]; trash: TrashEntry[]; assets: DesktopAsset[];
