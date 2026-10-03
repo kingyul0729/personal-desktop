@@ -13,10 +13,10 @@ const DEFAULT_WALLPAPER = '/wallpapers/pink-cloud-grid.png';
 export function ControlPanel() {
   const { data, loaded, settingsTab, setSettingsTab } = useDesktop();
   return <div className="settings">
-    <nav className="settings-nav" aria-label="환경설정 메뉴">
-      {TABS.map(([tab, label]) => <button key={tab} type="button" aria-current={settingsTab === tab ? 'page' : undefined} onClick={() => setSettingsTab(tab)}>{label}</button>)}
+    <nav className="settings-nav" role="tablist" aria-label="환경설정 메뉴">
+      {TABS.map(([tab, label]) => <button key={tab} type="button" role="tab" id={`settings-tab-${tab}`} aria-selected={settingsTab === tab} aria-controls="settings-panel" onClick={() => setSettingsTab(tab)}>{label}</button>)}
     </nav>
-    <section className="settings-body" aria-label={TABS.find(([tab]) => tab === settingsTab)?.[1]}>
+    <section className="settings-body" id="settings-panel" role="tabpanel" aria-labelledby={`settings-tab-${settingsTab}`}>
       {loaded && !data.authenticated ? <p className="settings-empty">로그인하면 설정이 저장되고 다른 기기에서도 그대로 보입니다. <a href="/signin-with-chatgpt?return_to=%2F" target="_top">로그인</a></p>
         : settingsTab === 'wallpaper' ? <WallpaperSettings />
           : settingsTab === 'desktop' ? <DesktopSettings />
