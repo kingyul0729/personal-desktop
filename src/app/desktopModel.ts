@@ -11,12 +11,12 @@ export interface TrashEntry { type: 'file' | 'memo' | 'price' | 'capsule'; id: s
 export interface DesktopAsset { id: string; kind: 'wallpaper' | 'icon'; src: string; }
 export interface DesktopData {
   authenticated: boolean; items: DesktopEntry[]; files: UserFile[]; trash: TrashEntry[]; assets: DesktopAsset[];
-  settings: { wallpaper: { assetId: string; src: string } | null; fit: 'cover' | 'contain' };
+  settings: { wallpaper: { assetId: string; src: string } | null; fit: 'cover' | 'contain'; font: string | null };
 }
 
 // Mirrors the server's signed-out answer so the desktop looks the same before it loads.
 export const defaultDesktop: DesktopData = {
-  authenticated: false, files: [], trash: [], assets: [], settings: { wallpaper: null, fit: 'cover' },
+  authenticated: false, files: [], trash: [], assets: [], settings: { wallpaper: null, fit: 'cover', font: null },
   items: programs.map((program, sort) => ({ id: `program:${program.id}`, kind: 'program', target: `program:${program.id}`, label: program.label, defaultLabel: program.label, icon: null, hidden: false, sort })),
 };
 

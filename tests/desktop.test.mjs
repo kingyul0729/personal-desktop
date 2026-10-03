@@ -52,12 +52,12 @@ test('wallpaper upload, choice and fit persist on the server for every device', 
   await act(env, { action: 'set-wallpaper', assetId });
   await act(env, { action: 'set-fit', fit: 'contain' });
   const reloaded = (await call(env, '/api/desktop')).data;
-  assert.deepEqual(reloaded.settings, { wallpaper: { assetId, src: `/api/desktop-assets/${assetId}` }, fit: 'contain' });
+  assert.deepEqual(reloaded.settings, { wallpaper: { assetId, src: `/api/desktop-assets/${assetId}` }, fit: 'contain', font: null });
   assert.equal((await call(env, reloaded.settings.wallpaper.src)).status, 200);
   assert.equal((await call(env, reloaded.settings.wallpaper.src, { owner: 'someone-else' })).status, 404);
   assert.equal((await call(env, '/api/desktop', { owner: 'someone-else' })).data.settings.wallpaper, null);
   await act(env, { action: 'set-wallpaper', assetId: null });
-  assert.deepEqual((await call(env, '/api/desktop')).data.settings, { wallpaper: null, fit: 'contain' });
+  assert.deepEqual((await call(env, '/api/desktop')).data.settings, { wallpaper: null, fit: 'contain', font: null });
   assert.equal((await act(env, { action: 'set-wallpaper', assetId: 'aaaaaaaa-unknown' })).status, 404);
 });
 
@@ -215,7 +215,9 @@ test('trash keeps data until purge; restore returns to the original folder or th
 });
 
 test('adding the desktop tables keeps price lists, memos and drafts exactly as they were', async () => {
-  const before = migrationFiles.filter(name => !name.startsWith('0003'));
+  // 0006 adds a column to a 0003 table, so it is applied together with 0003.
+  const desktop = name => name.startsWith('0003') || name.startsWith('0006');
+  const before = migrationFiles.filter(name => !desktop(name));
   const env = environment(before);
   for (const owner of ['me', 'other']) await call(env, '/api/price-files', { owner });
   await call(env, '/api/price-files', { method: 'POST', body: { action: 'create-folder', name: '내 폴더', variant: 'flower' } });
@@ -224,7 +226,7 @@ test('adding the desktop tables keeps price lists, memos and drafts exactly as t
   await call(env, '/api/memo-draft', { method: 'PUT', body: { memoId: memo, title: '', content: '작성 중' } });
   const snapshot = () => JSON.stringify(['price_folders', 'price_images', 'memos', 'memo_drafts'].map(table => env.sqlite.prepare(`SELECT * FROM ${table} ORDER BY rowid`).all()));
   const saved = snapshot();
-  env.apply(migrationFiles.filter(name => name.startsWith('0003')));
+  env.apply(migrationFiles.filter(desktop));
   assert.equal(snapshot(), saved);
   await act(env, { action: 'create-file', kind: 'file', name: '새 파일' });
   assert.equal(snapshot(), saved);
@@ -354,4 +356,33 @@ test('adding the trash columns keeps memos, price lists and work capsules exactl
   assert.ok((await call(env, '/api/price-files')).data.images.some(image => image.name === '기존 가격표'));
   assert.equal((await call(env, '/api/memos')).data.draft.content, '작성 중');
   assert.equal((await call(env, '/api/capsules')).data.capsules[0].name, '기존 작업');
+});
+
+test('the chosen font is saved per account, only from the bundled list, and kept with the wallpaper', async () => {
+  const env = environment();
+  assert.equal((await call(env, '/api/desktop', { owner: '' })).data.settings.font, null);
+  assert.equal((await act(env, { action: 'set-font', font: 'adultkid' }, { owner: '' })).status, 401);
+  let state = (await act(env, { action: 'set-font', font: 'nanum-sinhonbubu' })).data;
+  assert.equal(state.settings.font, 'nanum-sinhonbubu');
+  for (const font of ['comic-sans', '../x', 3, undefined]) assert.equal((await act(env, { action: 'set-font', font })).status, 400);
+  await act(env, { action: 'set-fit', fit: 'contain' });
+  state = (await call(env, '/api/desktop')).data;
+  assert.deepEqual(state.settings, { wallpaper: null, fit: 'contain', font: 'nanum-sinhonbubu' }, 'other settings do not reset the font');
+  assert.equal((await call(env, '/api/desktop', { owner: 'someone-else' })).data.settings.font, null);
+  state = (await act(env, { action: 'set-font', font: null })).data;
+  assert.equal(state.settings.font, null);
+  for (const file of ['bccard.woff2', 'beomseok-neo.woff2', 'adultkid.woff2', 'nanum-sinhonbubu.woff2', 'griun-everyday-jeong.ttf', 'griun-myoeun-heullim.ttf', 'griun-bbangsim.ttf', 'griun-mongtori.ttf']) {
+    assert.ok(readFileSync(new URL(`../public/fonts/${file}`, import.meta.url)).length > 0, file);
+  }
+  assert.equal((await act(env, { action: 'set-font', font: 'griun-mongtori' })).data.settings.font, 'griun-mongtori');
+  assert.equal((await act(env, { action: 'set-font', font: 'gothic' })).data.settings.font, 'gothic', 'the previous plain font stays available');
+});
+
+test('adding the font column keeps the saved wallpaper settings', async () => {
+  const env = environment(migrationFiles.filter(name => !name.startsWith('0006')));
+  env.sqlite.exec(`INSERT INTO desktop_settings (owner, wallpaper_asset_id, wallpaper_fit, updated_at) VALUES ('me', NULL, 'contain', 5)`);
+  const saved = env.sqlite.prepare('SELECT * FROM desktop_settings').all();
+  env.apply(migrationFiles.filter(name => name.startsWith('0006')));
+  assert.deepEqual(env.sqlite.prepare('SELECT owner, wallpaper_asset_id, wallpaper_fit, updated_at FROM desktop_settings').all(), saved);
+  assert.deepEqual((await call(env, '/api/desktop')).data.settings, { wallpaper: null, fit: 'contain', font: null });
 });

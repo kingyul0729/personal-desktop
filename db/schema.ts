@@ -48,6 +48,8 @@ export const desktopItems = sqliteTable('desktop_items', {
 export const desktopSettings = sqliteTable('desktop_settings', {
   owner: text('owner').primaryKey(), wallpaperAssetId: text('wallpaper_asset_id'),
   wallpaperFit: text('wallpaper_fit').notNull().default('cover'), updatedAt: integer('updated_at').notNull(),
+  // Chosen font id from the built-in list; null keeps the default font.
+  font: text('font'),
 });
 
 // Uploaded wallpaper and icon images; the bytes live in R2.
