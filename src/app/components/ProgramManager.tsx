@@ -5,7 +5,7 @@ import { Button } from './ui/button';
 const programs = [
   { icon: TerminalIcon, name: 'Terminal', version: '1.0', size: '2.4 MB' },
   { icon: FolderOpen, name: 'File Explorer', version: '1.0', size: '5.1 MB' },
-  { icon: Settings, name: 'Control Panel', version: '1.0', size: '3.2 MB' },
+  { icon: Settings, name: '환경설정', version: '1.0', size: '3.2 MB' },
   { icon: FileText, name: '메모장', version: '1.0', size: '1.8 MB' },
   { icon: Calculator, name: 'Calculator', version: '1.0', size: '2.0 MB' },
   { icon: Image, name: 'Image Viewer', version: '1.0', size: '4.5 MB' },

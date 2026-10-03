@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Menu } from 'lucide-react';
 import { activeWindow, type DesktopState, type WindowId } from '../desktopState';
-import { programs } from '../programs';
+import { programs, windowLabel } from '../programs';
 import { PinkFolderIcon } from './PinkFolderIcon';
 
 interface TaskbarProps {
@@ -9,9 +9,12 @@ interface TaskbarProps {
   onOpenWindow: (windowId: WindowId) => void;
   onTaskClick: (windowId: WindowId) => void;
   currentTime: string;
+  iconFor?: (windowId: WindowId) => string | undefined;
 }
 
-export function Taskbar({ desktop, onOpenWindow, onTaskClick, currentTime }: TaskbarProps) {
+export function Taskbar({ desktop, onOpenWindow, onTaskClick, currentTime, iconFor }: TaskbarProps) {
+  // Taskbar and Start menu show the same picture the desktop uses for that program.
+  const art = (id: WindowId) => { const src = iconFor?.(id); return src ? <img className="taskbar-icon" src={src} alt="" draggable={false} /> : <PinkFolderIcon variant={id === 'fileExplorer' || id === 'priceCalculator' ? 'kitty' : 'heart'} />; };
   const [startOpen, setStartOpen] = useState(false);
   const startRef = useRef<HTMLDivElement>(null);
   const tasksRef = useRef<HTMLDivElement>(null);
@@ -47,18 +50,18 @@ export function Taskbar({ desktop, onOpenWindow, onTaskClick, currentTime }: Tas
       </button>
       {startOpen && <nav id="start-programs" className="start-menu" aria-label="프로그램 실행">
         <strong>프로그램</strong>
-        {programs.map((item) => <button type="button" key={item.id} onClick={() => { onOpenWindow(item.id); setStartOpen(false); }}><PinkFolderIcon variant={item.id === 'fileExplorer' || item.id === 'priceCalculator' ? 'kitty' : 'heart'} /><span>{item.label}</span></button>)}
+        {programs.map((item) => <button type="button" key={item.id} onClick={() => { onOpenWindow(item.id); setStartOpen(false); }}>{art(item.id)}<span>{item.label}</span></button>)}
       </nav>}
     </div>
     <div className="taskbar-divider" />
     <div className="taskbar-tasks" ref={tasksRef} role="group" aria-label="실행 중인 프로그램">
       {desktop.running.map((id) => {
-        const item = programs.find((program) => program.id === id)!;
+        const item = { label: windowLabel(id) };
         const minimized = desktop.minimized.includes(id);
         return <button type="button" key={id} className={`taskbar-task${minimized ? ' is-minimized' : ''}`}
           aria-label={`${item.label}${minimized ? ' 복원' : ''}`} aria-pressed={active === id}
           title={`${item.label}${minimized ? ' — 최소화됨' : ''}`} onClick={() => onTaskClick(id)}>
-          <PinkFolderIcon variant={id === 'fileExplorer' || id === 'priceCalculator' ? 'kitty' : 'heart'} /><span>{item.label}</span>
+          {art(id)}<span>{item.label}</span>
         </button>;
       })}
     </div>

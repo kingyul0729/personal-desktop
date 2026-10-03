@@ -42,12 +42,12 @@ test('closing removes the tab; reopening adds it once; active task click minimiz
 test('all windows can close and reopen; focus order never creates duplicate tabs', () => {
   let state = structuredClone(initialDesktop);
   for (const id of WINDOW_IDS) state = desktopReducer(state, { type: 'open', id });
-  for (let i = 0; i < 50; i++) state = desktopReducer(state, { type: 'focus', id: WINDOW_IDS[i % 6] });
-  assert.equal(state.running.length, 6);
-  assert.equal(state.stack.length, 6);
+  for (let i = 0; i < 50; i++) state = desktopReducer(state, { type: 'focus', id: WINDOW_IDS[i % WINDOW_IDS.length] });
+  assert.equal(state.running.length, WINDOW_IDS.length);
+  assert.equal(state.stack.length, WINDOW_IDS.length);
   for (const id of WINDOW_IDS) state = desktopReducer(state, { type: 'minimize', id });
   assert.equal(activeWindow(state), undefined);
-  assert.equal(state.running.length, 6);
+  assert.equal(state.running.length, WINDOW_IDS.length);
   for (const id of WINDOW_IDS) state = desktopReducer(state, { type: 'close', id });
   assert.deepEqual(state, { running: [], minimized: [], stack: [] });
   state = desktopReducer(state, { type: 'open', id: 'priceCalculator' });
@@ -61,6 +61,8 @@ const defaults = [
   { x: 440, y: 120, width: 680, height: 500 },
   { x: 300, y: 135, width: 680, height: 480 },
   { x: 250, y: 52, width: 980, height: 680 },
+  { x: 330, y: 110, width: 640, height: 460 },
+  { x: 280, y: 70, width: 700, height: 500 },
 ];
 const screens = [[1440, 900], [1180, 820], [820, 1180], [1024, 768], [768, 1024], [1067, 1536], [390, 844], [844, 390], [320, 568]];
 function inBounds(rect, bounds) {

@@ -23,3 +23,38 @@ export const memoDrafts = sqliteTable('memo_drafts', {
   owner: text('owner').primaryKey(), memoId: text('memo_id').notNull(), title: text('title').notNull().default(''),
   content: text('content').notNull(), updatedAt: integer('updated_at').notNull(),
 });
+
+// Files and folders the person creates on the desktop; a null parent means the desktop itself.
+// Trash keeps the row (trashed_at) so restore can return it to parent_id; only purge deletes it.
+export const userFiles = sqliteTable('user_files', {
+  id: text('id').primaryKey(), owner: text('owner').notNull(), parentId: text('parent_id'),
+  kind: text('kind').notNull(), name: text('name').notNull(), content: text('content').notNull().default(''),
+  createdAt: integer('created_at').notNull(), updatedAt: integer('updated_at').notNull(), trashedAt: integer('trashed_at'),
+  lockHash: text('lock_hash'), lockSalt: text('lock_salt'),
+  lockFailures: integer('lock_failures').notNull().default(0), lockRetryAt: integer('lock_retry_at').notNull().default(0),
+}, (t) => [index('idx_user_files_owner_parent').on(t.owner, t.parentId)]);
+
+// What the desktop shows: fixed programs, user shortcuts, and desktop-level files. Hiding or
+// renaming here never touches the program or file it points to.
+export const desktopItems = sqliteTable('desktop_items', {
+  id: text('id').primaryKey(), owner: text('owner').notNull(), kind: text('kind').notNull(), target: text('target').notNull(),
+  label: text('label'), icon: text('icon'), hidden: integer('hidden').notNull().default(0),
+  sort: integer('sort').notNull(), createdAt: integer('created_at').notNull(),
+}, (t) => [index('idx_desktop_items_owner').on(t.owner)]);
+
+export const desktopSettings = sqliteTable('desktop_settings', {
+  owner: text('owner').primaryKey(), wallpaperAssetId: text('wallpaper_asset_id'),
+  wallpaperFit: text('wallpaper_fit').notNull().default('cover'), updatedAt: integer('updated_at').notNull(),
+});
+
+// Uploaded wallpaper and icon images; the bytes live in R2.
+export const desktopAssets = sqliteTable('desktop_assets', {
+  id: text('id').primaryKey(), owner: text('owner').notNull(), kind: text('kind').notNull(),
+  objectKey: text('object_key').notNull(), mime: text('mime').notNull(), createdAt: integer('created_at').notNull(),
+}, (t) => [index('idx_desktop_assets_owner').on(t.owner)]);
+
+// Short-lived proof that a locked file was opened with its password; only a hash of the token is kept.
+export const fileUnlocks = sqliteTable('file_unlocks', {
+  tokenHash: text('token_hash').primaryKey(), owner: text('owner').notNull(), fileId: text('file_id').notNull(),
+  expiresAt: integer('expires_at').notNull(),
+}, (t) => [index('idx_file_unlocks_owner_file').on(t.owner, t.fileId)]);
