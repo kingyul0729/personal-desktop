@@ -18,10 +18,11 @@ interface DesktopIconProps {
   onMenu?: (point: { x: number; y: number }) => void;
 }
 
+// A picture icon stands on its own; the small badge is kept for the plain pink folders and for locks.
 export function DesktopIconArt({ icon, variant = 'heart', image, locked }: { icon: ReactNode; variant?: PinkFolderVariant; image?: string; locked?: boolean }) {
   return <div className="desktop-folder-art">
-    {image ? <img className="desktop-custom-icon" src={image} alt="" draggable={false} /> : <PinkFolderIcon variant={variant} />}
-    <i className="desktop-app-badge" aria-hidden="true">{locked ? <Lock /> : icon}</i>
+    {image ? <img className="desktop-image-icon" src={image} alt="" draggable={false} /> : <PinkFolderIcon variant={variant} />}
+    {(locked || !image) && <i className="desktop-app-badge" aria-hidden="true">{locked ? <Lock /> : icon}</i>}
   </div>;
 }
 

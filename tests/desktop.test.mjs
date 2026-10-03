@@ -72,6 +72,12 @@ test('desktop labels, icons, visibility and order change without changing what a
   assert.equal(program(state, 'notepad').target, 'program:notepad');
   state = (await act(env, { action: 'update-item', id: memo.id, icon: 'folder:cherry' })).data;
   assert.equal(program(state, 'notepad').icon, 'folder:cherry');
+  state = (await act(env, { action: 'update-item', id: memo.id, icon: 'builtin:coral-notepad' })).data;
+  assert.equal(program(state, 'notepad').icon, 'builtin:coral-notepad');
+  assert.equal((await call(env, '/api/desktop')).data.items.find(item => item.target === 'program:notepad').icon, 'builtin:coral-notepad', 'kept after reload');
+  assert.equal(program(state, 'notepad').target, 'program:notepad');
+  assert.equal((await act(env, { action: 'update-item', id: memo.id, icon: 'builtin:../x' })).status, 400);
+  state = (await act(env, { action: 'update-item', id: memo.id, icon: 'folder:cherry' })).data;
   assert.equal(program(state, 'notepad').label, '업무 메모');
   state = (await act(env, { action: 'update-item', id: memo.id, hidden: true })).data;
   assert.equal(program(state, 'notepad').hidden, true);

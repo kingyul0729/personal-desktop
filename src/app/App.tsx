@@ -24,6 +24,7 @@ import { EntryBadge } from './components/EntryIcon';
 import { activeWindow, desktopReducer, initialDesktop, type WindowId } from './desktopState';
 import { createLongPress, desktopMenu, entryKind, iconArt, menuFor, type DesktopEntry } from './desktopModel';
 import { DesktopProvider, useDesktop } from './useDesktop';
+import { DEFAULT_ICONS, libraryIconSrc } from './iconLibrary';
 
 export default function App() {
   const [desktop, dispatch] = useReducer(desktopReducer, initialDesktop);
@@ -124,7 +125,7 @@ function DesktopShell({ desktop, dispatch }: { desktop: typeof initialDesktop; d
         onPointerCancel={() => blankPress.current.cancel()}>
       <section className="desktop-icon-column" aria-label="데스크톱 프로그램">
         {data.items.filter((item) => !item.hidden).map((item) => {
-          const art = iconArt(item, data.assets);
+          const art = iconArt(item, data.assets, { trashFull: data.trash.length > 0 });
           return <DesktopIcon key={item.id} variant={art.variant} image={art.image} locked={item.locked} dimmed={item.missing}
             icon={<EntryBadge target={item.target} fileKind={item.fileKind} />} label={item.label}
             onClick={() => openEntry(item)}
@@ -161,7 +162,8 @@ function DesktopShell({ desktop, dispatch }: { desktop: typeof initialDesktop; d
       </Window>
 
       </div>
-      <Taskbar desktop={desktop} onOpenWindow={openWindow} onTaskClick={(id) => dispatch({ type: 'taskbar', id })} currentTime={currentTime} />
+      <Taskbar desktop={desktop} onOpenWindow={openWindow} onTaskClick={(id) => dispatch({ type: 'taskbar', id })} currentTime={currentTime}
+        iconFor={(id) => { const entry = data.items.find((item) => item.target === `program:${id}`); return iconArt(entry ?? { icon: null, target: `program:${id}` }, data.assets, { trashFull: data.trash.length > 0 }).image ?? (id === 'files' ? libraryIconSrc(DEFAULT_ICONS.folder) : undefined); }} />
     </main>
   );
 }

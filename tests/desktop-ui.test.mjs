@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { build } from 'esbuild';
+import { existsSync } from 'node:fs';
 
 const bundled = await build({
   stdin: {
@@ -12,6 +13,8 @@ const bundled = await build({
       export const renderMenu = (items) => renderToStaticMarkup(React.createElement(ContextMenuList, { items, onClose() {} }));
       export const renderIcon = (props) => renderToStaticMarkup(React.createElement(DesktopIcon, { icon: null, onClick() {}, ...props }));
       export { createLongPress, desktopMenu, entryKind, iconArt, menuFor, defaultDesktop } from './src/app/desktopModel';
+      export { ICON_LIBRARY, DEFAULT_ICONS, TRASH_FULL_ICON } from './src/app/iconLibrary';
+      export { programs } from './src/app/programs';
       // Call the component inside a real render so its hooks work, and keep the element it returns.
       export const iconElement = (props) => { let element; const Probe = () => { element = DesktopIcon({ icon: null, ...props }); return null; }; renderToStaticMarkup(React.createElement(Probe)); return element; };
     `,
@@ -68,9 +71,30 @@ test('desktop icons wire right click and touch; a custom icon keeps the same act
   const art = iconArt({ icon: 'asset:abcdefgh-1', target: 'program:notepad' }, assets);
   assert.equal(art.image, '/api/desktop-assets/abcdefgh-1');
   const html = ui.renderIcon({ label: '메모장', image: art.image, variant: art.variant });
-  assert.ok(html.includes('desktop-custom-icon') && html.includes('desktop-app-badge') && html.includes('메모장'));
+  assert.ok(html.includes('desktop-image-icon') && html.includes('메모장'));
+  assert.ok(!html.includes('desktop-app-badge'), 'a picture icon stands on its own');
+  assert.ok(ui.renderIcon({ label: '잠금', image: art.image, locked: true }).includes('desktop-app-badge'), 'locks stay visible');
   assert.deepEqual(iconArt({ icon: 'folder:cherry', target: 'program:notepad' }, assets), { variant: 'cherry' });
-  assert.deepEqual(iconArt({ icon: null, target: 'program:fileExplorer' }, assets), { variant: 'kitty' });
+  assert.ok(ui.renderIcon({ label: '폴더', variant: 'cherry' }).includes('desktop-app-badge'));
   const renaming = ui.renderIcon({ label: '메모장', renaming: true, onRename() {}, onCancelRename() {} });
   assert.ok(renaming.includes('value="메모장"') && renaming.includes('이름 저장'));
+});
+
+test('every built-in icon exists, every tab has a fitting default, and picking one keeps what it opens', () => {
+  const ids = ui.ICON_LIBRARY.map(icon => icon.id);
+  assert.equal(new Set(ids).size, ids.length);
+  assert.ok(ids.length >= 50);
+  for (const id of ids) assert.ok(existsSync(new URL(`../public/icons/${id}.png`, import.meta.url)), id);
+  for (const program of ui.programs) {
+    const art = iconArt({ icon: null, target: `program:${program.id}` }, []);
+    assert.ok(ids.includes(ui.DEFAULT_ICONS[`program:${program.id}`]), program.label);
+    assert.equal(art.image, `/icons/${ui.DEFAULT_ICONS[`program:${program.id}`]}.png`);
+  }
+  assert.equal(iconArt({ icon: null, target: 'program:priceCalculator' }, []).image, '/icons/pink-calculator.png');
+  assert.equal(iconArt({ icon: null, target: 'program:trash' }, []).image, '/icons/pink-trash-kitty.png');
+  assert.equal(iconArt({ icon: null, target: 'program:trash' }, [], { trashFull: true }).image, `/icons/${ui.TRASH_FULL_ICON}.png`);
+  assert.equal(iconArt({ icon: 'builtin:coral-calculator', target: 'program:trash' }, [], { trashFull: true }).image, '/icons/coral-calculator.png', 'a chosen icon is kept even when the trash fills');
+  assert.equal(iconArt({ icon: null, target: 'file:x', fileKind: 'folder' }, []).image, '/icons/pink-folder-heart.png');
+  assert.equal(iconArt({ icon: null, target: 'file:x', fileKind: 'file' }, []).image, '/icons/pink-document-kitty.png');
+  assert.equal(iconArt({ icon: 'builtin:not-real', target: 'program:notepad' }, []).image, '/icons/pink-notepad.png', 'an unknown icon falls back to the default');
 });

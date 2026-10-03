@@ -3,6 +3,7 @@ import { Upload } from 'lucide-react';
 import { KittyDialog } from './KittyDialog';
 import { PinkFolderIcon, type PinkFolderVariant } from './PinkFolderIcon';
 import { useDesktop } from '../useDesktop';
+import { ICON_GROUPS, ICON_LIBRARY, libraryIconSrc } from '../iconLibrary';
 
 const VARIANTS: [PinkFolderVariant, string][] = [['heart', '하트'], ['kitty', '키티'], ['flower', '꽃'], ['cherry', '체리']];
 
@@ -14,11 +15,21 @@ export function IconPicker({ current, onPick }: { current: string | null; onPick
   const [busy, setBusy] = useState(false);
   const icons = data.assets.filter(asset => asset.kind === 'icon');
   return <KittyDialog title="아이콘 변경" onClose={() => onPick(undefined)} busy={busy}>
-    <div className="icon-picker" role="group" aria-label="아이콘 선택">
-      <button type="button" aria-pressed={current === null} onClick={() => onPick(null)}><span className="icon-picker-default">기본</span></button>
-      {VARIANTS.map(([variant, label]) => <button key={variant} type="button" aria-label={label} aria-pressed={current === `folder:${variant}`} onClick={() => onPick(`folder:${variant}`)}><PinkFolderIcon variant={variant} /></button>)}
-      {icons.map(asset => <button key={asset.id} type="button" aria-label="올린 이미지" aria-pressed={current === `asset:${asset.id}`} onClick={() => onPick(`asset:${asset.id}`)}><img src={asset.src} alt="" /></button>)}
-      <button type="button" aria-label="이미지 업로드" disabled={busy} onClick={() => input.current?.click()}><Upload size={22} /></button>
+    <div className="icon-picker-scroll">
+      <div className="icon-picker" role="group" aria-label="기본·내 아이콘">
+        <button type="button" aria-pressed={current === null} onClick={() => onPick(null)}><span className="icon-picker-default">기본</span></button>
+        {icons.map(asset => <button key={asset.id} type="button" aria-label="내가 올린 아이콘" aria-pressed={current === `asset:${asset.id}`} onClick={() => onPick(`asset:${asset.id}`)}><img src={asset.src} alt="" /></button>)}
+        <button type="button" aria-label="아이콘 이미지 추가" disabled={busy} onClick={() => input.current?.click()}><Upload size={22} /></button>
+      </div>
+      {ICON_GROUPS.map(group => <section key={group}>
+        <h3>{group}</h3>
+        <div className="icon-picker" role="group" aria-label={group}>
+          {ICON_LIBRARY.filter(item => item.group === group).map(item => <button key={item.id} type="button" aria-label={item.label} title={item.label}
+            aria-pressed={current === `builtin:${item.id}`} onClick={() => onPick(`builtin:${item.id}`)}><img src={libraryIconSrc(item.id)} alt="" loading="lazy" /></button>)}
+          {group === '폴더' && VARIANTS.map(([variant, label]) => <button key={variant} type="button" aria-label={`기존 ${label} 폴더`} title={`기존 ${label} 폴더`}
+            aria-pressed={current === `folder:${variant}`} onClick={() => onPick(`folder:${variant}`)}><PinkFolderIcon variant={variant} /></button>)}
+        </div>
+      </section>)}
     </div>
     <input ref={input} type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={async event => {
       const file = event.target.files?.[0]; event.target.value = '';

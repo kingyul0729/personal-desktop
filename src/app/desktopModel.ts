@@ -1,4 +1,5 @@
 import { programs } from './programs';
+import { DEFAULT_ICONS, TRASH_FULL_ICON, isLibraryIcon, libraryIconSrc } from './iconLibrary';
 import type { PinkFolderVariant } from './components/PinkFolderIcon';
 
 export interface DesktopEntry {
@@ -38,12 +39,19 @@ export function desktopMenu(signedIn: boolean): { action: DesktopMenuAction; lab
 }
 
 export interface IconArt { variant: PinkFolderVariant; image?: string }
-export function iconArt(entry: { icon: string | null; target: string; fileKind?: 'file' | 'folder' }, assets: DesktopAsset[]): IconArt {
+// Icon values: null = the item's default, `builtin:<id>` = an icon from the library,
+// `asset:<id>` = an uploaded image, `folder:<variant>` = the original pink folder art.
+// The icon only changes the picture; what the item opens is decided by its target.
+export function iconArt(entry: { icon: string | null; target: string; fileKind?: 'file' | 'folder' }, assets: DesktopAsset[], { trashFull = false } = {}): IconArt {
   const program = programs.find(item => entry.target === `program:${item.id}`);
-  const fallback: PinkFolderVariant = program?.variant ?? (entry.fileKind === 'folder' ? 'heart' : 'flower');
+  const variant: PinkFolderVariant = program?.variant ?? (entry.fileKind === 'folder' ? 'heart' : 'flower');
   if (entry.icon?.startsWith('folder:')) return { variant: entry.icon.slice(7) as PinkFolderVariant };
+  if (entry.icon?.startsWith('builtin:') && isLibraryIcon(entry.icon.slice(8))) return { variant, image: libraryIconSrc(entry.icon.slice(8)) };
   const asset = entry.icon?.startsWith('asset:') && assets.find(item => item.id === entry.icon!.slice(6));
-  return asset ? { variant: fallback, image: asset.src } : { variant: fallback };
+  if (asset) return { variant, image: asset.src };
+  const fallback = entry.target === 'program:trash' && trashFull ? TRASH_FULL_ICON
+    : DEFAULT_ICONS[entry.target] ?? DEFAULT_ICONS[entry.fileKind === 'folder' ? 'folder' : 'file'];
+  return { variant, image: libraryIconSrc(fallback) };
 }
 
 // Long press opens the same menu as a right click (iPad has no right click). A move beyond the

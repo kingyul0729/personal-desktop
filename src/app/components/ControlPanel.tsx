@@ -3,6 +3,7 @@ import { ArrowDown, ArrowUp, ChevronRight, FilePlus, FolderPlus, ImagePlus, Lock
 import { useDesktop, type SettingsTab } from '../useDesktop';
 import { iconArt, parentChain, type UserFile } from '../desktopModel';
 import { programs } from '../programs';
+import { DEFAULT_ICONS, libraryIconSrc } from '../iconLibrary';
 import { DesktopIconArt } from './DesktopIcon';
 import { EntryBadge } from './EntryIcon';
 import { InlineRename } from './InlineRename';
@@ -89,7 +90,7 @@ function DesktopSettings() {
   return <>
     <ul className="settings-list">
       {data.items.map((item, index) => {
-        const art = iconArt(item, data.assets);
+        const art = iconArt(item, data.assets, { trashFull: data.trash.length > 0 });
         return <li key={item.id} className={item.hidden ? 'is-hidden' : undefined}>
           <DesktopIconArt icon={<EntryBadge target={item.target} fileKind={item.fileKind} />} variant={art.variant} image={art.image} locked={item.locked} />
           <div className="settings-name">
@@ -119,7 +120,7 @@ function DesktopSettings() {
       </select></label>
       <div className="settings-row">
         <button type="button" onClick={async () => { const icon = await pickIcon(form.icon); if (icon !== undefined) setForm(current => ({ ...current, icon })); }}>
-          {(() => { const art = iconArt({ icon: form.icon, target: form.target }, data.assets); return <DesktopIconArt icon={<EntryBadge target={form.target} />} variant={art.variant} image={art.image} />; })()}아이콘
+          {(() => { const fileKind = data.files.find(file => form.target === `file:${file.id}`)?.kind; const art = iconArt({ icon: form.icon, target: form.target, fileKind }, data.assets); return <DesktopIconArt icon={<EntryBadge target={form.target} fileKind={fileKind} />} variant={art.variant} image={art.image} />; })()}아이콘
         </button>
         <label className="settings-toggle"><input type="checkbox" checked={form.visible} onChange={event => setForm({ ...form, visible: event.target.checked })} />바탕화면에 표시</label>
       </div>
@@ -166,7 +167,7 @@ function FileSettings() {
       {children.map(file => {
         const blocked = blockedTargets(file);
         return <li key={file.id}>
-          <DesktopIconArt icon={<EntryBadge target={`file:${file.id}`} fileKind={file.kind} />} variant={file.kind === 'folder' ? 'heart' : 'flower'} locked={file.locked} />
+          <DesktopIconArt icon={<EntryBadge target={`file:${file.id}`} fileKind={file.kind} />} image={libraryIconSrc(DEFAULT_ICONS[file.kind])} locked={file.locked} />
           <div className="settings-name">
             {renaming === file.id ? <InlineRename value={file.name} label="파일 이름" onCancel={() => setRenaming(null)}
               onSave={name => { setRenaming(null); void feedback.run(() => act({ action: 'rename-file', id: file.id, name })); }} />

@@ -5,6 +5,7 @@ import { menuFor, parentChain, type UserFile } from '../desktopModel';
 import { formatMemoTime } from '../memos';
 import { DesktopIcon } from './DesktopIcon';
 import { EntryBadge } from './EntryIcon';
+import { DEFAULT_ICONS, libraryIconSrc } from '../iconLibrary';
 
 // One window shows the desktop folder, a folder, or a text file chosen from the desktop or 환경설정.
 export function FileWindow() {
@@ -74,7 +75,7 @@ export function FileWindow() {
     {locked && current ? <p className="settings-empty"><Lock size={16} />잠긴 폴더입니다. <button type="button" onClick={() => void unlock(current.id)}>비밀번호 입력</button></p>
       : <div className="file-window-grid">
         {children.map(file => <DesktopIcon key={file.id} label={file.name} icon={<EntryBadge target={`file:${file.id}`} fileKind={file.kind} />}
-          variant={file.kind === 'folder' ? 'heart' : 'flower'} locked={file.locked} onClick={() => void open(file)}
+          image={libraryIconSrc(DEFAULT_ICONS[file.kind])} locked={file.locked} onClick={() => void open(file)}
           onMenu={point => menu(file, point)} renaming={renaming === file.id} onCancelRename={() => setRenaming(null)}
           onRename={name => { setRenaming(null); void act({ action: 'rename-file', id: file.id, name }).then(result => { if (!result.ok) notify(result.error); }); }} />)}
         {!children.length && <p className="settings-empty">비어 있습니다.</p>}

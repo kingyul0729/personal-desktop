@@ -177,7 +177,7 @@ const FILE_LIMIT = 100000;
 const UNLOCK_MS = 30 * 60 * 1000;
 const LOCK_ATTEMPTS = 5;
 const LOCKOUT_MS = 60 * 1000;
-const validIcon = value => value === null || (typeof value === 'string' && /^(folder:(heart|kitty|flower|cherry)|asset:[A-Za-z0-9-]{8,64})$/.test(value));
+const validIcon = value => value === null || (typeof value === 'string' && /^(folder:(heart|kitty|flower|cherry)|builtin:[a-z0-9-]{1,40}|asset:[A-Za-z0-9-]{8,64})$/.test(value));
 const fileId = value => typeof value === 'string' && /^[A-Za-z0-9-]{8,64}$/.test(value) ? value : null;
 const programTarget = target => typeof target === 'string' && PROGRAMS.some(([id]) => target === `program:${id}`);
 const assetSrc = id => `/api/desktop-assets/${encodeURIComponent(id)}`;
