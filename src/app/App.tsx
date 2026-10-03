@@ -26,6 +26,7 @@ import { EntryBadge } from './components/EntryIcon';
 import { activeWindow, desktopReducer, initialDesktop, type WindowId, type WindowRect } from './desktopState';
 import { createLongPress, desktopMenu, entryKind, iconArt, menuFor, type DesktopEntry } from './desktopModel';
 import { DesktopProvider, useDesktop } from './useDesktop';
+import { DesktopNotice, LoadingBox } from './components/Feedback';
 import { DEFAULT_ICONS, libraryIconSrc } from './iconLibrary';
 
 export default function App() {
@@ -165,7 +166,8 @@ function DesktopShell({ desktop, dispatch }: { desktop: typeof initialDesktop; d
             renaming={shell.renaming === item.id} onCancelRename={() => shell.setRenaming(null)} onRename={(name) => rename(item, name)} />;
         })}
       </section>
-      {shell.notice && <p className="desktop-notice" role="status">{shell.notice}</p>}
+      {!shell.loaded && <div className="desktop-loading"><LoadingBox label="바탕화면 불러오는 중…" /></div>}
+      {shell.notice && <DesktopNotice message={shell.notice} onClose={() => notify('')} />}
       {savingLayout && <CapsuleSaveDialog layout={savingLayout} onClose={() => setSavingLayout(null)}
         onSaved={() => { setSavingLayout(null); setCapsuleVersion((version) => version + 1); notify('작업을 저장했습니다. 작업 캡슐에서 다시 열 수 있습니다.'); }} />}
       <img className="desktop-kitty" src="/theme/kitty-peek.png" alt="" aria-hidden="true" draggable={false} />

@@ -3,6 +3,7 @@ import { ArrowLeft, ArrowRight, Home, Image as ImageIcon, Search, FolderPlus, Pl
 import { ImageDocumentViewer } from './ImageDocumentViewer';
 import { PinkFolderIcon } from './PinkFolderIcon';
 import { KittyDialog } from './KittyDialog';
+import { LoadingBox } from './Feedback';
 import { announceTrash, useTrashChange } from '../trash';
 import { initialPriceFiles, type PriceFiles, type PriceFolder, type PriceImage } from '../priceFiles';
 
@@ -134,7 +135,8 @@ export function FileExplorer() {
               <button type="button" className="pf-image-open" onClick={() => setGallery({ images: visibleImages, index: visibleImages.indexOf(image) })}><div><img src={image.src} alt="" loading="lazy" /></div><span>{image.name}</span></button>
               {files.authenticated && <div className="pf-image-actions"><button type="button" aria-label={`${image.name} 이름·폴더 변경`} onClick={() => openEditor({ type: 'image', image })}><Pencil size={14} />정리</button><button type="button" aria-label={`${image.name} 삭제`} onClick={() => openEditor({ type: 'delete', image })}><Trash2 size={14} />삭제</button></div>}
             </article>)}</div>
-            {!visibleImages.length && <p className="pf-empty">{loading ? '불러오는 중입니다.' : query ? '검색 결과가 없습니다.' : '이 폴더에 가격표 이미지를 추가해 주세요.'}</p>}
+            {!visibleImages.length && (loading ? <div className="pf-loading"><LoadingBox label="가격표 불러오는 중…" /></div>
+              : <p className="pf-empty">{query ? '검색 결과가 없습니다.' : '이 폴더에 가격표 이미지를 추가해 주세요.'}</p>)}
           </>}
         </div>
         <footer className="pf-status"><span>{showFolders ? `폴더 ${files.folders.length}개` : `가격표 ${visibleImages.length}개`}</span><span role="status">{loading ? '불러오는 중' : notice}</span></footer>
