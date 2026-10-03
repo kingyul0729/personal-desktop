@@ -233,7 +233,7 @@ const fileView = (file, unlocked) => ({ id: file.id, parentId: file.parentId, ki
 // Memos, price images and work capsules share the trash with files: deleting only marks
 // trashed_at, and the row (and stored image) is removed when purged from the trash.
 // Fonts bundled in public/fonts; the setting stores only one of these ids.
-const FONTS = ['bccard', 'beomseok-neo', 'adultkid', 'nanum-sinhonbubu', 'griun-everyday-jeong', 'griun-myoeun-heullim', 'griun-bbangsim', 'griun-mongtori'];
+const FONTS = ['gothic', 'bccard', 'beomseok-neo', 'adultkid', 'nanum-sinhonbubu', 'griun-everyday-jeong', 'griun-myoeun-heullim', 'griun-bbangsim', 'griun-mongtori'];
 const TRASH_TYPES = ['memo', 'price', 'capsule'];
 async function appTrash(env, owner) {
   const [memos, prices, capsules] = await Promise.all([

@@ -375,6 +375,7 @@ test('the chosen font is saved per account, only from the bundled list, and kept
     assert.ok(readFileSync(new URL(`../public/fonts/${file}`, import.meta.url)).length > 0, file);
   }
   assert.equal((await act(env, { action: 'set-font', font: 'griun-mongtori' })).data.settings.font, 'griun-mongtori');
+  assert.equal((await act(env, { action: 'set-font', font: 'gothic' })).data.settings.font, 'gothic', 'the previous plain font stays available');
 });
 
 test('adding the font column keeps the saved wallpaper settings', async () => {

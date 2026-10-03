@@ -1,9 +1,12 @@
-// Fonts bundled in public/fonts. The ids match the server's list; null means the default font.
+// Fonts bundled in public/fonts. The ids match the server's list. Nothing saved (null) means the
+// default, 휴먼범석네오; 'gothic' is the plain system font the desktop used before.
 // The first four are subset to Korean, Latin and common symbols; the Griun fonts are served as
 // the original files because their license does not allow modifying them.
+export const DEFAULT_FONT = 'beomseok-neo';
 export const FONTS = [
+  { id: 'beomseok-neo', label: '휴먼범석네오 (기본)', family: 'PD Beomseok Neo' },
+  { id: 'gothic', label: '고딕', family: 'Inter' },
   { id: 'bccard', label: 'BC카드체', family: 'PD BC Card' },
-  { id: 'beomseok-neo', label: '휴먼범석네오', family: 'PD Beomseok Neo' },
   { id: 'adultkid', label: '어른아이', family: 'PD Adultkid' },
   { id: 'nanum-sinhonbubu', label: '나눔손글씨 신혼부부', family: 'PD Nanum SinHonBuBu' },
   { id: 'griun-everyday-jeong', label: '그리운 정매일체', family: 'PD Griun EverydayJeong' },
