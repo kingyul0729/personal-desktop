@@ -12,10 +12,18 @@ button, input { font: inherit; }
 @font-face { font-family: "PD Beomseok Neo"; src: url("/fonts/beomseok-neo.woff2") format("woff2"); font-display: swap; }
 @font-face { font-family: "PD Adultkid"; src: url("/fonts/adultkid.woff2") format("woff2"); font-display: swap; }
 @font-face { font-family: "PD Nanum SinHonBuBu"; src: url("/fonts/nanum-sinhonbubu.woff2") format("woff2"); font-display: swap; size-adjust: 125%; }
+@font-face { font-family: "PD Griun EverydayJeong"; src: url("/fonts/griun-everyday-jeong.ttf") format("truetype"); font-display: swap; }
+@font-face { font-family: "PD Griun MyoeunHeullim"; src: url("/fonts/griun-myoeun-heullim.ttf") format("truetype"); font-display: swap; }
+@font-face { font-family: "PD Griun Bbangsim"; src: url("/fonts/griun-bbangsim.ttf") format("truetype"); font-display: swap; }
+@font-face { font-family: "PD Griun Mongtori"; src: url("/fonts/griun-mongtori.ttf") format("truetype"); font-display: swap; }
 :root[data-font="bccard"] { --desktop-font: "PD BC Card"; }
 :root[data-font="beomseok-neo"] { --desktop-font: "PD Beomseok Neo"; }
 :root[data-font="adultkid"] { --desktop-font: "PD Adultkid"; }
 :root[data-font="nanum-sinhonbubu"] { --desktop-font: "PD Nanum SinHonBuBu"; }
+:root[data-font="griun-everyday-jeong"] { --desktop-font: "PD Griun EverydayJeong"; }
+:root[data-font="griun-myoeun-heullim"] { --desktop-font: "PD Griun MyoeunHeullim"; }
+:root[data-font="griun-bbangsim"] { --desktop-font: "PD Griun Bbangsim"; }
+:root[data-font="griun-mongtori"] { --desktop-font: "PD Griun Mongtori"; }
 :root[data-font] body, :root[data-font] body *:not(.terminal, .terminal *, .font-preview > span) {
   font-family: var(--desktop-font), Pretendard, "Noto Sans KR", system-ui, sans-serif !important;
 }

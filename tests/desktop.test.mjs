@@ -371,7 +371,10 @@ test('the chosen font is saved per account, only from the bundled list, and kept
   assert.equal((await call(env, '/api/desktop', { owner: 'someone-else' })).data.settings.font, null);
   state = (await act(env, { action: 'set-font', font: null })).data;
   assert.equal(state.settings.font, null);
-  for (const file of ['bccard', 'beomseok-neo', 'adultkid', 'nanum-sinhonbubu']) assert.ok(readFileSync(new URL(`../public/fonts/${file}.woff2`, import.meta.url)).length > 0);
+  for (const file of ['bccard.woff2', 'beomseok-neo.woff2', 'adultkid.woff2', 'nanum-sinhonbubu.woff2', 'griun-everyday-jeong.ttf', 'griun-myoeun-heullim.ttf', 'griun-bbangsim.ttf', 'griun-mongtori.ttf']) {
+    assert.ok(readFileSync(new URL(`../public/fonts/${file}`, import.meta.url)).length > 0, file);
+  }
+  assert.equal((await act(env, { action: 'set-font', font: 'griun-mongtori' })).data.settings.font, 'griun-mongtori');
 });
 
 test('adding the font column keeps the saved wallpaper settings', async () => {
