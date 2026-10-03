@@ -24,6 +24,7 @@ import { EntryBadge } from './components/EntryIcon';
 import { activeWindow, desktopReducer, initialDesktop, type WindowId } from './desktopState';
 import { createLongPress, desktopMenu, entryKind, iconArt, menuFor, type DesktopEntry } from './desktopModel';
 import { DesktopProvider, useDesktop } from './useDesktop';
+import { DesktopNotice, LoadingBox } from './components/Feedback';
 import { DEFAULT_ICONS, libraryIconSrc } from './iconLibrary';
 
 export default function App() {
@@ -133,7 +134,8 @@ function DesktopShell({ desktop, dispatch }: { desktop: typeof initialDesktop; d
             renaming={shell.renaming === item.id} onCancelRename={() => shell.setRenaming(null)} onRename={(name) => rename(item, name)} />;
         })}
       </section>
-      {shell.notice && <p className="desktop-notice" role="status">{shell.notice}</p>}
+      {!shell.loaded && <div className="desktop-loading"><LoadingBox label="바탕화면 불러오는 중…" /></div>}
+      {shell.notice && <DesktopNotice message={shell.notice} onClose={() => notify('')} />}
       <img className="desktop-kitty" src="/theme/kitty-peek.png" alt="" aria-hidden="true" draggable={false} />
 
       <Window title="Terminal" icon={<TerminalIcon size={18} />} defaultPosition={{ x: 255, y: 90 }} defaultSize={{ width: 720, height: 410 }} {...shared('terminal')}>

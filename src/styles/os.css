@@ -502,7 +502,21 @@ button { cursor: pointer; }
 .inline-rename { display: flex; align-items: center; gap: 4px; width: 100%; }
 .inline-rename input { min-width: 0; flex: 1; min-height: 32px; padding: 3px 6px; border: 1px solid #d77aae; border-radius: 6px; background: #fff; color: #63334e; font-size: 16px; user-select: text; -webkit-user-select: text; }
 .inline-rename button { display: grid; place-items: center; width: 32px; height: 32px; border: 1px solid #e3adcd; border-radius: 6px; background: #fff0f8; color: var(--shell-ink, #843c65); }
-.desktop-notice { position: absolute; z-index: 900; left: 50%; top: 14px; transform: translateX(-50%); max-width: calc(100% - 32px); margin: 0; padding: 9px 16px; border: 1px solid #e59bc3; border-radius: 999px; background: #fff7fbf2; color: #843c65; font-size: 14px; box-shadow: 0 6px 16px #a6437926; }
+/* Notice and loading box follow the supplied heart speech-bubble artwork, a little smaller. */
+.desktop-notice { position: absolute; z-index: 900; left: 50%; top: 12px; transform: translateX(-50%); width: max-content; max-width: min(360px, calc(100% - 24px)); display: flex; align-items: center; gap: 10px; margin: 0; padding: 7px 8px 7px 11px; border: 2px solid #ec8f9b; border-radius: 12px; background: linear-gradient(#fff6f2, #ffe8ea); box-shadow: inset 0 0 0 2px #fffaf8, 0 6px 16px #c0566a2e; color: #b8434f; font-size: 14px; font-weight: 600; line-height: 1.35; animation: notice-pop .25s ease-out; }
+.desktop-notice-heart { flex: 0 0 auto; width: 28px; height: 25px; }
+.desktop-notice span { min-width: 0; }
+.desktop-notice button { flex: 0 0 auto; display: grid; place-items: center; width: 26px; height: 26px; margin-left: 2px; border: 2px solid #f1b2ba; border-radius: 6px; background: #fff; color: #d4475a; }
+.desktop-notice button:focus-visible { outline: 2px solid #d0559a; outline-offset: 1px; }
+@keyframes notice-pop { from { opacity: 0; transform: translate(-50%, -6px); } to { opacity: 1; transform: translate(-50%, 0); } }
+.loading-box { width: min(240px, 100%); display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 4px 10px; padding: 9px 13px; border: 2px solid #ec8f9b; border-radius: 13px; background: linear-gradient(#fff6f2, #ffe8ea); box-shadow: inset 0 0 0 2px #fffaf8; color: #b8434f; font-size: 14px; font-weight: 600; }
+.loading-box-heart { grid-row: span 2; width: 32px; height: 29px; }
+.loading-box-track { height: 9px; border: 2px solid #f1b2ba; border-radius: 99px; background: #fff; overflow: hidden; }
+.loading-box-track div { width: 40%; height: 100%; border-radius: 99px; background: linear-gradient(#ff9aab, #ec6a82); animation: loading-slide 1.1s ease-in-out infinite alternate; }
+@keyframes loading-slide { from { transform: translateX(-30%); } to { transform: translateX(180%); } }
+@media (prefers-reduced-motion: reduce) { .desktop-notice { animation: none; } .loading-box-track div { animation: none; width: 60%; } }
+.desktop-loading { position: absolute; z-index: 800; inset: 0; display: grid; place-items: center; pointer-events: none; }
+.file-window-loading, .pf-loading { flex: 1; display: grid; place-items: center; padding: 24px; }
 
 .context-menu { position: fixed; z-index: 2000; display: grid; min-width: 184px; padding: 6px; border: 1px solid #e59bc3; border-radius: 10px; background: #fff7fb; box-shadow: 0 12px 28px #a643792e; }
 .context-menu button { min-height: 40px; padding: 8px 12px; border: 0; border-radius: 6px; background: transparent; color: #843c65; text-align: left; font-size: 15px; }

@@ -10,6 +10,10 @@ const bundled = await build({
       import { renderToStaticMarkup } from 'react-dom/server.browser';
       import { ContextMenuList } from './src/app/components/ContextMenu';
       import { DesktopIcon } from './src/app/components/DesktopIcon';
+      import { DesktopNotice, LoadingBox } from './src/app/components/Feedback';
+      export const renderNotice = (message) => renderToStaticMarkup(React.createElement(DesktopNotice, { message, onClose() {} }));
+      export const noticeElement = (message, onClose) => { let element; const Probe = () => { element = DesktopNotice({ message, onClose }); return null; }; renderToStaticMarkup(React.createElement(Probe)); return element; };
+      export const renderLoading = (label) => renderToStaticMarkup(React.createElement(LoadingBox, label ? { label } : {}));
       export const renderMenu = (items) => renderToStaticMarkup(React.createElement(ContextMenuList, { items, onClose() {} }));
       export const renderIcon = (props) => renderToStaticMarkup(React.createElement(DesktopIcon, { icon: null, onClick() {}, ...props }));
       export { createLongPress, desktopMenu, entryKind, iconArt, menuFor, defaultDesktop } from './src/app/desktopModel';
@@ -97,4 +101,16 @@ test('every built-in icon exists, every tab has a fitting default, and picking o
   assert.equal(iconArt({ icon: null, target: 'file:x', fileKind: 'folder' }, []).image, '/icons/pink-folder-heart.png');
   assert.equal(iconArt({ icon: null, target: 'file:x', fileKind: 'file' }, []).image, '/icons/pink-document-kitty.png');
   assert.equal(iconArt({ icon: 'builtin:not-real', target: 'program:notepad' }, []).image, '/icons/pink-notepad.png', 'an unknown icon falls back to the default');
+});
+
+test('the heart notice shows the message with a close button, and the loading box announces itself', () => {
+  const html = ui.renderNotice('작업을 저장했습니다.');
+  assert.ok(html.includes('role="status"') && html.includes('작업을 저장했습니다.') && html.includes('<svg') && html.includes('aria-label="알림 닫기"'));
+  let closed = 0;
+  const close = ui.noticeElement('휴지통으로 이동했습니다.', () => closed++).props.children.at(-1);
+  close.props.onClick();
+  assert.equal(closed, 1);
+  const loading = ui.renderLoading();
+  assert.ok(loading.includes('role="status"') && loading.includes('불러오는 중…') && loading.includes('loading-box-track'));
+  assert.ok(ui.renderLoading('가격표 불러오는 중…').includes('가격표 불러오는 중…'));
 });

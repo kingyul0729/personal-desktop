@@ -5,6 +5,7 @@ import { menuFor, parentChain, type UserFile } from '../desktopModel';
 import { formatMemoTime } from '../memos';
 import { DesktopIcon } from './DesktopIcon';
 import { EntryBadge } from './EntryIcon';
+import { LoadingBox } from './Feedback';
 import { DEFAULT_ICONS, libraryIconSrc } from '../iconLibrary';
 
 // One window shows the desktop folder, a folder, or a text file chosen from the desktop or 환경설정.
@@ -56,6 +57,7 @@ export function FileWindow() {
         }}><Save size={16} />저장</button>
       </div>
       {state === 'error' ? <p className="settings-empty">{message}{current.locked && <button type="button" onClick={async () => { if (await unlock(current.id)) setViewing(current.id); }}><Lock size={15} />비밀번호 입력</button>}</p>
+        : state === 'loading' ? <div className="file-window-loading"><LoadingBox /></div>
         : <textarea className="file-window-text" aria-label={`${current.name} 내용`} value={content} disabled={state === 'loading'} onChange={event => setContent(event.target.value)} />}
       <footer className="file-window-status"><span>{content.length}자</span><span role="status">{state === 'loading' ? '불러오는 중' : content !== saved ? '저장 안 됨' : message}</span></footer>
     </div>;
