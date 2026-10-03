@@ -40,7 +40,7 @@ test('signed-out visitors see the default desktop and cannot change it', async (
   const env = environment();
   const state = (await call(env, '/api/desktop', { owner: '' })).data;
   assert.equal(state.authenticated, false);
-  assert.deepEqual(state.items.map(item => item.label), ['Terminal', '가격표 보관함', '환경설정', 'Programs', '메모장', '금액 계산', '휴지통']);
+  assert.deepEqual(state.items.map(item => item.label), ['Terminal', '가격표 보관함', '환경설정', '작업 캡슐', '메모장', '금액 계산', '휴지통']);
   assert.equal((await act(env, { action: 'set-fit', fit: 'contain' }, { owner: '' })).status, 401);
 });
 
@@ -230,4 +230,53 @@ test('adding the desktop tables keeps price lists, memos and drafts exactly as t
   assert.equal(snapshot(), saved);
   assert.equal((await call(env, '/api/memos')).data.memos[0].preview, '기존 메모');
   assert.ok((await call(env, '/api/price-files')).data.folders.some(folder => folder.name === '내 폴더'));
+});
+
+const layout = (windows, active = windows.at(-1)?.id, view = {}) => ({ windows, active, view });
+const win = (id, x = 10, y = 20, width = 600, height = 400, extra = {}) => ({ id, x, y, width, height, minimized: false, maximized: false, ...extra });
+
+test('work capsules save only window layouts, survive reload, and rename or delete one at a time', async () => {
+  const env = environment();
+  const capsules = (owner) => call(env, '/api/capsules', { owner });
+  const save = (body, owner) => call(env, '/api/capsules', { method: 'POST', body, owner });
+  assert.deepEqual((await capsules('')).data, { authenticated: false, capsules: [] });
+  assert.equal((await save({ action: 'create', name: 'x', layout: layout([win('notepad')]) }, '')).status, 401);
+  const memo = '55555555-5555-4555-8555-555555555555';
+  await call(env, `/api/memos/${memo}`, { method: 'PUT', body: { title: '', content: '10월 1일 메모' } });
+  let state = (await save({ action: 'create', name: '상담 준비', layout: layout([win('notepad'), win('fileExplorer', 240, 24, 920, 760, { minimized: true }), win('priceCalculator', 250, 52, 980, 680, { maximized: true })], 'priceCalculator', { settingsTab: 'files' }) })).data;
+  assert.equal(state.capsules.length, 1);
+  const saved = state.capsules[0];
+  assert.deepEqual(saved.layout.windows.map(w => w.id), ['notepad', 'fileExplorer', 'priceCalculator']);
+  assert.equal(saved.layout.windows[1].minimized, true);
+  assert.equal(saved.layout.windows[2].maximized, true);
+  assert.equal(saved.layout.active, 'priceCalculator');
+  assert.deepEqual(saved.layout.view, { settingsTab: 'files' });
+  assert.ok(!JSON.stringify(env.sqlite.prepare('SELECT layout FROM work_capsules').all()).includes('10월 1일 메모'), 'no app data is copied');
+  await save({ action: 'create', name: '10월 2일 마감 정리', layout: layout([win('fileExplorer'), win('notepad')]) });
+  // Later edits stay: a capsule never brings back old memo content.
+  await call(env, `/api/memos/${memo}`, { method: 'PUT', body: { title: '', content: '10월 3일 최신 메모' } });
+  state = (await capsules()).data;
+  assert.deepEqual(state.capsules.map(c => c.name), ['10월 2일 마감 정리', '상담 준비'], 'kept after reload, newest first');
+  assert.equal((await call(env, `/api/memos/${memo}`)).data.content, '10월 3일 최신 메모');
+  assert.equal((await capsules('someone-else')).data.capsules.length, 0);
+  state = (await save({ action: 'rename', id: saved.id, name: '상담 준비 2' })).data;
+  assert.equal(state.capsules.find(c => c.id === saved.id).name, '상담 준비 2');
+  assert.equal((await save({ action: 'rename', id: saved.id, name: '탈취' }, 'someone-else')).status, 404);
+  const memosBefore = JSON.stringify(env.sqlite.prepare('SELECT * FROM memos').all());
+  state = (await save({ action: 'delete', id: saved.id })).data;
+  assert.deepEqual(state.capsules.map(c => c.name), ['10월 2일 마감 정리']);
+  assert.equal(JSON.stringify(env.sqlite.prepare('SELECT * FROM memos').all()), memosBefore);
+});
+
+test('capsule layouts are cleaned: unknown windows, the capsule window and bad numbers are dropped', async () => {
+  const env = environment();
+  const save = body => call(env, '/api/capsules', { method: 'POST', body });
+  assert.equal((await save({ action: 'create', name: '빈 작업', layout: layout([]) })).status, 400);
+  assert.equal((await save({ action: 'create', name: '', layout: layout([win('notepad')]) })).status, 400);
+  const state = (await save({ action: 'create', name: '정리', layout: layout([win('notepad'), win('notepad'), win('programManager'), win('hacker'), win('trash', 'x'), { ...win('files'), extra: 'ignored' }], 'hacker', { settingsTab: 'evil', filesViewing: '../x' }) })).data;
+  const cleaned = state.capsules[0].layout;
+  assert.deepEqual(cleaned.windows.map(w => w.id), ['notepad', 'files']);
+  assert.equal(cleaned.active, null);
+  assert.deepEqual(cleaned.view, {});
+  assert.ok(!('extra' in cleaned.windows[1]));
 });

@@ -11,12 +11,14 @@ export const initialDesktop: DesktopState = {
   minimized: [],
   stack: [],
 };
-export type DesktopAction = { type: 'open' | 'focus' | 'minimize' | 'close' | 'taskbar'; id: WindowId };
+export type DesktopAction = { type: 'open' | 'focus' | 'minimize' | 'close' | 'taskbar'; id: WindowId }
+  | { type: 'layout'; windows: WindowId[]; minimized: WindowId[]; active?: WindowId };
 
 export function activeWindow(state: DesktopState): WindowId | undefined {
   return [...state.stack].reverse().find((id) => !state.minimized.includes(id));
 }
 export function desktopReducer(state: DesktopState, action: DesktopAction): DesktopState {
+  if (action.type === 'layout') return applyLayout(state, action);
   const { id } = action;
   const running = state.running.includes(id);
   const type = action.type === 'taskbar' ? (activeWindow(state) === id ? 'minimize' : 'open') : action.type;
@@ -64,5 +66,19 @@ export function resizeWindow(rect: WindowRect, delta: { x: number; y: number }, 
     ...fitted,
     width: Math.min(Math.max(320, fitted.width + delta.x), bounds.width - fitted.x - gap),
     height: Math.min(Math.max(240, fitted.height + delta.y), bounds.height - fitted.y - gap),
+  };
+}
+
+// Opens a saved work layout with the same window list: windows already open are reused (never
+// duplicated), other open windows are only minimized so nothing in them is lost, and the saved
+// active window ends up in front.
+function applyLayout(state: DesktopState, { windows, minimized, active }: { windows: WindowId[]; minimized: WindowId[]; active?: WindowId }): DesktopState {
+  const wanted = windows.filter((id, index) => WINDOW_IDS.includes(id) && windows.indexOf(id) === index);
+  const others = state.running.filter(id => !wanted.includes(id));
+  const front = active && wanted.includes(active) && !minimized.includes(active) ? active : undefined;
+  return {
+    running: [...state.running, ...wanted.filter(id => !state.running.includes(id))],
+    minimized: [...others, ...wanted.filter(id => minimized.includes(id))],
+    stack: [...state.stack.filter(id => !wanted.includes(id)), ...wanted.filter(id => id !== front), ...(front ? [front] : [])],
   };
 }
