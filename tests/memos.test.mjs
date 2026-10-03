@@ -71,6 +71,7 @@ test('saving twice updates one memo, New makes a separate one, newest first', as
   const opened = await call(env, `/api/memos/${ID_A}`);
   assert.equal(opened.data.content, '첫 메모 수정');
   // Re-saving the older memo moves it to the top without copying it.
+  await new Promise(resolve => setTimeout(resolve, 5));
   saved = await call(env, `/api/memos/${ID_A}`, { method: 'PUT', body: { title: '회의', content: '다시 수정' } });
   assert.deepEqual(saved.data.memos.map(memo => memo.id), [ID_A, ID_B]);
 });
