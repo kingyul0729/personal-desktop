@@ -4,6 +4,7 @@ import { Button } from './ui/button';
 import { Textarea } from './ui/textarea';
 import { KittyDialog } from './KittyDialog';
 import { formatMemoTime, memoChanged, type Memo, type MemoState, type MemoSummary } from '../memos';
+import { announceTrash, useTrashChange } from '../trash';
 
 const newMemoId = () => crypto.randomUUID();
 const readJson = async (response: Response) => {
@@ -120,6 +121,10 @@ export function Notepad() {
       finally { setBusy(false); }
     });
   };
+  // A memo restored from the trash reappears in the list.
+  useTrashChange('memo', () => {
+    if (authenticated) void fetch('/api/memos', { cache: 'no-store' }).then(readJson).then((data: MemoState) => setMemos(data.memos)).catch(() => undefined);
+  });
   const remove = async () => {
     if (!deleting || busy) return;
     setBusy(true); setError('');
@@ -128,7 +133,7 @@ export function Notepad() {
       setMemos(data.memos);
       // The open memo is gone, so the editor starts a fresh one instead of re-saving it.
       if (deleting.id === memoId) { openMemo(null); setView('list'); }
-      setDeleting(null);
+      setDeleting(null); announceTrash('memo');
     } catch (e) { setError((e as Error).message); }
     finally { setBusy(false); }
   };
@@ -208,12 +213,12 @@ export function Notepad() {
         <span className="text-gray-600" role="status">{view === 'editor' ? statusText : ''}</span>
       </div>
 
-      {deleting && <KittyDialog title="삭제 확인" busy={busy} onClose={() => setDeleting(null)}>
-        <p className="kitty-question">‘{memoLabel(deleting)}’ 메모를 삭제할까요? 삭제하면 되돌릴 수 없습니다.</p>
+      {deleting && <KittyDialog title="휴지통으로 이동" busy={busy} onClose={() => setDeleting(null)}>
+        <p className="kitty-question">‘{memoLabel(deleting)}’ 메모를 휴지통으로 옮길까요?<br />휴지통에서 복원할 수 있습니다.</p>
         {error && <p className="kitty-error" role="alert">{error}</p>}
         <footer className="kitty-dialog-actions">
           <button type="button" onClick={() => setDeleting(null)} disabled={busy}>취소</button>
-          <button type="button" className="kitty-primary" onClick={() => void remove()} disabled={busy}>{busy ? '삭제 중…' : '삭제'}</button>
+          <button type="button" className="kitty-primary" onClick={() => void remove()} disabled={busy}>{busy ? '이동 중…' : '휴지통으로 이동'}</button>
         </footer>
       </KittyDialog>}
 

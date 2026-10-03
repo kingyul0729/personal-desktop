@@ -4,6 +4,7 @@ import type { WindowId } from './desktopState';
 import { ContextMenu, type ContextMenuItem } from './components/ContextMenu';
 import { PasswordDialog } from './components/PasswordDialog';
 import { IconPicker } from './components/IconPicker';
+import { useTrashChange } from './trash';
 
 export type SettingsTab = 'wallpaper' | 'desktop' | 'files' | 'security';
 type Result<T = DesktopData & Record<string, unknown>> = { ok: true; data: T } | { ok: false; error: string };
@@ -62,6 +63,8 @@ export function DesktopProvider({ openWindow, children }: { openWindow: (id: Win
     finally { setLoaded(true); }
   }, [headers]);
   useEffect(() => { void refresh(); }, [refresh]);
+  // A memo, price image or work capsule moved to the trash fills the trash icon and list.
+  useTrashChange(null, () => { void refresh(); });
 
   const unlock = useCallback((id: string) => new Promise<boolean>(resolve => {
     const name = dataRef.current.files.find(file => file.id === id)?.name ?? dataRef.current.trash.find(file => file.id === id)?.name ?? '잠긴 항목';

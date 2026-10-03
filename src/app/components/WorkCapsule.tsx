@@ -5,6 +5,7 @@ import { capsuleRequest, capsuleSummary, type Capsule, type CapsuleLayout } from
 import { CapsuleSaveDialog } from './CapsuleSaveDialog';
 import { KittyDialog } from './KittyDialog';
 import { InlineRename } from './InlineRename';
+import { announceTrash, useTrashChange } from '../trash';
 
 export function WorkCapsule({ currentLayout, openLayout, version = 0 }: { currentLayout: () => CapsuleLayout; openLayout: (layout: CapsuleLayout) => void; version?: number }) {
   const { showMenu, notify } = useDesktop();
@@ -26,6 +27,7 @@ export function WorkCapsule({ currentLayout, openLayout, version = 0 }: { curren
   };
   // Reloads when a layout was saved from the desktop menu while this window is open.
   useEffect(() => { void send(); }, [version]);
+  useTrashChange('capsule', () => { void send(); });
 
   const startSave = () => {
     const layout = currentLayout();
@@ -69,12 +71,12 @@ export function WorkCapsule({ currentLayout, openLayout, version = 0 }: { curren
 
     {saving && <CapsuleSaveDialog layout={saving} onClose={() => setSaving(null)}
       onSaved={list => { setCapsules(list); setSaving(null); notify('작업을 저장했습니다.'); }} />}
-    {deleting && <KittyDialog title="작업 삭제" busy={busy} onClose={() => setDeleting(null)}>
-      <p className="kitty-question">‘{deleting.name}’ 작업을 삭제할까요?<br />저장된 창 배치만 지워지고 메모·파일 등 데이터는 그대로입니다.</p>
+    {deleting && <KittyDialog title="휴지통으로 이동" busy={busy} onClose={() => setDeleting(null)}>
+      <p className="kitty-question">‘{deleting.name}’ 작업을 휴지통으로 옮길까요?<br />휴지통에서 복원할 수 있고, 메모·파일 등 데이터는 그대로입니다.</p>
       {error && <p className="kitty-error" role="alert">{error}</p>}
       <footer className="kitty-dialog-actions">
         <button type="button" onClick={() => setDeleting(null)} disabled={busy}>취소</button>
-        <button type="button" className="kitty-primary" disabled={busy} onClick={async () => { if (await send({ action: 'delete', id: deleting.id })) setDeleting(null); }}>삭제</button>
+        <button type="button" className="kitty-primary" disabled={busy} onClick={async () => { if (await send({ action: 'delete', id: deleting.id })) { setDeleting(null); announceTrash('capsule'); notify('휴지통으로 이동했습니다.'); } }}>휴지통으로 이동</button>
       </footer>
     </KittyDialog>}
   </div>;
