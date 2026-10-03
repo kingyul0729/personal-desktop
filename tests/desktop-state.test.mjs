@@ -96,3 +96,19 @@ test('portrait ↔ landscape fits both orientations without mutating saved resto
   assert.deepEqual(fitWindow(preferred, landscape), first);
   assert.deepEqual(preferred, copy);
 });
+
+test('opening a work layout reuses open windows, keeps others minimized, and brings the saved active window forward', () => {
+  let state = desktopReducer(initialDesktop, { type: 'open', id: 'notepad' });
+  state = desktopReducer(state, { type: 'open', id: 'terminal' });
+  state = desktopReducer(state, { type: 'layout', windows: ['notepad', 'fileExplorer', 'priceCalculator'], minimized: ['fileExplorer'], active: 'notepad' });
+  assert.deepEqual(state.running, ['notepad', 'terminal', 'fileExplorer', 'priceCalculator']);
+  assert.equal(new Set(state.running).size, state.running.length, 'no duplicate windows');
+  assert.deepEqual(state.minimized.sort(), ['fileExplorer', 'terminal'], 'terminal stays open, only minimized');
+  assert.equal(activeWindow(state), 'notepad');
+  assert.equal(state.stack.at(-1), 'notepad');
+  const again = desktopReducer(state, { type: 'layout', windows: ['notepad', 'fileExplorer', 'priceCalculator'], minimized: ['fileExplorer'], active: 'notepad' });
+  assert.deepEqual(again.running, state.running, 'opening the same layout twice adds nothing');
+  const unknown = desktopReducer(initialDesktop, { type: 'layout', windows: ['notepad', 'nope'], minimized: [], active: 'nope' });
+  assert.deepEqual(unknown.running, ['notepad']);
+  assert.equal(activeWindow(unknown), 'notepad');
+});

@@ -4,6 +4,7 @@ import { ImageDocumentViewer } from './ImageDocumentViewer';
 import { PinkFolderIcon } from './PinkFolderIcon';
 import { KittyDialog } from './KittyDialog';
 import { LoadingBox } from './Feedback';
+import { announceTrash, useTrashChange } from '../trash';
 import { initialPriceFiles, type PriceFiles, type PriceFolder, type PriceImage } from '../priceFiles';
 
 type Editor = { type: 'folder'; folder?: PriceFolder } | { type: 'image'; image: PriceImage } | { type: 'upload'; file: File } | { type: 'delete'; image: PriceImage };
@@ -44,6 +45,7 @@ export function FileExplorer() {
     finally { if (!signal?.aborted) setLoading(false); }
   }
   useEffect(() => { const controller = new AbortController(); void refresh(controller.signal); return () => controller.abort(); }, []);
+  useTrashChange('price', () => { void refresh(); });
   useEffect(() => {
     if (editor?.type !== 'upload') { setPreview(''); return; }
     const src = URL.createObjectURL(editor.file); setPreview(src);
@@ -84,7 +86,7 @@ export function FileExplorer() {
       // A gateway can answer with an HTML error page; never show its parse error.
       const data = await response.json().catch(() => null);
       if (!response.ok || !data) throw new Error(data?.error || '저장하지 못했습니다. 다시 시도해 주세요.');
-      setFiles(data); setNotice(editor.type === 'delete' ? '삭제했습니다.' : '저장했습니다.'); setEditor(null);
+      setFiles(data); setNotice(editor.type === 'delete' ? '휴지통으로 이동했습니다.' : '저장했습니다.'); if (editor.type === 'delete') announceTrash('price'); setEditor(null);
     } catch (e) { setError((e as Error).message || '저장하지 못했습니다. 다시 시도해 주세요.'); }
     finally { setPending(false); }
   };
@@ -140,16 +142,16 @@ export function FileExplorer() {
         <footer className="pf-status"><span>{showFolders ? `폴더 ${files.folders.length}개` : `가격표 ${visibleImages.length}개`}</span><span role="status">{loading ? '불러오는 중' : notice}</span></footer>
       </section>}
     </div>
-    {editor && <KittyDialog title={editor.type === 'delete' ? '삭제 확인' : editor.type === 'folder' && !editor.folder ? '새 폴더' : '저장 확인'} onClose={closeEditor} busy={pending}>
+    {editor && <KittyDialog title={editor.type === 'delete' ? '휴지통으로 이동' : editor.type === 'folder' && !editor.folder ? '새 폴더' : '저장 확인'} onClose={closeEditor} busy={pending}>
       <form onSubmit={save}>
-        {editor.type === 'delete' ? <p className="kitty-question">‘{editor.image.name}’ 가격표를 삭제할까요?</p> : <>
+        {editor.type === 'delete' ? <p className="kitty-question">‘{editor.image.name}’ 가격표를 휴지통으로 옮길까요?<br />휴지통에서 복원할 수 있습니다.</p> : <>
           {editor.type === 'upload' && preview && <img className="pf-upload-preview" src={preview} alt="추가할 가격표" />}
           <label className="kitty-field">{editor.type === 'folder' ? '폴더 이름' : '가격표 이름'}<input autoFocus required maxLength={100} value={name} onChange={event => setName(event.target.value)} disabled={pending} /></label>
           {editor.type !== 'folder' && <label className="kitty-field">저장할 폴더<select value={folderId} onChange={event => setFolderId(event.target.value)} disabled={pending} required>{files.folders.map(folder => <option key={folder.id} value={folder.id}>{folder.name}</option>)}</select></label>}
           {editor.type === 'folder' && !editor.folder && <fieldset className="pf-folder-options"><legend>폴더 모양</legend>{(['heart', 'kitty', 'flower', 'cherry'] as const).map((value, index) => <button key={value} type="button" aria-label={['하트', '키티', '꽃', '체리'][index]} aria-pressed={variant === value} disabled={pending} onClick={() => setVariant(value)}><PinkFolderIcon variant={value} /></button>)}</fieldset>}
         </>}
         {error && <p className="kitty-error" role="alert">{error}</p>}
-        <footer className="kitty-dialog-actions"><button type="button" onClick={closeEditor} disabled={pending}>취소</button><button type="submit" className="kitty-primary" disabled={pending || (editor.type !== 'delete' && !name.trim())}>{pending ? '처리 중…' : editor.type === 'delete' ? '삭제' : '저장'}</button></footer>
+        <footer className="kitty-dialog-actions"><button type="button" onClick={closeEditor} disabled={pending}>취소</button><button type="submit" className="kitty-primary" disabled={pending || (editor.type !== 'delete' && !name.trim())}>{pending ? '처리 중…' : editor.type === 'delete' ? '휴지통으로 이동' : '저장'}</button></footer>
       </form>
     </KittyDialog>}
   </div>;

@@ -29,6 +29,20 @@
       "when": 1790966324208,
       "tag": "0003_famous_husk",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1791017547609,
+      "tag": "0004_careful_machine_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1791028426148,
+      "tag": "0005_deep_eternals",
+      "breakpoints": true
     }
   ]
 }

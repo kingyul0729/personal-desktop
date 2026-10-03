@@ -14,6 +14,7 @@ const bundled = await build({
       export const renderNotice = (message) => renderToStaticMarkup(React.createElement(DesktopNotice, { message, onClose() {} }));
       export const noticeElement = (message, onClose) => { let element; const Probe = () => { element = DesktopNotice({ message, onClose }); return null; }; renderToStaticMarkup(React.createElement(Probe)); return element; };
       export const renderLoading = (label) => renderToStaticMarkup(React.createElement(LoadingBox, label ? { label } : {}));
+      export const menuButtons = (items) => { let element; const Probe = () => { element = ContextMenuList({ items, onClose() {} }); return null; }; renderToStaticMarkup(React.createElement(Probe)); return element.props.children; };
       export const renderMenu = (items) => renderToStaticMarkup(React.createElement(ContextMenuList, { items, onClose() {} }));
       export const renderIcon = (props) => renderToStaticMarkup(React.createElement(DesktopIcon, { icon: null, onClick() {}, ...props }));
       export { createLongPress, desktopMenu, entryKind, iconArt, menuFor, defaultDesktop } from './src/app/desktopModel';
@@ -40,7 +41,7 @@ test('menus match what each item really is; fixed programs never offer deletion'
     assert.ok(!actions.includes('trash') && !actions.includes('remove'), program.label);
   }
   assert.deepEqual(menuFor('file', false).map(item => item.label), ['열기']);
-  assert.deepEqual(desktopMenu(true).map(item => item.label), ['새 파일', '새 폴더', '배경화면 변경', '환경설정']);
+  assert.deepEqual(desktopMenu(true).map(item => item.label), ['새 파일', '새 폴더', '현재 화면 저장', '배경화면 변경', '환경설정']);
   assert.deepEqual(desktopMenu(false).map(item => item.label), ['환경설정']);
   const html = ui.renderMenu(menuFor('program', true).map(item => ({ label: item.label, onSelect() {} })));
   assert.equal((html.match(/role="menuitem"/g) ?? []).length, 4);
@@ -113,4 +114,16 @@ test('the heart notice shows the message with a close button, and the loading bo
   const loading = ui.renderLoading();
   assert.ok(loading.includes('role="status"') && loading.includes('불러오는 중…') && loading.includes('loading-box-track'));
   assert.ok(ui.renderLoading('가격표 불러오는 중…').includes('가격표 불러오는 중…'));
+});
+
+test('a menu item ignores the click left over from the long press that opened it', () => {
+  const picked = [];
+  const [first] = ui.menuButtons([{ label: '환경설정', onSelect: () => picked.push('settings') }]);
+  first.props.onClick({ detail: 1 });
+  assert.deepEqual(picked, [], 'release of the long press lands on the new menu but selects nothing');
+  first.props.onClick({ detail: 0 });
+  assert.deepEqual(picked, ['settings'], 'keyboard activation still works');
+  first.props.onPointerDown();
+  first.props.onClick({ detail: 1 });
+  assert.deepEqual(picked, ['settings', 'settings'], 'a real tap on the menu selects');
 });

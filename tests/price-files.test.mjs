@@ -85,7 +85,10 @@ test('upload, rename, move, reopen and delete persist with original image bytes 
   assert.equal(reloaded.folders.find(item => item.id === targetFolder.id).name, '새 프로그램');
   const removed = await (await handleApi(request('/api/price-files', { action: 'delete-image', id: image.id }), env)).json();
   assert.equal(removed.images.length, 18);
-  assert.equal(env.objects.size, 0);
+  // Deleting moves it to the trash: hidden and not served, but the stored image stays until purged.
+  assert.equal(env.objects.size, 1);
+  assert.equal((await handleApi(request(`/api/price-images/${encodeURIComponent(image.id)}`), env)).status, 404);
+  assert.equal((await handleApi(request('/api/price-files', { action: 'edit-image', id: image.id, name: '되살리기', folderId: targetFolder.id }), env)).status, 404);
 });
 
 test('existing accounts receive the skinbooster collection once without replacing saved images or resurrecting deleted ones', async () => {

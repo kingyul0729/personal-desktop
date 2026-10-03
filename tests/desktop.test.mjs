@@ -40,7 +40,7 @@ test('signed-out visitors see the default desktop and cannot change it', async (
   const env = environment();
   const state = (await call(env, '/api/desktop', { owner: '' })).data;
   assert.equal(state.authenticated, false);
-  assert.deepEqual(state.items.map(item => item.label), ['Terminal', '가격표 보관함', '환경설정', 'Programs', '메모장', '금액 계산', '휴지통']);
+  assert.deepEqual(state.items.map(item => item.label), ['Terminal', '가격표 보관함', '환경설정', '작업 캡슐', '메모장', '금액 계산', '휴지통']);
   assert.equal((await act(env, { action: 'set-fit', fit: 'contain' }, { owner: '' })).status, 401);
 });
 
@@ -230,4 +230,128 @@ test('adding the desktop tables keeps price lists, memos and drafts exactly as t
   assert.equal(snapshot(), saved);
   assert.equal((await call(env, '/api/memos')).data.memos[0].preview, '기존 메모');
   assert.ok((await call(env, '/api/price-files')).data.folders.some(folder => folder.name === '내 폴더'));
+});
+
+const layout = (windows, active = windows.at(-1)?.id, view = {}) => ({ windows, active, view });
+const win = (id, x = 10, y = 20, width = 600, height = 400, extra = {}) => ({ id, x, y, width, height, minimized: false, maximized: false, ...extra });
+
+test('work capsules save only window layouts, survive reload, and rename or delete one at a time', async () => {
+  const env = environment();
+  const capsules = (owner) => call(env, '/api/capsules', { owner });
+  const save = (body, owner) => call(env, '/api/capsules', { method: 'POST', body, owner });
+  assert.deepEqual((await capsules('')).data, { authenticated: false, capsules: [] });
+  assert.equal((await save({ action: 'create', name: 'x', layout: layout([win('notepad')]) }, '')).status, 401);
+  const memo = '55555555-5555-4555-8555-555555555555';
+  await call(env, `/api/memos/${memo}`, { method: 'PUT', body: { title: '', content: '10월 1일 메모' } });
+  let state = (await save({ action: 'create', name: '상담 준비', layout: layout([win('notepad'), win('fileExplorer', 240, 24, 920, 760, { minimized: true }), win('priceCalculator', 250, 52, 980, 680, { maximized: true })], 'priceCalculator', { settingsTab: 'files' }) })).data;
+  assert.equal(state.capsules.length, 1);
+  const saved = state.capsules[0];
+  assert.deepEqual(saved.layout.windows.map(w => w.id), ['notepad', 'fileExplorer', 'priceCalculator']);
+  assert.equal(saved.layout.windows[1].minimized, true);
+  assert.equal(saved.layout.windows[2].maximized, true);
+  assert.equal(saved.layout.active, 'priceCalculator');
+  assert.deepEqual(saved.layout.view, { settingsTab: 'files' });
+  assert.ok(!JSON.stringify(env.sqlite.prepare('SELECT layout FROM work_capsules').all()).includes('10월 1일 메모'), 'no app data is copied');
+  await save({ action: 'create', name: '10월 2일 마감 정리', layout: layout([win('fileExplorer'), win('notepad')]) });
+  // Later edits stay: a capsule never brings back old memo content.
+  await call(env, `/api/memos/${memo}`, { method: 'PUT', body: { title: '', content: '10월 3일 최신 메모' } });
+  state = (await capsules()).data;
+  assert.deepEqual(state.capsules.map(c => c.name), ['10월 2일 마감 정리', '상담 준비'], 'kept after reload, newest first');
+  assert.equal((await call(env, `/api/memos/${memo}`)).data.content, '10월 3일 최신 메모');
+  assert.equal((await capsules('someone-else')).data.capsules.length, 0);
+  state = (await save({ action: 'rename', id: saved.id, name: '상담 준비 2' })).data;
+  assert.equal(state.capsules.find(c => c.id === saved.id).name, '상담 준비 2');
+  assert.equal((await save({ action: 'rename', id: saved.id, name: '탈취' }, 'someone-else')).status, 404);
+  const memosBefore = JSON.stringify(env.sqlite.prepare('SELECT * FROM memos').all());
+  state = (await save({ action: 'delete', id: saved.id })).data;
+  assert.deepEqual(state.capsules.map(c => c.name), ['10월 2일 마감 정리']);
+  assert.equal(JSON.stringify(env.sqlite.prepare('SELECT * FROM memos').all()), memosBefore);
+});
+
+test('capsule layouts are cleaned: unknown windows, the capsule window and bad numbers are dropped', async () => {
+  const env = environment();
+  const save = body => call(env, '/api/capsules', { method: 'POST', body });
+  assert.equal((await save({ action: 'create', name: '빈 작업', layout: layout([]) })).status, 400);
+  assert.equal((await save({ action: 'create', name: '', layout: layout([win('notepad')]) })).status, 400);
+  const state = (await save({ action: 'create', name: '정리', layout: layout([win('notepad'), win('notepad'), win('programManager'), win('hacker'), win('trash', 'x'), { ...win('files'), extra: 'ignored' }], 'hacker', { settingsTab: 'evil', filesViewing: '../x' }) })).data;
+  const cleaned = state.capsules[0].layout;
+  assert.deepEqual(cleaned.windows.map(w => w.id), ['notepad', 'files']);
+  assert.equal(cleaned.active, null);
+  assert.deepEqual(cleaned.view, {});
+  assert.ok(!('extra' in cleaned.windows[1]));
+});
+
+test('memos, price images and work capsules go to the trash first; restore brings them back, purge and emptying delete for good', async () => {
+  const env = environment();
+  const memo = '66666666-6666-4666-8666-666666666666';
+  await call(env, `/api/memos/${memo}`, { method: 'PUT', body: { title: '', content: '휴지통에 갈 메모 내용' } });
+  await call(env, '/api/memo-draft', { method: 'PUT', body: { memoId: memo, title: '', content: '작성 중' } });
+  await call(env, '/api/price-files');
+  const form = new FormData();
+  form.set('file', png()); form.set('name', '내 가격표'); form.set('folderId', 'me:toning');
+  const price = (await call(env, '/api/price-images', { method: 'POST', body: form })).data.images.find(image => image.name === '내 가격표');
+  const capsule = (await call(env, '/api/capsules', { method: 'POST', body: { action: 'create', name: '상담 준비', layout: layout([win('notepad')]) } })).data.capsules[0];
+  const counts = () => ['memos', 'price_images', 'work_capsules'].map(table => env.sqlite.prepare(`SELECT count(*) AS n FROM ${table} WHERE owner = 'me'`).get().n);
+  const before = counts();
+
+  assert.equal((await call(env, `/api/memos/${memo}`, { method: 'DELETE' })).data.memos.length, 0);
+  assert.ok(!(await call(env, '/api/price-files', { method: 'POST', body: { action: 'delete-image', id: price.id } })).data.images.some(image => image.id === price.id));
+  assert.equal((await call(env, '/api/capsules', { method: 'POST', body: { action: 'delete', id: capsule.id } })).data.capsules.length, 0);
+  assert.deepEqual(counts(), before, 'moving to the trash deletes nothing');
+  assert.equal(env.objects.size, 1, 'the stored image stays while in the trash');
+  assert.equal((await call(env, `/api/memos/${memo}`)).status, 404);
+  assert.equal((await call(env, '/api/memos')).data.draft, null, 'the draft does not reopen the trashed memo');
+
+  let state = (await call(env, '/api/desktop')).data;
+  assert.deepEqual(state.trash.map(item => [item.type, item.name, item.location]).sort(), [
+    ['capsule', '상담 준비', '작업 캡슐'], ['memo', '휴지통에 갈 메모 내용', '메모장'], ['price', '내 가격표', '가격표 보관함 › 색소·토닝']]);
+  assert.equal((await call(env, '/api/desktop', { owner: 'someone-else' })).data.trash.length, 0);
+  assert.equal((await act(env, { action: 'purge-file', type: 'memo', id: memo }, { owner: 'someone-else' })).status, 404);
+
+  state = (await act(env, { action: 'restore-file', type: 'memo', id: memo })).data;
+  assert.equal((await call(env, `/api/memos/${memo}`)).data.content, '휴지통에 갈 메모 내용');
+  await act(env, { action: 'restore-file', type: 'price', id: price.id });
+  assert.ok((await call(env, '/api/price-files')).data.images.some(image => image.id === price.id && image.folderId === 'me:toning'));
+  await act(env, { action: 'restore-file', type: 'capsule', id: capsule.id });
+  assert.deepEqual((await call(env, '/api/capsules')).data.capsules[0].layout, capsule.layout);
+  assert.equal((await call(env, '/api/desktop')).data.trash.length, 0);
+  assert.equal((await act(env, { action: 'restore-file', type: 'memo', id: memo })).status, 404, 'only trashed items can be restored');
+  assert.equal((await act(env, { action: 'purge-file', type: 'memo', id: memo })).status, 404, 'only trashed items can be purged');
+
+  // Saving a memo another device trashed keeps the text instead of losing it.
+  await call(env, `/api/memos/${memo}`, { method: 'DELETE' });
+  await call(env, `/api/memos/${memo}`, { method: 'PUT', body: { title: '', content: '다른 기기에서 저장' } });
+  assert.equal((await call(env, '/api/memos')).data.memos.length, 1);
+
+  await call(env, `/api/memos/${memo}`, { method: 'DELETE' });
+  await act(env, { action: 'purge-file', type: 'memo', id: memo });
+  assert.equal(counts()[0], before[0] - 1);
+  await call(env, '/api/price-files', { method: 'POST', body: { action: 'delete-image', id: price.id } });
+  await call(env, '/api/capsules', { method: 'POST', body: { action: 'delete', id: capsule.id } });
+  const file = (await act(env, { action: 'create-file', kind: 'file', name: '문서' })).data.created;
+  await act(env, { action: 'trash-file', id: file });
+  state = (await act(env, { action: 'empty-trash' })).data;
+  assert.equal(state.trash.length, 0);
+  assert.deepEqual(counts(), [before[0] - 1, before[1] - 1, before[2] - 1]);
+  assert.equal(env.objects.size, 0, 'emptying the trash removes the stored image');
+});
+
+test('adding the trash columns keeps memos, price lists and work capsules exactly as they were', async () => {
+  const env = environment(migrationFiles.filter(name => !name.startsWith('0005')));
+  // Rows written the way the server stored them before the trash columns existed.
+  env.sqlite.exec(`INSERT INTO price_folders (id, owner, name, variant, created_at, catalog_version) VALUES ('me:mine', 'me', '내 폴더', 'heart', 1, 1);
+    INSERT INTO price_images (id, owner, folder_id, name, object_key, mime, created_at) VALUES ('img', 'me', 'me:mine', '기존 가격표', 'k', 'image/png', 1);
+    INSERT INTO memos (id, owner, title, content, created_at, saved_at) VALUES ('77777777-7777-4777-8777-777777777777', 'me', '메모', '기존 메모', 1, 1);
+    INSERT INTO memo_drafts (owner, memo_id, title, content, updated_at) VALUES ('me', '77777777-7777-4777-8777-777777777777', '', '작성 중', 2);
+    INSERT INTO work_capsules (id, owner, name, layout, created_at, updated_at) VALUES ('cap', 'me', '기존 작업', '{"windows":[{"id":"notepad","x":1,"y":2,"width":300,"height":200,"minimized":false,"maximized":false}],"active":"notepad","view":{}}', 1, 1);`);
+  const snapshot = () => JSON.stringify(['price_folders', 'price_images', 'memos', 'memo_drafts', 'work_capsules'].map(table =>
+    env.sqlite.prepare(`SELECT * FROM ${table} ORDER BY rowid`).all().map(({ trashed_at, ...row }) => row)));
+  const saved = snapshot();
+  env.apply(migrationFiles.filter(name => name.startsWith('0005')));
+  assert.equal(snapshot(), saved);
+  assert.equal(env.sqlite.prepare('SELECT count(*) AS n FROM memos WHERE trashed_at IS NOT NULL').get().n, 0);
+  assert.equal((await call(env, '/api/memos')).data.memos[0].preview, '기존 메모');
+  assert.ok((await call(env, '/api/price-files')).data.images.some(image => image.name === '기존 가격표'));
+  assert.equal((await call(env, '/api/memos')).data.draft.content, '작성 중');
+  assert.equal((await call(env, '/api/capsules')).data.capsules[0].name, '기존 작업');
 });

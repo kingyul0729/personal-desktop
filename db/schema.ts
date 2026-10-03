@@ -10,12 +10,15 @@ export const priceImages = sqliteTable('price_images', {
   id: text('id').primaryKey(), owner: text('owner').notNull(), folderId: text('folder_id').notNull(),
   name: text('name').notNull(), objectKey: text('object_key'), source: text('source'),
   mime: text('mime').notNull(), createdAt: integer('created_at').notNull(),
+  trashedAt: integer('trashed_at'),
 }, (t) => [index('idx_price_images_owner_folder').on(t.owner, t.folderId)]);
 
 // Confirmed memos only; the in-progress text lives in memo_drafts until Save.
 export const memos = sqliteTable('memos', {
   id: text('id').primaryKey(), owner: text('owner').notNull(), title: text('title').notNull().default(''),
   content: text('content').notNull(), createdAt: integer('created_at').notNull(), savedAt: integer('saved_at').notNull(),
+  // Set when moved to the trash; the row is only removed when the trash is emptied.
+  trashedAt: integer('trashed_at'),
 }, (t) => [index('idx_memos_owner_saved').on(t.owner, t.savedAt)]);
 
 // One autosaved draft per account so any signed-in device resumes the same text.
@@ -58,3 +61,11 @@ export const fileUnlocks = sqliteTable('file_unlocks', {
   tokenHash: text('token_hash').primaryKey(), owner: text('owner').notNull(), fileId: text('file_id').notNull(),
   expiresAt: integer('expires_at').notNull(),
 }, (t) => [index('idx_file_unlocks_owner_file').on(t.owner, t.fileId)]);
+
+// Saved window arrangements only (which windows, where, how big). They never hold app data,
+// so opening one shows today's memos, files and price lists.
+export const workCapsules = sqliteTable('work_capsules', {
+  id: text('id').primaryKey(), owner: text('owner').notNull(), name: text('name').notNull(),
+  layout: text('layout').notNull(), createdAt: integer('created_at').notNull(), updatedAt: integer('updated_at').notNull(),
+  trashedAt: integer('trashed_at'),
+}, (t) => [index('idx_work_capsules_owner').on(t.owner)]);

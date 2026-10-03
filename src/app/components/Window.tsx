@@ -1,4 +1,4 @@
-import { useRef, useState, type PointerEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type PointerEvent, type ReactNode } from 'react';
 import { X, Minus, Square, Maximize2 } from 'lucide-react';
 import { fitWindow, resizeWindow, type DesktopBounds, type WindowRect } from '../desktopState';
 
@@ -17,15 +17,21 @@ interface WindowProps {
   zIndex: number;
   onFocus: () => void;
   className?: string;
+  // A saved work layout to apply (a new nonce applies it again), and a report of the current one.
+  layout?: { rect: WindowRect; maximized: boolean; nonce: number };
+  onLayout?: (rect: WindowRect, maximized: boolean) => void;
 }
 
 export function Window({ title, icon, children, isOpen, isMinimized, isActive, bounds, onClose, onMinimize,
-  defaultPosition = { x: 100, y: 100 }, defaultSize = { width: 600, height: 400 }, zIndex, onFocus, className = '' }: WindowProps) {
+  defaultPosition = { x: 100, y: 100 }, defaultSize = { width: 600, height: 400 }, zIndex, onFocus, className = '', layout, onLayout }: WindowProps) {
   // Keep preferred geometry so rotating back can restore the larger layout.
   const [preferred, setPreferred] = useState<WindowRect>({ ...defaultPosition, ...defaultSize });
   const [maximized, setMaximized] = useState(false);
   const gesture = useRef<{ kind: 'move' | 'resize'; pointerId: number; x: number; y: number; rect: WindowRect } | null>(null);
   const rect = fitWindow(preferred, bounds, maximized);
+  useEffect(() => { if (layout) { setPreferred(layout.rect); setMaximized(layout.maximized); } }, [layout?.nonce]);
+  const reportRef = useRef(onLayout); reportRef.current = onLayout;
+  useEffect(() => { reportRef.current?.(preferred, maximized); }, [preferred, maximized]);
 
   const startGesture = (event: PointerEvent<HTMLElement>, kind: 'move' | 'resize') => {
     if (maximized || event.button !== 0 || (event.target as HTMLElement).closest('button')) return;
