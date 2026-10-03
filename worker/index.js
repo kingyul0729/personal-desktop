@@ -22,7 +22,8 @@ const defaultImages = [
   ['acne-eight', '여드름 8주 패키지', 'acne', '/documents/acne-eight.png', 'image/png'],
   ['acne-marks', '여드름 자국 지우기', 'acne', '/documents/acne-marks.png', 'image/png'],
 ];
-const json = (value, status = 200) => Response.json(value, { status, headers: { 'Cache-Control': 'private, no-store' } });
+// Declare UTF-8 so Korean messages are never decoded with a legacy encoding (Safari guessed CP949).
+const json = (value, status = 200) => Response.json(value, { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'private, no-store' } });
 // Keep the stored source as the identity so existing names, folders and deletions stay intact.
 const imageVariants = {
   '/documents/lifting-serf-landscape.jpg': { landscape: '/documents/lifting-serf-landscape.jpg', portrait: '/documents/lifting-serf-portrait.jpg' },
@@ -609,12 +610,26 @@ export async function handleApi(request, env) {
   return json({ error: '요청한 기능을 찾을 수 없습니다.' }, 404);
 }
 
+// A person opening an /api/ address in the address bar (or a restored tab) is a page visit, not
+// a request from the app. Safari sends Sec-Fetch-Mode only from 16.4, so Accept is checked too.
+export function isPageVisit(request) {
+  const mode = request.headers.get('Sec-Fetch-Mode');
+  if (mode) return mode === 'navigate';
+  return request.method === 'GET' && (request.headers.get('Accept') || '').includes('text/html');
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     if (url.pathname.startsWith('/api/')) {
-      try { return await handleApi(request, env); }
-      catch (error) { console.error('Storage request failed', error); return json({ error: '저장 공간에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.' }, 503); }
+      let response;
+      try { response = await handleApi(request, env); }
+      catch (error) { console.error('Storage request failed', error); response = json({ error: '저장 공간에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.' }, 503); }
+      // Never leave a visitor on a raw JSON page; images (price lists, icons) still open as images.
+      if (isPageVisit(request) && (response.headers.get('Content-Type') || '').includes('application/json')) {
+        return new Response(null, { status: 302, headers: { Location: '/', 'Cache-Control': 'no-store' } });
+      }
+      return response;
     }
     const response = await env.ASSETS.fetch(request);
     if (response.status !== 404 || url.pathname.includes('.')) return response;
