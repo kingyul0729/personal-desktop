@@ -32,10 +32,10 @@ export function menuFor(kind: ItemKind, signedIn: boolean): { action: MenuAction
 }
 export const entryKind = (entry: DesktopEntry): ItemKind => entry.kind === 'file' ? entry.fileKind ?? 'file' : entry.kind;
 
-export type DesktopMenuAction = 'new-file' | 'new-folder' | 'wallpaper' | 'settings';
+export type DesktopMenuAction = 'new-file' | 'new-folder' | 'save-layout' | 'wallpaper' | 'settings';
 export function desktopMenu(signedIn: boolean): { action: DesktopMenuAction; label: string }[] {
   const settings = { action: 'settings' as const, label: '환경설정' };
-  return signedIn ? [{ action: 'new-file', label: '새 파일' }, { action: 'new-folder', label: '새 폴더' }, { action: 'wallpaper', label: '배경화면 변경' }, settings] : [settings];
+  return signedIn ? [{ action: 'new-file', label: '새 파일' }, { action: 'new-folder', label: '새 폴더' }, { action: 'save-layout', label: '현재 화면 저장' }, { action: 'wallpaper', label: '배경화면 변경' }, settings] : [settings];
 }
 
 export interface IconArt { variant: PinkFolderVariant; image?: string }

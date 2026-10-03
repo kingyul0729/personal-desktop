@@ -10,6 +10,7 @@ const bundled = await build({
       import { renderToStaticMarkup } from 'react-dom/server.browser';
       import { ContextMenuList } from './src/app/components/ContextMenu';
       import { DesktopIcon } from './src/app/components/DesktopIcon';
+      export const menuButtons = (items) => { let element; const Probe = () => { element = ContextMenuList({ items, onClose() {} }); return null; }; renderToStaticMarkup(React.createElement(Probe)); return element.props.children; };
       export const renderMenu = (items) => renderToStaticMarkup(React.createElement(ContextMenuList, { items, onClose() {} }));
       export const renderIcon = (props) => renderToStaticMarkup(React.createElement(DesktopIcon, { icon: null, onClick() {}, ...props }));
       export { createLongPress, desktopMenu, entryKind, iconArt, menuFor, defaultDesktop } from './src/app/desktopModel';
@@ -36,7 +37,7 @@ test('menus match what each item really is; fixed programs never offer deletion'
     assert.ok(!actions.includes('trash') && !actions.includes('remove'), program.label);
   }
   assert.deepEqual(menuFor('file', false).map(item => item.label), ['열기']);
-  assert.deepEqual(desktopMenu(true).map(item => item.label), ['새 파일', '새 폴더', '배경화면 변경', '환경설정']);
+  assert.deepEqual(desktopMenu(true).map(item => item.label), ['새 파일', '새 폴더', '현재 화면 저장', '배경화면 변경', '환경설정']);
   assert.deepEqual(desktopMenu(false).map(item => item.label), ['환경설정']);
   const html = ui.renderMenu(menuFor('program', true).map(item => ({ label: item.label, onSelect() {} })));
   assert.equal((html.match(/role="menuitem"/g) ?? []).length, 4);
@@ -97,4 +98,16 @@ test('every built-in icon exists, every tab has a fitting default, and picking o
   assert.equal(iconArt({ icon: null, target: 'file:x', fileKind: 'folder' }, []).image, '/icons/pink-folder-heart.png');
   assert.equal(iconArt({ icon: null, target: 'file:x', fileKind: 'file' }, []).image, '/icons/pink-document-kitty.png');
   assert.equal(iconArt({ icon: 'builtin:not-real', target: 'program:notepad' }, []).image, '/icons/pink-notepad.png', 'an unknown icon falls back to the default');
+});
+
+test('a menu item ignores the click left over from the long press that opened it', () => {
+  const picked = [];
+  const [first] = ui.menuButtons([{ label: '환경설정', onSelect: () => picked.push('settings') }]);
+  first.props.onClick({ detail: 1 });
+  assert.deepEqual(picked, [], 'release of the long press lands on the new menu but selects nothing');
+  first.props.onClick({ detail: 0 });
+  assert.deepEqual(picked, ['settings'], 'keyboard activation still works');
+  first.props.onPointerDown();
+  first.props.onClick({ detail: 1 });
+  assert.deepEqual(picked, ['settings', 'settings'], 'a real tap on the menu selects');
 });

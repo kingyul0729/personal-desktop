@@ -17,6 +17,7 @@ import { FileExplorer } from './components/FileExplorer';
 import { ControlPanel } from './components/ControlPanel';
 import { WorkCapsule } from './components/WorkCapsule';
 import { CAPSULE_WINDOW, type CapsuleLayout } from './workCapsules';
+import { CapsuleSaveDialog } from './components/CapsuleSaveDialog';
 import { Notepad } from './components/Notepad';
 import { PriceCalculator } from './components/PriceCalculator';
 import { FileWindow } from './components/FileWindow';
@@ -92,6 +93,11 @@ function DesktopShell({ desktop, dispatch }: { desktop: typeof initialDesktop; d
   const runDesktop = async (action: ReturnType<typeof desktopMenu>[number]['action']) => {
     if (action === 'settings') shell.openSettings(shell.settingsTab);
     else if (action === 'wallpaper') shell.openSettings('wallpaper');
+    else if (action === 'save-layout') {
+      // Same save as the 작업 캡슐 window, without having to open it first.
+      const layout = currentLayout();
+      if (layout.windows.length) setSavingLayout(layout); else notify('열려 있는 창이 없습니다. 작업할 창을 연 뒤 저장해 주세요.');
+    }
     else {
       const result = await act({ action: 'create-file', kind: action === 'new-file' ? 'file' : 'folder', name: action === 'new-file' ? '새 파일' : '새 폴더', parentId: null });
       if (!result.ok) { notify(result.error); return; }
@@ -108,6 +114,8 @@ function DesktopShell({ desktop, dispatch }: { desktop: typeof initialDesktop; d
   // Work capsules reuse the window system above: each Window reports its geometry here and
   // takes a saved one back through `layout`; open/minimized/order go through the reducer.
   const geometry = useRef<Partial<Record<WindowId, { rect: WindowRect; maximized: boolean }>>>({});
+  const [savingLayout, setSavingLayout] = useState<CapsuleLayout | null>(null);
+  const [capsuleVersion, setCapsuleVersion] = useState(0);
   const [layouts, setLayouts] = useState<Partial<Record<WindowId, { rect: WindowRect; maximized: boolean; nonce: number }>>>({});
   const currentLayout = (): CapsuleLayout => {
     const ids = desktop.stack.filter((id) => id !== CAPSULE_WINDOW && desktop.running.includes(id) && geometry.current[id]);
@@ -158,6 +166,8 @@ function DesktopShell({ desktop, dispatch }: { desktop: typeof initialDesktop; d
         })}
       </section>
       {shell.notice && <p className="desktop-notice" role="status">{shell.notice}</p>}
+      {savingLayout && <CapsuleSaveDialog layout={savingLayout} onClose={() => setSavingLayout(null)}
+        onSaved={() => { setSavingLayout(null); setCapsuleVersion((version) => version + 1); notify('작업을 저장했습니다. 작업 캡슐에서 다시 열 수 있습니다.'); }} />}
       <img className="desktop-kitty" src="/theme/kitty-peek.png" alt="" aria-hidden="true" draggable={false} />
 
       <Window title="Terminal" icon={<TerminalIcon size={18} />} defaultPosition={{ x: 255, y: 90 }} defaultSize={{ width: 720, height: 410 }} {...shared('terminal')}>
@@ -170,7 +180,7 @@ function DesktopShell({ desktop, dispatch }: { desktop: typeof initialDesktop; d
         <ControlPanel />
       </Window>
       <Window title="작업 캡슐" icon={<Layers size={18} />} defaultPosition={{ x: 440, y: 120 }} defaultSize={{ width: 560, height: 520 }} {...shared('programManager')}>
-        <WorkCapsule currentLayout={currentLayout} openLayout={openLayout} />
+        <WorkCapsule currentLayout={currentLayout} openLayout={openLayout} version={capsuleVersion} />
       </Window>
       <Window title="메모장" icon={<FileText size={18} />} defaultPosition={{ x: 300, y: 135 }} defaultSize={{ width: 680, height: 480 }} {...shared('notepad')}>
         <Notepad />
