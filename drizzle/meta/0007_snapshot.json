@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "ea488a7d-608c-405c-a3fa-75b2810364c5",
+  "id": "a37ee088-f11d-4037-9cef-ce4918977eb5",
   "prevId": "d7717f13-f4cb-4c1d-955a-9f55b4bfdfb9",
   "tables": {
     "desktop_assets": {
@@ -497,8 +497,8 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
-    "study_assets": {
-      "name": "study_assets",
+    "study_attachments": {
+      "name": "study_attachments",
       "columns": {
         "id": {
           "name": "id",
@@ -509,6 +509,20 @@
         },
         "owner": {
           "name": "owner",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "record_id": {
+          "name": "record_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
@@ -528,48 +542,9 @@
           "notNull": true,
           "autoincrement": false
         },
-        "created_at": {
-          "name": "created_at",
+        "size": {
+          "name": "size",
           "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {
-        "idx_study_assets_owner": {
-          "name": "idx_study_assets_owner",
-          "columns": [
-            "owner"
-          ],
-          "isUnique": false
-        }
-      },
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
-    "study_folders": {
-      "name": "study_folders",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "owner": {
-          "name": "owner",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "name": {
-          "name": "name",
-          "type": "text",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
@@ -583,10 +558,11 @@
         }
       },
       "indexes": {
-        "idx_study_folders_owner": {
-          "name": "idx_study_folders_owner",
+        "idx_study_attachments_record": {
+          "name": "idx_study_attachments_record",
           "columns": [
-            "owner"
+            "owner",
+            "record_id"
           ],
           "isUnique": false
         }
@@ -596,8 +572,8 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
-    "study_notes": {
-      "name": "study_notes",
+    "study_records": {
+      "name": "study_records",
       "columns": {
         "id": {
           "name": "id",
@@ -611,17 +587,24 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "autoincrement": false
-        },
-        "folder_id": {
-          "name": "folder_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
           "autoincrement": false
         },
         "title": {
           "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "category": {
+          "name": "category",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "studied_on": {
+          "name": "studied_on",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
@@ -632,15 +615,24 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "autoincrement": false
+          "autoincrement": false,
+          "default": "''"
         },
-        "revision": {
-          "name": "revision",
+        "tags": {
+          "name": "tags",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "''"
+        },
+        "favorite": {
+          "name": "favorite",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": 1
+          "default": 0
         },
         "created_at": {
           "name": "created_at",
@@ -665,30 +657,16 @@
         }
       },
       "indexes": {
-        "idx_study_notes_owner_folder": {
-          "name": "idx_study_notes_owner_folder",
+        "idx_study_records_owner": {
+          "name": "idx_study_records_owner",
           "columns": [
             "owner",
-            "folder_id"
+            "updated_at"
           ],
           "isUnique": false
         }
       },
-      "foreignKeys": {
-        "study_notes_folder_id_study_folders_id_fk": {
-          "name": "study_notes_folder_id_study_folders_id_fk",
-          "tableFrom": "study_notes",
-          "tableTo": "study_folders",
-          "columnsFrom": [
-            "folder_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
+      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {}

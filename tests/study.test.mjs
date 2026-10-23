@@ -1,155 +1,142 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { DatabaseSync } from 'node:sqlite';
 import { readFileSync, readdirSync } from 'node:fs';
-import { environment, call, request } from './support/study-env.mjs';
-import { handleApi } from '../worker/index.js';
-import worker from '../worker/index.js';
-import { newStudyId, studyChanged, studyUrl, studyRequest } from '../src/app/study.ts';
+import { handleApi, publicDesktop } from '../worker/index.js';
 
-const ID = '11111111-1111-4111-8111-111111111111';
-const OTHER = '22222222-2222-4222-8222-222222222222';
-const note = (extra = {}) => ({ title: '기초 정리', content: '## 핵심 개념\n\n중요한 설명', folderId: null, revision: 0, ...extra });
-const save = (env, body = note(), options = {}) => call(env, `/api/study/notes/${ID}`, { method: 'PUT', body, ...options });
-const folder = async (env, name = '피부 기초') => (await call(env, '/api/study/folders', { method: 'POST', body: { name } })).data.id;
+function environment() {
+  const sqlite = new DatabaseSync(':memory:');
+  const root = new URL('../drizzle/', import.meta.url);
+  for (const file of readdirSync(root).filter(name => name.endsWith('.sql')).sort()) sqlite.exec(readFileSync(new URL(file, root), 'utf8'));
+  const objects = new Map();
+  const env = { sqlite, objects, DB: {
+    prepare(sql) { const s = sqlite.prepare(sql); return { bind(...v) { return {
+      async first() { return s.get(...v) ?? null; }, async all() { return { results: s.all(...v) }; },
+      async run() { return { meta: { changes: s.run(...v).changes } }; },
+    }; } }; },
+    async batch(statements) { sqlite.exec('BEGIN'); try { const result = []; for (const s of statements) result.push(await s.run()); sqlite.exec('COMMIT'); return result; } catch (e) { sqlite.exec('ROLLBACK'); throw e; } },
+  }, BUCKET: {
+    async put(key, bytes) { objects.set(key, bytes); }, async get(key) { return objects.has(key) ? { body: objects.get(key) } : null; }, async delete(key) { objects.delete(key); },
+  } };
+  return env;
+}
+function request(path, { method = 'GET', body, owner = 'owner-one', origin = 'https://site.test' } = {}) {
+  const headers = new Headers({ Origin: origin });
+  if (owner) { headers.set('oai-authenticated-user-id', owner); headers.set('oai-authenticated-user-email', `${owner}@test.invalid`); }
+  if (body && !(body instanceof FormData)) { headers.set('Content-Type', 'application/json'); body = JSON.stringify(body); }
+  return new Request(`https://site.test${path}`, { method, headers, body });
+}
+const call = async (env, path, options) => { const response = await handleApi(request(path, options), env); return { status: response.status, data: await response.json() }; };
+const id = '11111111-1111-4111-8111-111111111111';
+const path = `/api/study/records/${id}`;
+const png = () => new File([new Uint8Array([137,80,78,71,13,10,26,10])], '구조.png', { type: 'image/png' });
+function form(overrides = {}, files = []) {
+  const body = new FormData();
+  for (const [key, value] of Object.entries({ title: '피부 구조 정리', category: '피부 기초', studiedOn: '2026-10-22', content: '표피와 진피를 비교해 공부함', tags: '기초, 복습', version: '0', keep: '[]', ...overrides })) body.set(key, String(value));
+  for (const file of files) body.append('files', file);
+  return body;
+}
 
-test('new notes receive distinct valid ids even when randomUUID is unavailable', t => {
-  t.mock.property(Object.getPrototypeOf(globalThis.crypto), 'randomUUID', undefined);
-  const first = newStudyId(); const second = newStudyId();
-  assert.match(first, /^[A-Za-z0-9-]{8,64}$/); assert.notEqual(first, second);
-});
-
-test('study requires authentication and same-origin writes; signed-out lists are empty', async () => {
+test('study records and attachments require authentication, ownership and same-origin writes', async () => {
   const env = environment();
-  assert.deepEqual((await call(env, '/api/study', { owner: '' })).data, { authenticated: false, folders: [], notes: [], counts: { total: 0, trash: 0, unfiled: 0 } });
-  assert.equal((await save(env, note(), { owner: '' })).status, 401);
-  assert.equal((await save(env, note(), { origin: 'https://other.test' })).status, 403);
-  assert.equal((await call(env, '/api/study/folders', { method: 'POST', body: { name: 'folder' }, owner: '' })).status, 401);
+  assert.deepEqual((await call(env, '/api/study', { owner: '' })).data, { authenticated: false, records: [] });
+  assert.equal((await call(env, path, { owner: '', method: 'PUT', body: form() })).status, 401);
+  assert.equal((await call(env, path, { method: 'PUT', body: form(), origin: 'https://other.test' })).status, 403);
+  const saved = await call(env, path, { method: 'PUT', body: form({}, [png()]) });
+  assert.equal(saved.status, 201);
+  assert.equal((await call(env, path, { owner: 'someone-else' })).status, 404);
+  assert.equal((await call(env, path, { owner: 'someone-else', method: 'PUT', body: form() })).status, 409);
+  assert.deepEqual((await call(env, '/api/study', { owner: 'someone-else' })).data.records, []);
+  const file = saved.data.attachments[0];
+  assert.equal((await handleApi(request(file.url, { owner: 'someone-else' }), env)).status, 404);
+  const download = await handleApi(request(`${file.url}?download=1`), env);
+  assert.equal(download.status, 200); assert.equal(download.headers.get('Content-Type'), 'image/png');
+  assert.match(download.headers.get('Content-Disposition'), /^attachment;/);
+  assert.equal((await download.arrayBuffer()).byteLength, 8);
 });
 
-test('notes save, reopen, move between folders and search their full body without copying', async () => {
-  const env = environment(); const folderId = await folder(env);
-  let result = await save(env, note({ folderId, content: '처음 '.repeat(100) + '정확한 본문 검색어' }));
-  assert.equal(result.status, 200); assert.equal(result.data.revision, 1);
-  const createdAt = result.data.createdAt;
-  assert.equal((await call(env, '/api/study?q=정확한')).data.notes[0].id, ID);
-  assert.equal((await call(env, '/api/study?folder=unfiled')).data.notes.length, 0);
-  assert.equal((await call(env, `/api/study?folder=${folderId}`)).data.notes.length, 1);
-  result = await save(env, note({ revision: 1, title: '정리 수정', content: '수정한 본문' }));
-  assert.equal(result.data.createdAt, createdAt); assert.equal(result.data.revision, 2);
-  assert.equal((await call(env, '/api/study?folder=unfiled')).data.notes.length, 1);
-  assert.equal((await call(env, `/api/study/notes/${ID}`)).data.content, '수정한 본문');
-  const state = (await call(env, '/api/study')).data;
-  assert.equal(state.notes.length, 1); assert.equal(state.folders[0].count, 0);
-  assert.equal('content' in state.notes[0], false);
-});
-
-test('other accounts cannot read, update, restore or file notes in another account folders', async () => {
-  const env = environment(); const folderId = await folder(env);
-  await save(env, note({ folderId }));
-  assert.equal((await call(env, '/api/study', { owner: 'other' })).data.notes.length, 0);
-  assert.equal((await call(env, `/api/study/notes/${ID}`, { owner: 'other' })).status, 404);
-  assert.equal((await save(env, note({ revision: 1 }), { owner: 'other' })).status, 409);
-  assert.equal((await save(env, note(), { owner: 'other' })).status, 409);
-  assert.equal((await call(env, `/api/study/notes/${OTHER}`, { method: 'PUT', body: note({ folderId }), owner: 'other' })).status, 404);
-  assert.equal((await call(env, `/api/study/notes/${ID}`, { method: 'PATCH', body: { action: 'trash', revision: 1 }, owner: 'other' })).status, 409);
-  assert.equal((await call(env, `/api/study/folders/${folderId}`, { method: 'PATCH', body: { name: 'stolen' }, owner: 'other' })).status, 404);
-  assert.equal((await call(env, `/api/study/notes/${ID}`)).data.title, '기초 정리');
-});
-
-test('stale saves cannot overwrite newer notes or revive trashed notes; restore retains content and folder', async () => {
-  const env = environment(); const folderId = await folder(env);
-  await save(env, note({ folderId }));
-  await save(env, note({ revision: 1, folderId, content: '최신 내용' }));
-  assert.equal((await save(env, note({ revision: 1, content: '오래된 창' }))).status, 409);
-  assert.equal((await call(env, `/api/study/notes/${ID}`, { method: 'PATCH', body: { action: 'trash', revision: 2 } })).status, 200);
-  assert.equal((await save(env, note({ revision: 2 }))).status, 409);
-  assert.equal((await call(env, '/api/study')).data.notes.length, 0);
-  const trashed = (await call(env, '/api/study?trash=1')).data.notes[0];
-  assert.equal(trashed.revision, 3); assert.equal(trashed.folderId, folderId);
-  assert.equal((await call(env, `/api/study/notes/${ID}`, { method: 'PATCH', body: { action: 'restore', revision: 3 } })).status, 200);
-  const restored = (await call(env, `/api/study/notes/${ID}`)).data;
-  assert.equal(restored.content, '최신 내용'); assert.equal(restored.folderId, folderId); assert.equal(restored.trashedAt, null);
-});
-
-test('folder rename preserves notes; a folder containing active or trashed notes cannot be deleted', async () => {
-  const env = environment(); const folderId = await folder(env);
-  await save(env, note({ folderId }));
-  const remove = () => call(env, `/api/study/folders/${folderId}`, { method: 'DELETE' });
-  assert.equal((await remove()).status, 409);
-  await call(env, `/api/study/folders/${folderId}`, { method: 'PATCH', body: { name: '새 이름' } });
-  assert.equal((await call(env, '/api/study')).data.folders[0].name, '새 이름');
-  await call(env, `/api/study/notes/${ID}`, { method: 'PATCH', body: { action: 'trash', revision: 1 } });
-  assert.equal((await remove()).status, 409);
-  await call(env, `/api/study/notes/${ID}`, { method: 'PATCH', body: { action: 'restore', revision: 2 } });
-  await save(env, note({ revision: 3 }));
-  assert.equal((await remove()).status, 200);
-  assert.equal((await call(env, '/api/study')).data.notes.length, 1);
-});
-
-test('invalid bodies, oversized content, missing folders and malformed ids are rejected', async () => {
+test('saved records survive independent requests, edit in place, search metadata and restore with files', async () => {
   const env = environment();
-  for (const body of [null, {}, note({ content: '' }), note({ title: ' ' }), note({ title: 'a'.repeat(101) }), note({ revision: -1 }), note({ revision: 1.1 }), note({ folderId: {} })]) assert.equal((await save(env, body)).status, 400);
-  assert.equal((await save(env, note({ content: 'a'.repeat(200001) }))).status, 413);
-  assert.equal((await save(env, note({ folderId: OTHER }))).status, 404);
-  assert.equal((await call(env, '/api/study/notes/%E0%A4%A')).status, 404);
-  assert.equal((await call(env, '/api/study/folders', { method: 'POST', body: { name: '' } })).status, 400);
+  let saved = (await call(env, path, { method: 'PUT', body: form({}, [png()]) })).data;
+  assert.equal((await call(env, '/api/study')).data.records[0].attachments.length, 1);
+  saved = (await call(env, path, { method: 'PUT', body: form({ version: saved.updatedAt, content: '수정된 메모', keep: JSON.stringify(saved.attachments.map(f => f.id)) }) })).data;
+  assert.equal(saved.content, '수정된 메모'); assert.equal(saved.attachments.length, 1);
+  saved = (await call(env, path, { method: 'PATCH', body: { action: 'favorite', version: saved.updatedAt } })).data;
+  assert.equal(saved.favorite, 1);
+  saved = (await call(env, path, { method: 'PATCH', body: { action: 'trash', version: saved.updatedAt } })).data;
+  assert.ok(saved.trashedAt); assert.equal(env.objects.size, 1);
+  assert.equal((await handleApi(request(saved.attachments[0].url), env)).status, 404);
+  saved = (await call(env, path, { method: 'PATCH', body: { action: 'restore', version: saved.updatedAt } })).data;
+  assert.equal(saved.trashedAt, null); assert.equal(saved.favorite, 1);
+  assert.equal((await handleApi(request(saved.attachments[0].url), env)).status, 200);
+  saved = (await call(env, path, { method: 'PUT', body: form({ version: saved.updatedAt }) })).data;
+  assert.deepEqual(saved.attachments, []); assert.equal(env.objects.size, 0);
 });
 
-test('study uploads validate bytes, retain original images and enforce owner-only access', async () => {
+test('invalid dates, unsafe file bytes, oversize notes and excessive file counts are rejected without writes', async () => {
   const env = environment();
-  const bytes = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3]);
-  const form = new FormData(); form.set('file', new File([bytes], 'diagram.png', { type: 'image/png' }));
-  const uploaded = await call(env, '/api/study/assets', { method: 'POST', body: form });
-  assert.equal(uploaded.status, 201);
-  const response = await handleApi(request(uploaded.data.src), env);
-  assert.deepEqual(new Uint8Array(await response.arrayBuffer()), bytes);
-  assert.equal(response.headers.get('cache-control'), 'private, no-store');
-  assert.equal((await call(env, uploaded.data.src, { owner: 'other' })).status, 404);
-  const invalid = new FormData(); invalid.set('file', new File(['<svg onload="alert(1)"/>'], 'fake.png', { type: 'image/png' }));
-  assert.equal((await call(env, '/api/study/assets', { method: 'POST', body: invalid })).status, 400);
-  assert.equal(env.objects.size, 1);
+  for (const studiedOn of ['2026-02-30', '', 'bad']) assert.equal((await call(env, path, { method: 'PUT', body: form({ studiedOn }) })).status, 400);
+  assert.equal((await call(env, path, { method: 'PUT', body: form({ content: 'x'.repeat(100001) }) })).status, 400);
+  assert.equal((await call(env, path, { method: 'PUT', body: form({}, [new File(['<script>x</script>'], 'fake.png', { type: 'image/png' })]) })).status, 400);
+  assert.equal((await call(env, path, { method: 'PUT', body: form({}, Array.from({ length: 13 }, png)) })).status, 413);
+  assert.equal(env.objects.size, 0); assert.deepEqual((await call(env, '/api/study')).data.records, []);
+  assert.equal((await call(env, '/api/study/records/%E0%A4%A')).status, 404);
 });
 
-test('an image DB failure cleans only the just-uploaded object', async () => {
-  const env = environment(); env.objects.set('existing', 'original');
-  const form = new FormData(); form.set('file', new File([new Uint8Array([137,80,78,71,13,10,26,10])], 'image.png'));
-  const failing = { ...env, DB: { prepare() { throw new Error('temporary DB outage'); } } };
-  assert.equal((await worker.fetch(request('/api/study/assets', { method: 'POST', body: form }), failing)).status, 503);
-  assert.deepEqual([...env.objects.keys()], ['existing']);
+test('PDF attachments are retained and served with private cache and inert headers', async () => {
+  const env = environment();
+  const result = await call(env, path, { method: 'PUT', body: form({}, [new File(['%PDF-1.7\n%%EOF'], '공부.pdf', { type: 'application/pdf' })]) });
+  const response = await handleApi(request(result.data.attachments[0].url), env);
+  assert.equal(response.status, 200); assert.equal(response.headers.get('Content-Type'), 'application/pdf');
+  assert.equal(response.headers.get('Cache-Control'), 'private, no-store');
+  assert.equal(response.headers.get('X-Content-Type-Options'), 'nosniff');
 });
 
-test('additive migration and study operations preserve existing memo, price, file and trash data', async () => {
-  const env = environment({ migrateStudy: false });
-  await call(env, '/api/price-files');
-  await call(env, `/api/memos/${ID}`, { method: 'PUT', body: { title: '메모 원본', content: '기존 내용' } });
-  const created = await call(env, '/api/desktop', { method: 'POST', body: { action: 'create-file', kind: 'file', name: '기존 파일', parentId: null } });
-  await call(env, '/api/desktop', { method: 'POST', body: { action: 'trash-file', id: created.data.created } });
-  const tables = env.sqlite.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all().map(row => row.name);
-  const snapshot = () => Object.fromEntries(tables.map(table => [table, env.sqlite.prepare(`SELECT * FROM ${table} ORDER BY rowid`).all()]));
-  const before = snapshot();
-  const migration = readdirSync(new URL('../drizzle/', import.meta.url)).find(name => name.startsWith('0007') && name.endsWith('.sql'));
-  env.sqlite.exec(readFileSync(new URL(`../drizzle/${migration}`, import.meta.url), 'utf8'));
-  await save(env); await folder(env);
-  await call(env, `/api/study/notes/${ID}`, { method: 'PATCH', body: { action: 'trash', revision: 1 } });
-  assert.deepEqual(snapshot(), before);
-  // Emptying the original trash never removes the separate study records.
-  await call(env, '/api/desktop', { method: 'POST', body: { action: 'empty-trash' } });
-  assert.equal((await call(env, '/api/study?trash=1')).data.notes.length, 1);
+test('stale saves cannot overwrite newer changes, including a conflict during an upload', async () => {
+  const env = environment();
+  const first = (await call(env, path, { method: 'PUT', body: form({}, [png()]) })).data;
+  const second = (await call(env, path, { method: 'PATCH', body: { action: 'favorite', version: first.updatedAt } })).data;
+  assert.equal((await call(env, path, { method: 'PUT', body: form({ version: first.updatedAt }) })).status, 409);
+  const originalPut = env.BUCKET.put;
+  env.BUCKET.put = async (key, bytes) => { await originalPut(key, bytes); env.sqlite.prepare('UPDATE study_records SET content = ?, updated_at = updated_at + 1 WHERE id = ?').run('다른 기기에서 저장', id); };
+  const raced = await call(env, path, { method: 'PUT', body: form({ version: second.updatedAt }, [png()]) });
+  assert.equal(raced.status, 409); assert.equal(env.objects.size, 1);
+  const kept = (await call(env, path)).data;
+  assert.equal(kept.content, '다른 기기에서 저장'); assert.equal(kept.attachments.length, 1);
 });
 
-test('network failures report retryable errors and leave supplied draft data unchanged', async t => {
-  const draft = note(); const copy = structuredClone(draft);
-  t.mock.method(globalThis, 'fetch', async () => { throw new TypeError('offline'); });
-  await assert.rejects(studyRequest('/notes/test', { method: 'PUT', body: JSON.stringify(draft) }), /작성 내용은 유지/);
-  assert.deepEqual(draft, copy);
-  assert.equal(studyChanged({ ...draft, folderId: 'new-folder' }, draft), true);
-  assert.equal(studyChanged(draft, draft), false);
+test('database failure rolls back records and cleans uploaded objects', async () => {
+  const env = environment();
+  env.DB.batch = async () => { throw new Error('Storage unavailable'); };
+  await assert.rejects(call(env, path, { method: 'PUT', body: form({}, [png()]) }), /Storage unavailable/);
+  assert.equal(env.objects.size, 0); assert.deepEqual((await call(env, '/api/study')).data.records, []);
 });
 
-test('document URLs block scripts, HTML data URLs and arbitrary local endpoints', () => {
-  for (const url of ['javascript:alert(1)', 'data:text/html,evil', '//evil.test/image', '/api/memos', '/signin-with-chatgpt']) {
-    assert.equal(studyUrl(url, 'src'), ''); assert.equal(studyUrl(url, 'href'), '');
-  }
-  assert.equal(studyUrl(`/api/study/assets/${ID}`, 'src'), `/api/study/assets/${ID}`);
-  assert.equal(studyUrl('https://example.org/info', 'href'), 'https://example.org/info');
+test('existing program identity is kept for saved desktop layouts with the new study label', () => {
+  const program = publicDesktop().items.find(item => item.target === 'program:terminal');
+  assert.equal(program.label, '공부 보관함'); assert.equal(publicDesktop().items.length, 7);
+});
+
+test('Cornell keywords and summary persist, and older clients cannot erase these fields', async () => {
+  const env = environment();
+  let record = (await call(env, path, { method: 'PUT', body: form({ keywords: '구조\n기능', summary: '핵심 요약' }, [png()]) })).data;
+  assert.equal(record.keywords, '구조\n기능'); assert.equal(record.summary, '핵심 요약');
+  record = (await call(env, path, { method: 'PUT', body: form({ version: record.updatedAt, keep: JSON.stringify(record.attachments.map(f => f.id)) }) })).data;
+  assert.equal(record.keywords, '구조\n기능'); assert.equal(record.summary, '핵심 요약'); assert.equal(record.attachments.length, 1);
+  const listed = (await call(env, '/api/study')).data.records[0];
+  assert.equal(listed.summary, '핵심 요약');
+  assert.equal((await call(env, path, { method: 'PUT', body: form({ version: record.updatedAt, summary: 'x'.repeat(10001) }) })).status, 400);
+});
+
+test('Cornell migration preserves existing notes and attachment rows', () => {
+  const db = new DatabaseSync(':memory:');
+  const root = new URL('../drizzle/', import.meta.url);
+  const files = readdirSync(root).filter(name => name.endsWith('.sql')).sort();
+  for (const file of files.filter(name => !name.startsWith('0008_'))) db.exec(readFileSync(new URL(file, root), 'utf8'));
+  db.prepare('INSERT INTO study_records (id,owner,title,category,studied_on,content,tags,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)').run(id,'owner','기존 제목','분류','2026-10-22','기존 본문','기존 태그',1,1);
+  db.prepare('INSERT INTO study_attachments (id,owner,record_id,name,object_key,mime,size,created_at) VALUES (?,?,?,?,?,?,?,?)').run('attachment','owner',id,'기존.png','original-key','image/png',8,1);
+  db.exec(readFileSync(new URL(files.find(name => name.startsWith('0008_')), root),'utf8'));
+  const row = db.prepare('SELECT * FROM study_records').get();
+  assert.equal(row.content,'기존 본문'); assert.equal(row.keywords,''); assert.equal(row.summary,'');
+  assert.equal(db.prepare('SELECT object_key FROM study_attachments').get().object_key,'original-key');
 });

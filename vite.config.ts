@@ -17,6 +17,7 @@ function figmaAssetResolver() {
 }
 
 export default defineConfig({
+  server: { allowedHosts: ['terminal.local'] },
   build: { outDir: 'dist/client' },
   plugins: [
     figmaAssetResolver(),
