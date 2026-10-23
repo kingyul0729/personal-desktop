@@ -6,6 +6,7 @@ if (build.status !== 0) process.exit(build.status ?? 1);
 await mkdir('dist/server', { recursive: true });
 await mkdir('dist/.openai', { recursive: true });
 await cp('worker/index.js', 'dist/server/index.js');
+await cp('worker/study.js', 'dist/server/study.js');
 await cp('.openai/hosting.json', 'dist/.openai/hosting.json');
 await cp('drizzle', 'dist/.openai/drizzle', { recursive: true });
 await writeFile('dist/server/wrangler.json', JSON.stringify({

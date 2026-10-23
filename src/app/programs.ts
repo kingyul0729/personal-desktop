@@ -1,9 +1,9 @@
-import { Calculator, FileText, FolderOpen, Layers, Settings, Terminal, Trash2 } from 'lucide-react';
+import { BookOpen, Calculator, FileText, FolderOpen, Layers, Settings, Trash2 } from 'lucide-react';
 import type { WindowId } from './desktopState';
 import type { PinkFolderVariant } from './components/PinkFolderIcon';
 
 export const programs: { id: WindowId; label: string; icon: typeof Calculator; variant: PinkFolderVariant }[] = [
-  { id: 'terminal', label: 'Terminal', icon: Terminal, variant: 'heart' },
+  { id: 'terminal', label: '공부 보관함', icon: BookOpen, variant: 'heart' },
   { id: 'fileExplorer', label: '가격표 보관함', icon: FolderOpen, variant: 'kitty' },
   { id: 'controlPanel', label: '환경설정', icon: Settings, variant: 'flower' },
   { id: 'programManager', label: '작업 캡슐', icon: Layers, variant: 'cherry' },

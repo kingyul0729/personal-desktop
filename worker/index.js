@@ -1,3 +1,5 @@
+import { handleStudy } from './study.js';
+
 const defaults = [
   ['toning', '색소·토닝', 'heart'], ['acne', '여드름·흉터', 'kitty'],
   ['lifting', '리프팅', 'flower'], ['skinbooster', '스킨부스터', 'heart'], ['other', '기타 프로그램', 'cherry'],
@@ -173,7 +175,7 @@ async function handleMemos(request, env, owner, url) {
 
 // Desktop: fixed programs can only be hidden or relabelled; shortcuts can be removed without
 // touching their target; user files go to trash first and are deleted only by purge.
-const PROGRAMS = [['terminal', 'Terminal'], ['fileExplorer', '가격표 보관함'], ['controlPanel', '환경설정'],
+const PROGRAMS = [['terminal', '공부 보관함'], ['fileExplorer', '가격표 보관함'], ['controlPanel', '환경설정'],
   ['programManager', '작업 캡슐'], ['notepad', '메모장'], ['priceCalculator', '금액 계산'], ['trash', '휴지통']];
 const FILE_LIMIT = 100000;
 const UNLOCK_MS = 30 * 60 * 1000;
@@ -639,12 +641,14 @@ export async function handleApi(request, env) {
   const url = new URL(request.url);
   const owner = request.headers.get('oai-authenticated-user-id');
   const signedIn = owner && request.headers.get('oai-authenticated-user-email');
+  if (!signedIn && request.method === 'GET' && url.pathname === '/api/study') return json({ authenticated: false, records: [] });
   if (!signedIn) return request.method === 'GET' && url.pathname === '/api/price-files' ? json(publicFiles())
     : request.method === 'GET' && url.pathname === '/api/memos' ? json({ authenticated: false, memos: [], draft: null })
       : request.method === 'GET' && url.pathname === '/api/desktop' ? json(publicDesktop())
         : request.method === 'GET' && url.pathname === '/api/capsules' ? json({ authenticated: false, capsules: [] })
           : json({ error: '로그인 후 이용해 주세요.' }, 401);
   if (!['GET', 'HEAD'].includes(request.method) && request.headers.get('Origin') !== url.origin) return json({ error: '요청을 확인할 수 없습니다.' }, 403);
+  if (url.pathname === '/api/study' || url.pathname.startsWith('/api/study/')) return handleStudy(request, env, owner, url);
   if (url.pathname === '/api/capsules') return handleCapsules(request, env, owner);
   if (url.pathname.startsWith('/api/desktop') || url.pathname.startsWith('/api/files/')) {
     const response = await handleDesktop(request, env, owner, url);

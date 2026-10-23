@@ -6,13 +6,13 @@ import {
   Heart,
   Layers,
   Settings,
-  Terminal as TerminalIcon,
+  BookOpen,
   Trash2,
 } from 'lucide-react';
 import { DesktopIcon } from './components/DesktopIcon';
 import { Taskbar } from './components/Taskbar';
 import { Window } from './components/Window';
-import { Terminal } from './components/Terminal';
+import { StudyArchive } from './components/StudyArchive';
 import { FileExplorer } from './components/FileExplorer';
 import { ControlPanel } from './components/ControlPanel';
 import { WorkCapsule } from './components/WorkCapsule';
@@ -42,6 +42,7 @@ function DesktopShell({ desktop, dispatch }: { desktop: typeof initialDesktop; d
   const workareaRef = useRef<HTMLDivElement>(null);
   const [bounds, setBounds] = useState({ width: 0, height: 0 });
   const [currentTime, setCurrentTime] = useState('');
+  const [studyDirty, setStudyDirty] = useState(false);
   const active = activeWindow(desktop);
 
   useLayoutEffect(() => {
@@ -172,8 +173,9 @@ function DesktopShell({ desktop, dispatch }: { desktop: typeof initialDesktop; d
         onSaved={() => { setSavingLayout(null); setCapsuleVersion((version) => version + 1); notify('작업을 저장했습니다. 작업 캡슐에서 다시 열 수 있습니다.'); }} />}
       <img className="desktop-kitty" src="/theme/kitty-peek.png" alt="" aria-hidden="true" draggable={false} />
 
-      <Window title="Terminal" icon={<TerminalIcon size={18} />} defaultPosition={{ x: 255, y: 90 }} defaultSize={{ width: 720, height: 410 }} {...shared('terminal')}>
-        <Terminal />
+      <Window title="공부 보관함" className="study-window" icon={<BookOpen size={18} />} defaultPosition={{ x: 190, y: 45 }} defaultSize={{ width: 980, height: 720 }} {...shared('terminal')}
+        onClose={() => { if (!studyDirty || window.confirm('저장하지 않은 공부 기록이 있습니다. 창을 닫을까요?')) dispatch({ type: 'close', id: 'terminal' }); }}>
+        <StudyArchive onDirtyChange={setStudyDirty} />
       </Window>
       <Window title="가격표 보관함" className="price-files-window" icon={<Heart size={22} />} defaultPosition={{ x: 240, y: 24 }} defaultSize={{ width: 920, height: 760 }} {...shared('fileExplorer')}>
         <FileExplorer />

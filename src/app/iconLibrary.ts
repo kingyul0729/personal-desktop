@@ -32,7 +32,7 @@ export const isLibraryIcon = (id: string) => ICON_LIBRARY.some(item => item.id =
 
 // What each desktop item shows until the person picks something else.
 export const DEFAULT_ICONS: Record<string, string> = {
-  'program:terminal': 'pink-monitor-kitty',
+  'program:terminal': 'pink-folder-ribbon',
   'program:fileExplorer': 'pink-folder-kitty',
   'program:controlPanel': 'pink-settings',
   'program:programManager': 'pink-monitor-heart',

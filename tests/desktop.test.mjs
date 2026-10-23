@@ -40,7 +40,7 @@ test('signed-out visitors see the default desktop and cannot change it', async (
   const env = environment();
   const state = (await call(env, '/api/desktop', { owner: '' })).data;
   assert.equal(state.authenticated, false);
-  assert.deepEqual(state.items.map(item => item.label), ['Terminal', '가격표 보관함', '환경설정', '작업 캡슐', '메모장', '금액 계산', '휴지통']);
+  assert.deepEqual(state.items.map(item => item.label), ['공부 보관함', '가격표 보관함', '환경설정', '작업 캡슐', '메모장', '금액 계산', '휴지통']);
   assert.equal((await act(env, { action: 'set-fit', fit: 'contain' }, { owner: '' })).status, 401);
 });
 
