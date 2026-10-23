@@ -40,7 +40,7 @@ test('signed-out visitors see the default desktop and cannot change it', async (
   const env = environment();
   const state = (await call(env, '/api/desktop', { owner: '' })).data;
   assert.equal(state.authenticated, false);
-  assert.deepEqual(state.items.map(item => item.label), ['Terminal', '가격표 보관함', '환경설정', '작업 캡슐', '메모장', '금액 계산', '휴지통']);
+  assert.deepEqual(state.items.map(item => item.label), ['Terminal', '가격표 보관함', '환경설정', '작업 캡슐', '메모장', '금액 계산', '휴지통', '공부 보관함']);
   assert.equal((await act(env, { action: 'set-fit', fit: 'contain' }, { owner: '' })).status, 401);
 });
 
@@ -89,7 +89,7 @@ test('desktop labels, icons, visibility and order change without changing what a
   const after = state.items.map(item => item.target);
   assert.equal(after.indexOf('program:notepad'), before.indexOf('program:notepad') - 1);
   assert.equal((await act(env, { action: 'remove-shortcut', id: memo.id })).status, 400);
-  assert.equal((await call(env, '/api/desktop')).data.items.filter(item => item.kind === 'program').length, 7);
+  assert.equal((await call(env, '/api/desktop')).data.items.filter(item => item.kind === 'program').length, 8);
 });
 
 test('new shortcuts link to a program or file; removing one never touches the target', async () => {

@@ -37,6 +37,7 @@ export const DEFAULT_ICONS: Record<string, string> = {
   'program:controlPanel': 'pink-settings',
   'program:programManager': 'pink-monitor-heart',
   'program:notepad': 'pink-notepad',
+  'program:studyLibrary': 'pink-document-kitty',
   'program:priceCalculator': 'pink-calculator',
   'program:trash': 'pink-trash-kitty',
   folder: 'pink-folder-heart',

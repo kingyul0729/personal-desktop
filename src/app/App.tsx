@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useReducer, useRef, useState } from 'react';
 import {
   Calculator,
+  BookOpen,
   FileText,
   FolderOpen,
   Heart,
@@ -19,6 +20,7 @@ import { WorkCapsule } from './components/WorkCapsule';
 import { CAPSULE_WINDOW, type CapsuleLayout } from './workCapsules';
 import { CapsuleSaveDialog } from './components/CapsuleSaveDialog';
 import { Notepad } from './components/Notepad';
+import { StudyLibrary } from './components/StudyLibrary';
 import { PriceCalculator } from './components/PriceCalculator';
 import { FileWindow } from './components/FileWindow';
 import { TrashWindow } from './components/TrashWindow';
@@ -43,6 +45,7 @@ function DesktopShell({ desktop, dispatch }: { desktop: typeof initialDesktop; d
   const [bounds, setBounds] = useState({ width: 0, height: 0 });
   const [currentTime, setCurrentTime] = useState('');
   const active = activeWindow(desktop);
+  const studyClose = useRef<(() => void) | null>(null);
 
   useLayoutEffect(() => {
     const element = workareaRef.current;
@@ -186,6 +189,10 @@ function DesktopShell({ desktop, dispatch }: { desktop: typeof initialDesktop; d
       </Window>
       <Window title="메모장" icon={<FileText size={18} />} defaultPosition={{ x: 300, y: 135 }} defaultSize={{ width: 680, height: 480 }} {...shared('notepad')}>
         <Notepad />
+      </Window>
+      <Window title="공부 보관함" className="study-window" icon={<BookOpen size={18} />} defaultPosition={{ x: 220, y: 30 }} defaultSize={{ width: 1000, height: 760 }} {...shared('studyLibrary')}
+        onClose={() => studyClose.current?.()}>
+        <StudyLibrary closeGuard={studyClose} onClose={() => dispatch({ type: 'close', id: 'studyLibrary' })} />
       </Window>
       <Window title="휴지통" icon={<Trash2 size={18} />} defaultPosition={{ x: 330, y: 110 }} defaultSize={{ width: 640, height: 460 }} {...shared('trash')}>
         <TrashWindow />

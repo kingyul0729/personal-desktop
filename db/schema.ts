@@ -71,3 +71,23 @@ export const workCapsules = sqliteTable('work_capsules', {
   layout: text('layout').notNull(), createdAt: integer('created_at').notNull(), updatedAt: integer('updated_at').notNull(),
   trashedAt: integer('trashed_at'),
 }, (t) => [index('idx_work_capsules_owner').on(t.owner)]);
+
+// Study records have their own namespace; no existing files or memos are reclassified.
+export const studyFolders = sqliteTable('study_folders', {
+  id: text('id').primaryKey(), owner: text('owner').notNull(), name: text('name').notNull(),
+  createdAt: integer('created_at').notNull(),
+}, (t) => [index('idx_study_folders_owner').on(t.owner)]);
+
+export const studyNotes = sqliteTable('study_notes', {
+  id: text('id').primaryKey(), owner: text('owner').notNull(),
+  folderId: text('folder_id').references(() => studyFolders.id),
+  title: text('title').notNull(), content: text('content').notNull(),
+  revision: integer('revision').notNull().default(1),
+  createdAt: integer('created_at').notNull(), updatedAt: integer('updated_at').notNull(),
+  trashedAt: integer('trashed_at'),
+}, (t) => [index('idx_study_notes_owner_folder').on(t.owner, t.folderId)]);
+
+export const studyAssets = sqliteTable('study_assets', {
+  id: text('id').primaryKey(), owner: text('owner').notNull(), objectKey: text('object_key').notNull(),
+  mime: text('mime').notNull(), createdAt: integer('created_at').notNull(),
+}, (t) => [index('idx_study_assets_owner').on(t.owner)]);

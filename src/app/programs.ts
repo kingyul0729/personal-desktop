@@ -1,4 +1,4 @@
-import { Calculator, FileText, FolderOpen, Layers, Settings, Terminal, Trash2 } from 'lucide-react';
+import { BookOpen, Calculator, FileText, FolderOpen, Layers, Settings, Terminal, Trash2 } from 'lucide-react';
 import type { WindowId } from './desktopState';
 import type { PinkFolderVariant } from './components/PinkFolderIcon';
 
@@ -10,6 +10,7 @@ export const programs: { id: WindowId; label: string; icon: typeof Calculator; v
   { id: 'notepad', label: '메모장', icon: FileText, variant: 'heart' },
   { id: 'priceCalculator', label: '금액 계산', icon: Calculator, variant: 'kitty' },
   { id: 'trash', label: '휴지통', icon: Trash2, variant: 'flower' },
+  { id: 'studyLibrary', label: '공부 보관함', icon: BookOpen, variant: 'flower' },
 ];
 
 // Windows that are not desktop programs still need a taskbar label.
