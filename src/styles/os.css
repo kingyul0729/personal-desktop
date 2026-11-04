@@ -713,47 +713,99 @@ button { cursor: pointer; }
 .capsule-list .capsule-open { background: #f7c4df; border-color: #d77aae; font-weight: 600; }
 .capsule-list .capsule-more { width: 40px; justify-content: center; padding: 0; }
 
-/* 바탕화면: 파일 탐색기형 작업 공간. 왼쪽 공간 메뉴, 오른쪽 항목 그리드, 아래 경로·상태 표시줄. */
-.desktop-finder { position: absolute; z-index: 2; top: clamp(12px, 3vh, 32px); left: 50%; transform: translateX(-50%); width: min(1080px, calc(100% - 32px)); height: min(max(640px, 72%), calc(100% - clamp(24px, 6vh, 64px)));
-  display: grid; grid-template-columns: 220px minmax(0, 1fr); overflow: hidden; border: 1px solid #ecc6da; border-radius: 14px; background: #fffdfe; color: #5b3a4c;
-  box-shadow: 0 24px 60px #a8507c24, 0 2px 8px #a8507c14; }
-.finder-sidebar { display: flex; flex-direction: column; gap: 18px; padding: 22px 12px; overflow: auto; background: #fbeff5; border-right: 1px solid #f0d3e2; }
-.finder-group { display: grid; gap: 2px; }
-.finder-group > p { margin: 0 10px 6px; color: #a8869a; font-size: 12px; font-weight: 600; }
-.finder-sidebar button { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 38px; padding: 0 10px; border: 0; border-radius: 8px; background: transparent; color: #6d4a5d; font-size: 14px; text-align: left; }
+/* 바탕화면: 파일 탐색기 창. 회색 사이드바, 흰 작업 영역, 아래 경로·상태 표시줄. */
+.desktop-finder { --f-ink: #262629; --f-muted: #8a8a90; --f-line: #e3e3e6; --f-side: #ebebed; --f-pick: #dadadd; --f-bar: #f7f7f8; --f-accent: #4a6c8f;
+  position: absolute; z-index: 2; top: clamp(12px, 4vh, 40px); left: 50%; transform: translateX(-50%);
+  width: min(1100px, calc(100% - 32px)); height: min(max(620px, 72%), calc(100% - clamp(24px, 8vh, 80px)));
+  display: grid; grid-template-columns: 250px minmax(0, 1fr); overflow: hidden; border: 1px solid #cfcfd3; border-radius: 12px; background: #fff; color: var(--f-ink);
+  box-shadow: 0 22px 60px #0000002e, 0 2px 8px #00000014; font-size: 15px; }
+.finder-sidebar { display: flex; flex-direction: column; gap: 22px; padding: 18px 10px; overflow: auto; background: var(--f-side); border-right: 1px solid #d9d9dc; }
+.finder-lights { display: flex; gap: 9px; padding: 4px 10px 6px; }
+.finder-lights i { width: 13px; height: 13px; border-radius: 50%; background: #bdbdc1; }
+.finder-group { display: grid; gap: 1px; }
+.finder-group > p { margin: 0 10px 5px; color: #9a9aa0; font-size: 13px; font-weight: 600; }
+.finder-sidebar button { display: flex; align-items: center; gap: 9px; width: 100%; min-height: 36px; padding: 0 10px; border: 0; border-radius: 7px; background: transparent; color: var(--f-ink); font-size: 15px; text-align: left; }
 .finder-sidebar button span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.finder-sidebar button small { color: #a8869a; font-size: 12px; font-variant-numeric: tabular-nums; }
-.finder-sidebar button svg { flex-shrink: 0; color: #b8678f; }
-.finder-sidebar button:hover { background: #f8e2ed; }
-.finder-sidebar button[aria-pressed="true"] { background: #f3d4e4; color: #5b2f47; font-weight: 600; }
-.finder-sidebar button:focus-visible, .finder-search input:focus-visible { outline: 2px solid var(--shell-accent); outline-offset: 1px; }
+.finder-sidebar button svg { flex-shrink: 0; color: #66666c; }
+.finder-sidebar button:hover { background: #e1e1e4; }
+.finder-sidebar button[aria-pressed="true"] { background: var(--f-pick); }
+.desktop-finder button:focus-visible, .finder-search input:focus-visible, .finder-status input:focus-visible { outline: 2px solid var(--f-accent); outline-offset: 1px; }
 .finder-main { display: grid; grid-template-rows: auto minmax(0, 1fr) auto auto; min-width: 0; min-height: 0; }
-.finder-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 64px; padding: 0 22px; border-bottom: 1px solid #f3dfe9; background: #fffafc; }
-.finder-toolbar h1 { margin: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #4f2f41; font-size: 18px; font-weight: 600; }
-.finder-search { display: flex; align-items: center; gap: 6px; width: min(240px, 45%); height: 34px; padding: 0 10px; border: 1px solid #ecd0de; border-radius: 8px; background: #fff; color: #a8869a; }
-.finder-search input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: #4f2f41; font-size: 14px; }
-.finder-search button { display: grid; place-items: center; padding: 0; border: 0; background: none; color: inherit; }
-.finder-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(116px, 1fr)); align-content: start; gap: 18px 10px; padding: 28px 24px; overflow: auto; counter-reset: finder-item; }
-.finder-grid .desktop-icon { width: 100%; min-height: 118px; justify-content: flex-start; gap: 12px; padding: 14px 6px 10px; border: 0; border-radius: 10px; background: transparent; font-size: 14px; counter-increment: finder-item; }
-.finder-grid .desktop-icon:hover { background: #fdf0f6; box-shadow: inset 0 0 0 1px #f2cfe0; }
-.finder-grid .desktop-icon span { color: #4f2f41; font-weight: 500; line-height: 1.35; text-shadow: none; filter: none; word-break: keep-all; }
-.finder-grid .desktop-icon:not(.is-renaming) span::before { content: counter(finder-item, decimal-leading-zero) ' '; color: #b08ca0; font-size: 12px; font-weight: 400; }
-.finder-grid .desktop-icon.is-renaming { width: 100%; }
+.finder-toolbar { display: flex; align-items: center; gap: 14px; min-height: 64px; padding: 0 18px 0 14px; border-bottom: 1px solid var(--f-line); background: #f9f9fa; }
+.finder-history { display: flex; gap: 4px; }
+.finder-toolbar button { display: grid; place-items: center; min-width: 34px; height: 32px; padding: 0 4px; border: 0; border-radius: 7px; background: transparent; color: #5c5c62; }
+.finder-toolbar button:hover:not(:disabled) { background: #ececef; }
+.finder-toolbar button:disabled { color: #c3c3c7; cursor: default; }
+.finder-toolbar h1 { flex: 1; margin: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--f-ink); font-size: 19px; font-weight: 600; }
+.finder-tools { display: flex; align-items: center; gap: 14px; }
+.finder-view { display: flex; gap: 2px; }
+.finder-view button[aria-pressed="true"] { background: #e6e6e9; color: var(--f-ink); }
+.finder-search { display: flex; align-items: center; gap: 6px; width: min(220px, 34cqi); height: 32px; padding: 0 8px; border: 1px solid #d6d6da; border-radius: 7px; background: #fff; color: var(--f-muted); }
+.finder-search input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--f-ink); font-size: 14px; }
+.finder-search button { min-width: 0; height: auto; padding: 0; }
+.finder-grid { --finder-scale: 1; display: grid; grid-template-columns: repeat(auto-fill, minmax(calc(170px * var(--finder-scale)), 1fr)); align-content: start; gap: 18px 8px; padding: 34px 26px; overflow: auto; counter-reset: finder-item; }
+.finder-grid .desktop-icon { width: 100%; min-height: 0; justify-content: flex-start; gap: calc(16px * var(--finder-scale)); padding: 12px 6px; border: 0; border-radius: 10px; background: transparent; font-size: 15px; counter-increment: finder-item; }
+.finder-grid .desktop-icon > .desktop-folder-art { transform: scale(calc(1.75 * var(--finder-scale))); transform-origin: center top; margin-bottom: calc(46px * var(--finder-scale)); filter: saturate(.55); }
+.finder-grid .desktop-icon:hover { background: #f2f2f4; }
+.finder-grid .desktop-icon:focus-visible { outline: 2px solid var(--f-accent); outline-offset: 0; }
+.finder-grid .desktop-icon span { color: var(--f-ink); font-weight: 400; line-height: 1.35; text-shadow: none; filter: none; word-break: keep-all; }
+.finder-grid .desktop-icon:not(.is-renaming) span::before { content: counter(finder-item, decimal-leading-zero) ' '; }
+.finder-grid .desktop-icon.is-renaming { width: 100%; background: #f2f2f4; box-shadow: inset 0 0 0 1px #d6d6da; }
+.finder-grid .desktop-app-badge { color: #5c5c62; border-color: #d0d0d4; background: #fff; }
 .finder-grid .desktop-app-badge svg { width: 15px; height: 15px; }
-.finder-empty { grid-column: 1 / -1; margin: 40px auto; max-width: 360px; color: #a8869a; font-size: 14px; line-height: 1.6; text-align: center; }
-.finder-path { display: flex; align-items: center; gap: 6px; min-height: 34px; padding: 0 22px; border-top: 1px solid #f3dfe9; color: #8f6c80; font-size: 13px; }
-.finder-path strong { color: #5b3a4c; font-weight: 500; }
-.finder-status { display: grid; place-items: center; min-height: 32px; border-top: 1px solid #f3dfe9; background: #fffafc; color: #8f6c80; font-size: 12px; font-variant-numeric: tabular-nums; }
+.finder-grid.is-list { grid-template-columns: minmax(0, 1fr); gap: 0; padding: 8px 14px; }
+.finder-grid.is-list .desktop-icon { flex-direction: row; align-items: center; gap: 14px; padding: 6px 12px; border-radius: 6px; border-bottom: 1px solid #f0f0f2; }
+.finder-grid.is-list .desktop-icon:nth-child(odd) { background: #fafafb; }
+.finder-grid.is-list .desktop-icon:hover { background: #ededf0; }
+.finder-grid.is-list .desktop-icon > .desktop-folder-art { transform: scale(.5); margin: -14px -18px -12px; }
+.finder-grid.is-list .desktop-icon span { text-align: left; }
+.finder-empty { grid-column: 1 / -1; margin: 48px auto; max-width: 380px; color: var(--f-muted); font-size: 14px; line-height: 1.6; text-align: center; }
+.finder-path { display: flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 18px; border-top: 1px solid var(--f-line); color: #55555b; font-size: 14px; background: #fff; }
+.finder-path svg { color: #7a8ea6; }
+.finder-status { position: relative; display: grid; place-items: center; min-height: 36px; padding: 0 140px; border-top: 1px solid var(--f-line); background: var(--f-bar); color: #6c6c72; font-size: 14px; font-variant-numeric: tabular-nums; }
+.finder-status input[type="range"] { position: absolute; right: 18px; top: 50%; width: 100px; transform: translateY(-50%); accent-color: #8a8a90; }
 @media (max-width: 900px) {
-  .desktop-finder { grid-template-columns: 180px minmax(0, 1fr); width: calc(100% - 24px); }
-  .finder-grid { grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); padding: 22px 16px; }
+  .desktop-finder { grid-template-columns: 196px minmax(0, 1fr); width: calc(100% - 24px); }
+  .finder-grid { padding: 26px 16px; }
 }
 @media (max-width: 640px) {
   .desktop-finder { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); width: calc(100% - 16px); top: 8px; height: calc(100% - 16px); }
-  .finder-sidebar { flex-direction: row; gap: 6px; padding: 8px; border-right: 0; border-bottom: 1px solid #f0d3e2; overflow-x: auto; }
+  .finder-sidebar { flex-direction: row; gap: 6px; padding: 8px; border-right: 0; border-bottom: 1px solid #d9d9dc; overflow-x: auto; }
+  .finder-lights, .finder-group > p { display: none; }
   .finder-group { display: flex; gap: 4px; }
-  .finder-group > p { display: none; }
   .finder-sidebar button { width: auto; white-space: nowrap; }
-  .finder-toolbar { padding: 0 14px; min-height: 54px; }
-  .finder-grid { grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 10px 6px; padding: 16px 10px; }
+  .finder-toolbar { gap: 8px; padding: 0 10px; min-height: 54px; }
+  .finder-view { display: none; }
+  .finder-grid { --finder-scale: .8 !important; padding: 18px 10px; }
+  .finder-status { padding: 0 12px; } .finder-status input[type="range"] { display: none; }
 }
+
+/* 차분한 색상: 바탕화면 배경, 작업표시줄, 시작 메뉴, 창 테두리를 회색·청회색 계열로. 사용자가 고른 배경화면은 그대로 쓴다. */
+.web-os { --shell-ink: #3a3a40; --shell-line: #cfcfd4; --shell-accent: #4a6c8f; --shell-tint: #f4f4f6;
+  --shell-raised: linear-gradient(180deg, #ffffff 0%, #f1f1f3 100%);
+  background: #dfe2e6 linear-gradient(160deg, #eceef1 0%, #dcdfe4 55%, #d2d6dc 100%); }
+.desktop-kitty, .window-kitty { display: none; }
+.os-window { border-color: #c9c9ce; box-shadow: 0 18px 44px #0000002b, 0 2px 6px #0000001a; }
+.window-titlebar, .price-files-window .window-titlebar { background: linear-gradient(180deg, #fafafb, #ececef); box-shadow: inset 0 1px 0 #fff, inset 0 -1px 0 #d6d6da; color: #3a3a40; }
+.window-controls button { color: #55555b; background: transparent; border-color: transparent; box-shadow: none; }
+.window-controls button:hover { background: #e0e0e4; }
+.window-controls .window-close:hover { background: #c8565d; color: #fff; }
+.os-taskbar { background: #f4f4f6f2; border-top: 1px solid #cfcfd4; box-shadow: 0 -4px 16px #0000000f; backdrop-filter: blur(12px); }
+.start-button, .taskbar-task { color: #3a3a40; }
+.start-menu { background: #fbfbfc; border-color: #d6d6da; box-shadow: 0 10px 30px #00000024; }
+.start-menu strong { color: #8a8a90; }
+.start-menu button:hover { background: #ececef; }
+.start-space + .start-space { border-top-color: #e3e3e6; }
+.taskbar-clock { color: #55555b; }
+.start-button { background: linear-gradient(180deg, #ffffff, #e9e9ec); color: #3a3a40; box-shadow: inset 0 0 0 1px #cfcfd4, 0 1px 2px #0000000f; }
+.taskbar-task { box-shadow: inset 0 0 0 1px #d9d9dd; }
+.taskbar-task[aria-pressed="true"] { background: #e6e8ec; color: #2c3e52; box-shadow: inset 0 0 0 1px #b9c2cd; }
+.taskbar-task[aria-pressed="true"]::after { background: #4a6c8f; }
+.price-files-window .window-controls button { border-color: transparent; }
+.os-window.is-active { border-color: #b9bcc3; box-shadow: 0 20px 48px #00000033, 0 0 0 1px #d6d8dc, inset 0 0 0 1px #fff; }
+.window-resize-handle::after { border-color: #a9abb1; }
+.taskbar-divider { background: #c9cbd0; }
+.taskbar-task::after { background: #a9abb1; }
+.window-title { color: #3a3a40; }
+.window-title svg { color: #5c6f86; }
+.finder-status input[type="range"] { accent-color: #9a9aa0; }

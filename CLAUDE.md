@@ -1,6 +1,6 @@
 # personal-desktop
 
-Pink web desktop (React 18 + Vite, Cloudflare Worker in `worker/`). Programs open as windows from the desktop icons and the taskbar Start menu (`src/app/programs.ts`, `src/app/App.tsx`).
+Web desktop (React 18 + Vite, Cloudflare Worker in `worker/`). Programs open as windows from the desktop icons and the taskbar Start menu (`src/app/programs.ts`, `src/app/App.tsx`).
 
 ## Commands
 - `npm test`: node test runner over `tests/*.test.mjs` (components are rendered with esbuild + `react-dom/server`)
@@ -13,6 +13,7 @@ Pink web desktop (React 18 + Vite, Cloudflare Worker in `worker/`). Programs ope
 - 화면 형식: 업무 자료실은 중앙 슬라이드(`WorkLibrary.tsx`), 공부 보관함은 겹친 카드(`StudyArchive.tsx`의 `StudyStack`), 가격표는 겹친 폴더 탭(`FileExplorer.tsx`).
 - 가격표는 이미지로 저장되어 있다. 프로그램명·구성·횟수·가격을 표 데이터로 만들려면 확정 가격 원본이 필요하므로 임의로 입력하지 않는다.
 - 바탕화면은 파일 탐색기형(`DesktopFinder.tsx`): 왼쪽 공간 메뉴(전체·A·B·공통·바탕화면 파일), 오른쪽 항목 그리드. 항목의 열기·이름 변경·메뉴는 `DesktopIcon`이 그대로 맡는다.
+- 데스크톱 외곽(배경, 작업표시줄, 시작 메뉴, 창 테두리, 바탕화면 탐색기)은 차분한 회색·청회색 계열이다(`os.css` 끝의 차분한 색상 블록). 각 프로그램 창 안쪽은 아직 기존 분홍 계열이다.
 - 계약 등록, 환불 정산, 계약 내역 기능은 넣지 않는다.
 
 ## 금액 계산 (상담 계산기)
