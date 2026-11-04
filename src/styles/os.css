@@ -95,6 +95,8 @@ button { cursor: pointer; }
 .os-taskbar button:focus-visible { outline: 2px solid var(--shell-accent); outline-offset: -3px; }
 .start-menu { position: absolute; bottom: calc(100% + 12px); left: 0; width: 246px; max-width: calc(100vw - 32px); max-height: calc(100dvh - 90px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); overflow: auto; padding: 12px; border: 1px solid var(--shell-line); border-radius: 10px; background: #fff5fb; box-shadow: 0 8px 35px #a63e792b, inset 0 1px 0 #fff; }
 .start-menu strong { display: block; padding: 4px 10px 10px; color: #875775; font-size: 12px; }
+.start-menu { width: 268px; }
+.start-space + .start-space { margin-top: 8px; padding-top: 8px; border-top: 1px solid #f2cfe1; }
 .start-menu button { width: 100%; display: flex; gap: 12px; align-items: center; padding: 12px 10px; border: 0; border-radius: 6px; background: transparent; color: var(--shell-ink); text-align: left; }
 .start-menu button:hover { background: #fce1f0; }
 @media (max-width: 900px) {
@@ -492,6 +494,44 @@ button { cursor: pointer; }
 .pf-feedback { display: flex; align-items: center; gap: 8px; margin: 0 20px 10px; color: #a52e5b; font-size: 14px; }
 .pf-feedback button { border: 1px solid #e7aacb; border-radius: 6px; padding: 5px 8px; background: #fff; white-space: nowrap; }
 .pf-empty { margin: 36px 8px; color: #a78698; font-size: 14px; text-align: center; }
+/* 가격표 보관함: 겹쳐진 폴더 탭 + 전면 폴더 펼침 */
+.price-file-manager { --pf-t0: #ffd7ea; --pf-t1: #f6e4ec; --pf-t2: #fbc6de; --pf-t3: #efdbe5; --pf-ink: #4f3343; }
+.pf-folder-tabs { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(210px, 100%), 1fr)); column-gap: 8px; padding-top: 6px; }
+.pf-folder-tab { position: relative; display: grid; grid-template-columns: auto 1fr auto; align-items: baseline; gap: 2px 10px; min-height: 64px; margin-bottom: -14px; padding: 16px 16px 24px; border: 0; border-radius: 4px 10px 0 0; background: var(--tab); color: var(--pf-ink); text-align: left; box-shadow: 0 -2px 8px #a0507a12; transition: transform .25s ease, box-shadow .25s ease; }
+.pf-folder-tab::before { content: ''; position: absolute; left: 0; bottom: 100%; width: 46%; height: 12px; border-radius: 8px 0 0 0; background: var(--tab); clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 100%, 0 100%); }
+.pf-folder-tab[data-tone="0"] { --tab: var(--pf-t0); } .pf-folder-tab[data-tone="1"] { --tab: var(--pf-t1); }
+.pf-folder-tab[data-tone="2"] { --tab: var(--pf-t2); } .pf-folder-tab[data-tone="3"] { --tab: var(--pf-t3); }
+.pf-folder-tab { margin-top: 14px; }
+.pf-folder-tab:hover:not([aria-pressed="true"]) { transform: translateY(-4px); }
+.pf-folder-tab[aria-pressed="true"] { z-index: 2; transform: translateY(-6px); box-shadow: 0 -4px 14px #a0507a26; font-weight: 700; }
+.pf-folder-tab:focus-visible { outline: 2px solid #ad367c; outline-offset: 2px; }
+.pf-tab-no { color: #9a6c84; font-size: 11px; font-family: ui-monospace, 'SFMono-Regular', Menlo, monospace; }
+.pf-folder-tab strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 16px; font-weight: inherit; }
+.pf-folder-tab small { color: #8f6a7e; font-size: 12px; font-variant-numeric: tabular-nums; }
+.pf-sheet { position: relative; z-index: 3; padding: 22px 22px 24px; border-radius: 0 10px 12px 12px; background: var(--sheet); box-shadow: 0 -6px 18px #a0507a1c, 0 10px 24px #a0507a14; animation: pf-sheet-in .35s ease both; }
+.pf-sheet[data-tone="0"] { --sheet: var(--pf-t0); } .pf-sheet[data-tone="1"] { --sheet: var(--pf-t1); } .pf-sheet[data-tone="2"] { --sheet: var(--pf-t2); } .pf-sheet[data-tone="3"] { --sheet: var(--pf-t3); }
+.pf-search-sheet { --sheet: #fff1f8; margin-top: 4px; border-radius: 12px; }
+@keyframes pf-sheet-in { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+.pf-sheet-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 10px 16px; margin-bottom: 18px; }
+.pf-sheet-head > div:first-child { display: flex; align-items: baseline; gap: 12px; min-width: 0; }
+.pf-sheet-no { color: #9a6c84; font-size: 12px; font-family: ui-monospace, 'SFMono-Regular', Menlo, monospace; }
+.pf-sheet-head h2 { margin: 0; color: var(--pf-ink); font-size: clamp(24px, 4.2cqi, 38px); font-weight: 600; line-height: 1.15; letter-spacing: -.01em; word-break: keep-all; }
+.pf-sheet-tools { display: flex; align-items: center; gap: 10px; }
+.pf-sheet-count { color: #7f5c70; font-size: 13px; font-variant-numeric: tabular-nums; }
+.pf-sheet-tools button { display: inline-flex; align-items: center; gap: 5px; min-height: 32px; padding: 0 10px; border: 1px solid #00000014; border-radius: 7px; background: #ffffffb3; color: #7c4566; font-size: 13px; }
+.pf-price-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(260px, 100%), 1fr)); gap: 12px; margin: 0; padding: 0; list-style: none; }
+.pf-price-row { display: flex; flex-direction: column; min-width: 0; border-radius: 10px; background: #fffdfe; box-shadow: 0 2px 8px #a0507a14; overflow: hidden; }
+.pf-price-open { display: grid; grid-template-columns: 96px 1fr; align-items: center; gap: 14px; width: 100%; padding: 12px; border: 0; background: transparent; color: var(--pf-ink); text-align: left; }
+.pf-price-open:hover { background: #fff6fa; }
+.pf-price-thumb { display: block; width: 96px; height: 72px; border-radius: 7px; overflow: hidden; background: #f7edf2; border: 1px solid #f0dce6; }
+.pf-price-thumb img { width: 100%; height: 100%; object-fit: cover; object-position: top; display: block; }
+.pf-price-text { display: grid; gap: 4px; min-width: 0; }
+.pf-price-text small { color: #a07b8f; font-size: 12px; font-variant-numeric: tabular-nums; }
+.pf-price-text strong { font-size: 15px; font-weight: 600; line-height: 1.4; word-break: keep-all; overflow-wrap: anywhere; }
+.pf-price-text em { color: #ad367c; font-size: 12px; font-style: normal; }
+.pf-price-row .pf-image-actions { margin-top: auto; border-top: 1px solid #f6e6ee; padding: 4px 8px; }
+@media (prefers-reduced-motion: reduce) { .pf-sheet { animation: none; } .pf-folder-tab { transition: none; } }
+
 .price-file-manager button:focus-visible, .pf-tools-actions a:focus-visible { outline: 2px solid #be488b; outline-offset: 2px; }
 .kitty-dialog { width: min(500px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow: auto; border: 0; background: transparent; margin: auto; padding: 74px 5px 5px; color: #853363; }
 .kitty-dialog::backdrop { background: #68344d55; backdrop-filter: blur(2px); }
