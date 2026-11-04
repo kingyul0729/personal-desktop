@@ -1,20 +1,19 @@
 import { useEffect, useRef, useState } from 'react';
-import { Menu } from 'lucide-react';
+import { FolderOpen, Menu } from 'lucide-react';
 import { activeWindow, type DesktopState, type WindowId } from '../desktopState';
-import { programs, windowLabel } from '../programs';
-import { PinkFolderIcon } from './PinkFolderIcon';
+import { programs, spaces, windowLabel } from '../programs';
 
 interface TaskbarProps {
   desktop: DesktopState;
   onOpenWindow: (windowId: WindowId) => void;
   onTaskClick: (windowId: WindowId) => void;
   currentTime: string;
-  iconFor?: (windowId: WindowId) => string | undefined;
 }
 
-export function Taskbar({ desktop, onOpenWindow, onTaskClick, currentTime, iconFor }: TaskbarProps) {
+export function Taskbar({ desktop, onOpenWindow, onTaskClick, currentTime }: TaskbarProps) {
   // Taskbar and Start menu show the same picture the desktop uses for that program.
-  const art = (id: WindowId) => { const src = iconFor?.(id); return src ? <img className="taskbar-icon" src={src} alt="" draggable={false} /> : <PinkFolderIcon variant={id === 'fileExplorer' || id === 'priceCalculator' ? 'kitty' : 'heart'} />; };
+  // One line-icon style for every program (the desktop pictures are no longer mixed in here).
+  const art = (id: WindowId) => { const Icon = programs.find(item => item.id === id)?.icon ?? FolderOpen; return <Icon className="taskbar-line-icon" size={20} strokeWidth={1.7} aria-hidden="true" />; };
   const [startOpen, setStartOpen] = useState(false);
   const startRef = useRef<HTMLDivElement>(null);
   const tasksRef = useRef<HTMLDivElement>(null);
@@ -49,8 +48,10 @@ export function Taskbar({ desktop, onOpenWindow, onTaskClick, currentTime, iconF
         <Menu size={20} /><span>Start</span>
       </button>
       {startOpen && <nav id="start-programs" className="start-menu" aria-label="프로그램 실행">
-        <strong>프로그램</strong>
-        {programs.map((item) => <button type="button" key={item.id} onClick={() => { onOpenWindow(item.id); setStartOpen(false); }}>{art(item.id)}<span>{item.label}</span></button>)}
+        {spaces.map((space) => <div key={space.id} className="start-space" role="group" aria-label={space.label}>
+          <strong>{space.id === 'common' ? space.label : `${space.id} · ${space.label}`}</strong>
+          {programs.filter((item) => item.space === space.id).map((item) => <button type="button" key={item.id} onClick={() => { onOpenWindow(item.id); setStartOpen(false); }}>{art(item.id)}<span>{item.label}</span></button>)}
+        </div>)}
       </nav>}
     </div>
     <div className="taskbar-divider" />

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, BookOpen, CalendarDays, Check, Download, FileText, FolderOpen, Heart, ImagePlus, LockKeyhole, Plus, Search, Star, Trash2, Upload, X } from 'lucide-react';
+import { ArrowLeft, BookOpen, CalendarDays, Check, ChevronLeft, ChevronRight, Download, FileText, FolderOpen, Heart, ImagePlus, LayoutGrid, Layers, LockKeyhole, Pencil, Plus, Search, Star, Trash2, Upload, X } from 'lucide-react';
 import '../../styles/study.css';
 import { StudyNoteText } from './StudyNoteText';
 
@@ -16,6 +16,54 @@ const parse = async (response: Response) => {
   if (!response.ok || !data) throw new Error(data?.error || '연결하지 못했습니다. 잠시 후 다시 시도해 주세요.');
   return data;
 };
+// 자료 유형: 첨부가 있으면 이미지·PDF, 없으면 노트.
+export const studyType = (item: Pick<RecordItem, 'attachments'>) => {
+  const image = item.attachments.some(file => file.mime.startsWith('image/')), pdf = item.attachments.some(file => file.mime === 'application/pdf');
+  return image && pdf ? '이미지·PDF' : image ? '이미지 자료' : pdf ? 'PDF 자료' : '공부 노트';
+};
+
+// Stacked cards: the selected card sits in front, the others fan out behind it on both sides.
+function StudyStack({ items, selected, onSelect, onOpen, onEdit, onRemove, onFavorite, onAdd, busy }: {
+  items: RecordItem[]; selected: number; onSelect: (index: number) => void; onOpen: (item: RecordItem) => void;
+  onEdit: (item: RecordItem) => void; onRemove: (item: RecordItem) => void; onFavorite: (item: RecordItem) => void; onAdd: () => void; busy: boolean;
+}) {
+  const current = items[selected];
+  const swipe = useRef<{ x: number; id: number } | null>(null);
+  const move = (delta: number) => onSelect((selected + delta + items.length) % items.length);
+  return <section className="study-stack" aria-roledescription="carousel" aria-label="공부 자료 카드">
+    <div className="study-stack-meta"><strong>{current.category}</strong><span><Check size={14} />{items.length}개 중 {selected + 1}번째</span></div>
+    <div className="study-stack-stage" onPointerDown={event => { swipe.current = { x: event.clientX, id: event.pointerId }; }}
+      onPointerUp={event => { const start = swipe.current; swipe.current = null; if (start && start.id === event.pointerId && Math.abs(event.clientX - start.x) > 48) move(event.clientX < start.x ? 1 : -1); }}
+      onPointerCancel={() => { swipe.current = null; }}
+      onKeyDown={event => { if (event.key === 'ArrowLeft') { event.preventDefault(); move(-1); } if (event.key === 'ArrowRight') { event.preventDefault(); move(1); } }}>
+      {items.map((item, index) => {
+        const offset = index - selected;
+        if (Math.abs(offset) > 4) return null;
+        const center = offset === 0;
+        const cover = item.attachments.find(file => file.mime.startsWith('image/'));
+        return <button key={item.id} type="button" className={`study-stack-card${center ? ' is-center' : ''}`}
+          style={{ ['--sign' as string]: Math.sign(offset), ['--distance' as string]: Math.abs(offset) }}
+          tabIndex={center ? 0 : -1} aria-current={center ? 'true' : undefined}
+          aria-label={center ? `${item.title} 열기` : `${item.title} 앞으로 가져오기`} onClick={() => center ? onOpen(item) : onSelect(index)}>
+          {center ? <div className="study-stack-preview">
+            <div className="study-stack-page">{cover ? <img src={cover.url} alt="" loading="lazy" draggable={false} /> : <div className="study-stack-text"><span>{dateLabel(item.studiedOn)}</span><p>{(item.summary || item.content || '첨부 자료를 열어 확인해 보세요.').replace(/[#*_=|]+/g, ' ').slice(0, 260)}</p></div>}</div>
+            <div className="study-stack-page study-stack-page-right"><span className="study-stack-type">{studyType(item)}</span><h3>{item.title}</h3>{item.keywords?.trim() && <p>{item.keywords.split('\n').slice(0, 4).join(' · ')}</p>}<small>{dateLabel(item.studiedOn)} · 자료 {item.attachments.length}개</small></div>
+          </div> : <span className="study-stack-spine">{item.title}</span>}
+        </button>;
+      })}
+      <button type="button" className="study-stack-arrow is-prev" aria-label="이전 카드" onClick={() => move(-1)} disabled={items.length < 2}><ChevronLeft size={22} /></button>
+      <button type="button" className="study-stack-arrow is-next" aria-label="다음 카드" onClick={() => move(1)} disabled={items.length < 2}><ChevronRight size={22} /></button>
+    </div>
+    <div className="study-stack-caption" aria-live="polite"><span className="study-category-chip">{studyType(current)}</span><h2>{current.title}</h2><p>가운데 카드를 다시 누르면 노트가 열립니다.</p></div>
+    <div className="study-stack-actions">
+      <button type="button" onClick={() => onFavorite(current)} aria-pressed={!!current.favorite} aria-label={`${current.title} 즐겨찾기 ${current.favorite ? '해제' : '추가'}`} disabled={busy}><Star size={19} fill={current.favorite ? 'currentColor' : 'none'} /></button>
+      <button type="button" onClick={() => onEdit(current)} aria-label={`${current.title} 수정`} disabled={busy}><Pencil size={18} /></button>
+      <button type="button" onClick={() => onRemove(current)} aria-label={`${current.title} 삭제`} disabled={busy}><Trash2 size={18} /></button>
+      <button type="button" onClick={onAdd} aria-label="기록 추가" disabled={busy}><Plus size={20} /></button>
+    </div>
+  </section>;
+}
+
 const toEditor = (item: RecordItem): Editor => ({ id: item.id, title: item.title, category: item.category, studiedOn: item.studiedOn, content: item.content, tags: item.tags, keywords: item.keywords || '', summary: item.summary || '', version: item.updatedAt, attachments: item.attachments });
 
 export function StudyArchive({ onDirtyChange }: { onDirtyChange?: (dirty: boolean) => void }) {
@@ -31,6 +79,7 @@ export function StudyArchive({ onDirtyChange }: { onDirtyChange?: (dirty: boolea
   const inputRef = useRef<HTMLInputElement>(null);
   const textInputRef = useRef<HTMLInputElement>(null);
   const [readingSize, setReadingSize] = useState(16);
+  const [view, setView] = useState<'card' | 'list'>('card'), [stackIndex, setStackIndex] = useState(0);
   const noteRef = useRef<HTMLTextAreaElement>(null);
   const reading = records.find(item => item.id === readingId && !item.trashedAt);
   const busyRef = useRef(false);
@@ -57,6 +106,8 @@ export function StudyArchive({ onDirtyChange }: { onDirtyChange?: (dirty: boolea
     if (category && item.category !== category) return false;
     return `${item.title} ${item.content} ${item.keywords || ''} ${item.summary || ''} ${item.category} ${item.tags} ${item.attachments.map(file => file.name).join(' ')}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase());
   }).sort((a, b) => sort === 'title' ? a.title.localeCompare(b.title, 'ko') : sort === 'updated' ? b.updatedAt - a.updatedAt : b.studiedOn.localeCompare(a.studiedOn) || b.updatedAt - a.updatedAt), [records, filter, category, query, sort]);
+  useEffect(() => { setStackIndex(0); }, [filter, category, query, sort]);
+  const stackSelected = Math.min(stackIndex, Math.max(0, filtered.length - 1));
   const leave = (next: () => void) => { if (busyRef.current) return; if (!dirty || window.confirm('저장하지 않은 변경 사항이 있습니다. 저장하지 않고 이동할까요?')) { setEditor(null); setFiles([]); setError(''); next(); } };
   const open = (record?: RecordItem) => leave(() => {
     setReadingId(record?.id || null);
@@ -195,10 +246,13 @@ export function StudyArchive({ onDirtyChange }: { onDirtyChange?: (dirty: boolea
           </article>
         </div>
       </> : <>
-        <div className="study-toolbar"><label className="study-search"><Search size={17} /><input aria-label="공부 기록 검색" value={query} onChange={event => setQuery(event.target.value)} placeholder="제목, 메모, 태그 검색" />{query && <button onClick={() => setQuery('')} aria-label="검색어 지우기"><X size={16} /></button>}</label><select aria-label="정렬" value={sort} onChange={event => setSort(event.target.value)}><option value="date">공부 날짜순</option><option value="updated">최근 수정순</option><option value="title">제목순</option></select></div>
+        <div className="study-toolbar"><label className="study-search"><Search size={17} /><input aria-label="공부 기록 검색" value={query} onChange={event => setQuery(event.target.value)} placeholder="제목, 메모, 태그 검색" />{query && <button onClick={() => setQuery('')} aria-label="검색어 지우기"><X size={16} /></button>}</label><select aria-label="정렬" value={sort} onChange={event => setSort(event.target.value)}><option value="date">공부 날짜순</option><option value="updated">최근 수정순</option><option value="title">제목순</option></select><div className="study-view-toggle" role="group" aria-label="보기 방식"><button type="button" aria-pressed={view === 'card'} onClick={() => setView('card')}><Layers size={15} />카드</button><button type="button" aria-pressed={view === 'list'} onClick={() => setView('list')}><LayoutGrid size={15} />목록</button></div></div>
         <div className="study-results-line"><span>{filtered.length}개의 기록</span>{filter === 'trash' && <span>삭제한 기록은 여기에서 복원할 수 있어요.</span>}</div>
         <div className="study-results">
-          {filtered.length ? <div className="study-grid">{filtered.map(item => {
+          {filtered.length && view === 'card' && filter !== 'trash' ? <StudyStack items={filtered} selected={stackSelected} onSelect={setStackIndex} busy={busy}
+            onOpen={item => { setReadingId(item.id); setNotice(''); setError(''); }} onEdit={item => open(item)} onRemove={item => { setRemoving(item); setError(''); }}
+            onFavorite={item => void mutate(item, 'favorite')} onAdd={() => open()} />
+          : filtered.length ? <div className="study-grid">{filtered.map(item => {
             const cover = item.attachments.find(file => file.mime.startsWith('image/'));
             return <article className="study-card" key={item.id}>
               <button className="study-card-main" onClick={() => { setReadingId(item.id); setNotice(''); setError(''); }} disabled={!!item.trashedAt || busy} aria-label={`${item.title} 열기`}>

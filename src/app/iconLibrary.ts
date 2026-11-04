@@ -39,6 +39,7 @@ export const DEFAULT_ICONS: Record<string, string> = {
   'program:notepad': 'pink-notepad',
   'program:priceCalculator': 'pink-calculator',
   'program:trash': 'pink-trash-kitty',
+  'program:workLibrary': 'pink-slides',
   folder: 'pink-folder-heart',
   file: 'pink-document-kitty',
 };

@@ -8,11 +8,14 @@ import {
   Settings,
   BookOpen,
   Trash2,
+  Presentation,
 } from 'lucide-react';
 import { DesktopIcon } from './components/DesktopIcon';
+import { DesktopFinder } from './components/DesktopFinder';
 import { Taskbar } from './components/Taskbar';
 import { Window } from './components/Window';
 import { StudyArchive } from './components/StudyArchive';
+import { WorkLibrary } from './components/WorkLibrary';
 import { FileExplorer } from './components/FileExplorer';
 import { ControlPanel } from './components/ControlPanel';
 import { WorkCapsule } from './components/WorkCapsule';
@@ -27,7 +30,6 @@ import { activeWindow, desktopReducer, initialDesktop, type WindowId, type Windo
 import { createLongPress, desktopMenu, entryKind, iconArt, menuFor, type DesktopEntry } from './desktopModel';
 import { DesktopProvider, useDesktop } from './useDesktop';
 import { DesktopNotice, LoadingBox } from './components/Feedback';
-import { DEFAULT_ICONS, libraryIconSrc } from './iconLibrary';
 
 export default function App() {
   const [desktop, dispatch] = useReducer(desktopReducer, initialDesktop);
@@ -43,6 +45,7 @@ function DesktopShell({ desktop, dispatch }: { desktop: typeof initialDesktop; d
   const [bounds, setBounds] = useState({ width: 0, height: 0 });
   const [currentTime, setCurrentTime] = useState('');
   const [studyDirty, setStudyDirty] = useState(false);
+  const [workDirty, setWorkDirty] = useState(false);
   const active = activeWindow(desktop);
 
   useLayoutEffect(() => {
@@ -110,7 +113,7 @@ function DesktopShell({ desktop, dispatch }: { desktop: typeof initialDesktop; d
   const blankMenu = (point: { x: number; y: number }) => shell.showMenu(point, desktopMenu(data.authenticated).map(({ action, label }) => ({ label, onSelect: () => void runDesktop(action) })));
   const blankPress = useRef(createLongPress(point => blankMenuRef.current(point)));
   const blankMenuRef = useRef(blankMenu); blankMenuRef.current = blankMenu;
-  const onBlank = (target: EventTarget) => !(target as HTMLElement).closest('.os-window, .desktop-icon, .context-menu');
+  const onBlank = (target: EventTarget) => !(target as HTMLElement).closest('.os-window, .desktop-icon, .context-menu, .finder-sidebar, .finder-toolbar');
   const wallpaper = data.settings.wallpaper;
 
   // Work capsules reuse the window system above: each Window reports its geometry here and
@@ -157,16 +160,15 @@ function DesktopShell({ desktop, dispatch }: { desktop: typeof initialDesktop; d
         onPointerMove={(event) => blankPress.current.move(event)}
         onPointerUp={() => blankPress.current.up()}
         onPointerCancel={() => blankPress.current.cancel()}>
-      <section className="desktop-icon-column" aria-label="데스크톱 프로그램">
-        {data.items.filter((item) => !item.hidden).map((item) => {
+      <DesktopFinder items={data.items} loading={!shell.loaded} focusId={shell.renaming} renderItem={(item) => {
           const art = iconArt(item, data.assets, { trashFull: data.trash.length > 0 });
-          return <DesktopIcon key={item.id} variant={art.variant} image={art.image} locked={item.locked} dimmed={item.missing}
+          // One folder picture for every item; the small badge tells programs, shortcuts and files apart.
+          return <DesktopIcon key={item.id} variant={art.variant} locked={item.locked} dimmed={item.missing}
             icon={<EntryBadge target={item.target} fileKind={item.fileKind} />} label={item.label}
             onClick={() => openEntry(item)}
             onMenu={(point) => shell.showMenu(point, menuFor(entryKind(item), data.authenticated).map(({ action, label }) => ({ label, onSelect: () => runEntry(item, action) })))}
             renaming={shell.renaming === item.id} onCancelRename={() => shell.setRenaming(null)} onRename={(name) => rename(item, name)} />;
-        })}
-      </section>
+        }} />
       {!shell.loaded && <div className="desktop-loading"><LoadingBox label="바탕화면 불러오는 중…" /></div>}
       {shell.notice && <DesktopNotice message={shell.notice} onClose={() => notify('')} />}
       {savingLayout && <CapsuleSaveDialog layout={savingLayout} onClose={() => setSavingLayout(null)}
@@ -176,6 +178,10 @@ function DesktopShell({ desktop, dispatch }: { desktop: typeof initialDesktop; d
       <Window title="공부 보관함" className="study-window" icon={<BookOpen size={18} />} defaultPosition={{ x: 190, y: 45 }} defaultSize={{ width: 980, height: 720 }} {...shared('terminal')}
         onClose={() => { if (!studyDirty || window.confirm('저장하지 않은 공부 기록이 있습니다. 창을 닫을까요?')) dispatch({ type: 'close', id: 'terminal' }); }}>
         <StudyArchive onDirtyChange={setStudyDirty} />
+      </Window>
+      <Window title="업무 자료실" className="work-window" icon={<Presentation size={18} />} defaultPosition={{ x: 210, y: 36 }} defaultSize={{ width: 1000, height: 720 }} {...shared('workLibrary')}
+        onClose={() => { if (!workDirty || window.confirm('저장하지 않은 업무 자료가 있습니다. 창을 닫을까요?')) dispatch({ type: 'close', id: 'workLibrary' }); }}>
+        <WorkLibrary onDirtyChange={setWorkDirty} />
       </Window>
       <Window title="가격표 보관함" className="price-files-window" icon={<Heart size={22} />} defaultPosition={{ x: 240, y: 24 }} defaultSize={{ width: 920, height: 760 }} {...shared('fileExplorer')}>
         <FileExplorer />
@@ -200,8 +206,7 @@ function DesktopShell({ desktop, dispatch }: { desktop: typeof initialDesktop; d
       </Window>
 
       </div>
-      <Taskbar desktop={desktop} onOpenWindow={openWindow} onTaskClick={(id) => dispatch({ type: 'taskbar', id })} currentTime={currentTime}
-        iconFor={(id) => { const entry = data.items.find((item) => item.target === `program:${id}`); return iconArt(entry ?? { icon: null, target: `program:${id}` }, data.assets, { trashFull: data.trash.length > 0 }).image ?? (id === 'files' ? libraryIconSrc(DEFAULT_ICONS.folder) : undefined); }} />
+      <Taskbar desktop={desktop} onOpenWindow={openWindow} onTaskClick={(id) => dispatch({ type: 'taskbar', id })} currentTime={currentTime} />
     </main>
   );
 }

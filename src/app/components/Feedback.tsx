@@ -5,8 +5,8 @@ import { X } from 'lucide-react';
 export function HeartIcon({ className = '' }: { className?: string }) {
   const gradient = useId();
   return <svg className={className} viewBox="0 0 40 36" aria-hidden="true">
-    <defs><linearGradient id={gradient} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#ffc4cf" /><stop offset="1" stopColor="#f27b92" /></linearGradient></defs>
-    <path d="M20 34 C6 24 1 17 1 10.5 C1 5 5.5 1 10.5 1 C14.5 1 18 3.4 20 7 C22 3.4 25.5 1 29.5 1 C34.5 1 39 5 39 10.5 C39 17 34 24 20 34Z" fill={`url(#${gradient})`} stroke="#e06a80" strokeWidth="2" />
+    <defs><linearGradient id={gradient} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#d5dee8" /><stop offset="1" stopColor="#8fa6bf" /></linearGradient></defs>
+    <path d="M20 34 C6 24 1 17 1 10.5 C1 5 5.5 1 10.5 1 C14.5 1 18 3.4 20 7 C22 3.4 25.5 1 29.5 1 C34.5 1 39 5 39 10.5 C39 17 34 24 20 34Z" fill={`url(#${gradient})`} stroke="#6f8aa7" strokeWidth="2" />
     <ellipse cx="11" cy="9" rx="4" ry="2.6" fill="#fff" opacity=".7" />
   </svg>;
 }

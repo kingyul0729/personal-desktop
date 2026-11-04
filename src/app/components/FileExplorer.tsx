@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { ArrowLeft, ArrowRight, Home, Image as ImageIcon, Search, FolderPlus, Plus, Pencil, Trash2 } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Home, Search, FolderPlus, Plus, Pencil, Trash2 } from 'lucide-react';
 import { ImageDocumentViewer } from './ImageDocumentViewer';
 import { PinkFolderIcon } from './PinkFolderIcon';
 import { KittyDialog } from './KittyDialog';
@@ -92,9 +92,29 @@ export function FileExplorer() {
   };
 
   const normalizedQuery = query.trim().toLocaleLowerCase('ko');
-  const visibleImages = files.images.filter(image => (location === 'all' || location === 'folders' || image.folderId === location) && image.name.toLocaleLowerCase('ko').includes(normalizedQuery));
-  const showFolders = location === 'folders' && !query;
+  // The folder in front: the chosen one, or the first folder when nothing is chosen yet.
+  const frontId = currentFolder?.id ?? (location === 'all' ? 'all' : files.folders[0]?.id ?? 'all');
+  const folderName = (id: string) => files.folders.find(folder => folder.id === id)?.name ?? '';
+  // Search covers every price list in this archive (folder names too); without a query, only the front folder.
+  const visibleImages = normalizedQuery
+    ? files.images.filter(image => `${image.name} ${folderName(image.folderId)}`.toLocaleLowerCase('ko').includes(normalizedQuery))
+    : files.images.filter(image => frontId === 'all' || image.folderId === frontId);
+  const tabs = [{ id: 'all', name: '전체 가격표', count: files.images.length }, ...files.folders.map(folder => ({ id: folder.id, name: folder.name, count: files.images.filter(image => image.folderId === folder.id).length }))];
+  const front = tabs.find(tab => tab.id === frontId) ?? tabs[0];
+  const frontFolder = files.folders.find(folder => folder.id === front.id);
   const path = opened ? `${files.folders.find(folder => folder.id === opened.folderId)?.name ?? '가격표'} / ${opened.name}` : currentFolder?.name ?? (location === 'all' ? '전체 가격표' : '프로그램 폴더');
+
+  function renderImages() {
+    if (!visibleImages.length) return loading ? <div className="pf-loading"><LoadingBox label="가격표 불러오는 중…" /></div>
+      : <p className="pf-empty">{query ? '검색 결과가 없습니다. 시술명이나 카테고리 이름으로 검색해 보세요.' : '이 카테고리에 가격표 이미지를 추가해 주세요.'}</p>;
+    return <ol className="pf-price-list">{visibleImages.map((image, index) => <li key={image.id} className="pf-price-row">
+      <button type="button" className="pf-price-open" onClick={() => setGallery({ images: visibleImages, index })}>
+        <span className="pf-price-thumb"><img src={image.src} alt="" loading="lazy" /></span>
+        <span className="pf-price-text"><small>{String(index + 1).padStart(2, '0')}{(normalizedQuery || frontId === 'all') && folderName(image.folderId) ? ` · ${folderName(image.folderId)}` : ''}</small><strong>{image.name}</strong><em>가격표 열기</em></span>
+      </button>
+      {files.authenticated && <div className="pf-image-actions"><button type="button" aria-label={`${image.name} 이름·폴더 변경`} onClick={() => openEditor({ type: 'image', image })}><Pencil size={14} />정리</button><button type="button" aria-label={`${image.name} 삭제`} onClick={() => openEditor({ type: 'delete', image })}><Trash2 size={14} />삭제</button></div>}
+    </li>)}</ol>;
+  }
 
   return <div className="file-explorer price-file-manager">
     <div className="pf-navigation">
@@ -104,16 +124,11 @@ export function FileExplorer() {
       <div className="pf-address">{path}</div>
     </div>
     <div className="pf-workspace">
-      <aside className="pf-sidebar" aria-label="가격표 탐색">
-        <button type="button" aria-label="프로그램 폴더" aria-pressed={location === 'folders' && !opened} onClick={() => navigate('folders')}><PinkFolderIcon variant="heart" /><span>프로그램 폴더</span></button>
-        <button type="button" aria-label="전체 가격표" aria-pressed={location === 'all' && !opened} onClick={() => navigate('all')}><ImageIcon /><span>전체 가격표</span></button>
-        <div className="pf-sidebar-folders">{files.folders.map(folder => <button key={folder.id} type="button" aria-label={folder.name} aria-pressed={location === folder.id && !opened} onClick={() => navigate(folder.id)}><PinkFolderIcon variant={folder.variant} /><span>{folder.name}</span></button>)}</div>
-      </aside>
       {opened && gallery ? <ImageDocumentViewer name={opened.name} src={opened.src} variants={opened.variants} index={gallery.index} count={gallery.images.length}
         onNavigate={index => setGallery(current => current && index >= 0 && index < current.images.length ? { ...current, index } : current)}
         onBack={() => setGallery(null)} /> : <section className="pf-content" aria-label={path}>
         <div className="pf-tools">
-          <label className="pf-search"><Search size={17} /><input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="가격표 검색" aria-label="가격표 검색" /></label>
+          <label className="pf-search"><Search size={17} /><input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="시술명·카테고리 검색" aria-label="가격표 검색" /></label>
           <div className="pf-tools-actions">{files.authenticated ? <>
             <button type="button" onClick={() => openEditor({ type: 'folder' })}><FolderPlus size={17} />새 폴더</button>
             <button type="button" onClick={() => upload.current?.click()}><Plus size={18} />이미지 추가</button>
@@ -127,19 +142,27 @@ export function FileExplorer() {
         </div>
         {error && !editor && <div role="alert" className="pf-feedback">{error}{canRetry && <button type="button" onClick={() => void refresh()}>다시 불러오기</button>}</div>}
         <div className="pf-scroll">
-          {showFolders ? <div className="pf-folder-grid">{files.folders.map(folder => <article key={folder.id} className="pf-folder-card">
-            <button type="button" className="pf-folder-open" onClick={() => navigate(folder.id)}><PinkFolderIcon variant={folder.variant} /><span>{folder.name}</span><small>{files.images.filter(image => image.folderId === folder.id).length}개</small></button>
-            {files.authenticated && <button type="button" className="pf-folder-edit" aria-label={`${folder.name} 이름 변경`} onClick={() => openEditor({ type: 'folder', folder })}><Pencil size={15} /></button>}
-          </article>)}</div> : <>
-            <div className="pf-image-grid">{visibleImages.map(image => <article key={image.id} className="pf-image-card">
-              <button type="button" className="pf-image-open" onClick={() => setGallery({ images: visibleImages, index: visibleImages.indexOf(image) })}><div><img src={image.src} alt="" loading="lazy" /></div><span>{image.name}</span></button>
-              {files.authenticated && <div className="pf-image-actions"><button type="button" aria-label={`${image.name} 이름·폴더 변경`} onClick={() => openEditor({ type: 'image', image })}><Pencil size={14} />정리</button><button type="button" aria-label={`${image.name} 삭제`} onClick={() => openEditor({ type: 'delete', image })}><Trash2 size={14} />삭제</button></div>}
-            </article>)}</div>
-            {!visibleImages.length && (loading ? <div className="pf-loading"><LoadingBox label="가격표 불러오는 중…" /></div>
-              : <p className="pf-empty">{query ? '검색 결과가 없습니다.' : '이 폴더에 가격표 이미지를 추가해 주세요.'}</p>)}
+          {normalizedQuery ? <section className="pf-sheet pf-search-sheet" aria-label="가격표 검색 결과">
+            <header className="pf-sheet-head"><div><span className="pf-sheet-no">검색</span><h2>‘{query.trim()}’ 검색 결과</h2></div><span className="pf-sheet-count">{visibleImages.length}개</span></header>
+            {renderImages()}
+          </section> : <>
+            <nav className="pf-folder-tabs" aria-label="가격표 카테고리">
+              {tabs.map((tab, index) => <button key={tab.id} type="button" className="pf-folder-tab" data-tone={index % 4} aria-pressed={tab.id === front.id}
+                onClick={() => { if (tab.id !== front.id) navigate(tab.id); }}>
+                <span className="pf-tab-no">{String(index).padStart(2, '0')}</span><strong>{tab.name}</strong><small>{tab.count}개</small>
+              </button>)}
+            </nav>
+            <section className="pf-sheet" data-tone={tabs.indexOf(front) % 4} aria-label={`${front.name} 가격표`} key={front.id}>
+              <header className="pf-sheet-head">
+                <div><span className="pf-sheet-no">{String(tabs.indexOf(front)).padStart(2, '0')}</span><h2>{front.name}</h2></div>
+                <div className="pf-sheet-tools"><span className="pf-sheet-count">가격표 {visibleImages.length}개</span>
+                  {files.authenticated && frontFolder && <button type="button" onClick={() => openEditor({ type: 'folder', folder: frontFolder })}><Pencil size={14} />이름 변경</button>}</div>
+              </header>
+              {renderImages()}
+            </section>
           </>}
         </div>
-        <footer className="pf-status"><span>{showFolders ? `폴더 ${files.folders.length}개` : `가격표 ${visibleImages.length}개`}</span><span role="status">{loading ? '불러오는 중' : notice}</span></footer>
+        <footer className="pf-status"><span>카테고리 {files.folders.length}개 · 가격표 {files.images.length}개</span><span role="status">{loading ? '불러오는 중' : notice}</span></footer>
       </section>}
     </div>
     {editor && <KittyDialog title={editor.type === 'delete' ? '휴지통으로 이동' : editor.type === 'folder' && !editor.folder ? '새 폴더' : '저장 확인'} onClose={closeEditor} busy={pending}>

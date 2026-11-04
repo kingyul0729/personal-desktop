@@ -114,7 +114,7 @@ test('database failure rolls back records and cleans uploaded objects', async ()
 
 test('existing program identity is kept for saved desktop layouts with the new study label', () => {
   const program = publicDesktop().items.find(item => item.target === 'program:terminal');
-  assert.equal(program.label, '공부 보관함'); assert.equal(publicDesktop().items.length, 7);
+  assert.equal(program.label, '공부 보관함'); assert.equal(publicDesktop().items.length, 8);
 });
 
 test('Cornell keywords and summary persist, and older clients cannot erase these fields', async () => {
