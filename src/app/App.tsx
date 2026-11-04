@@ -11,6 +11,7 @@ import {
   Presentation,
 } from 'lucide-react';
 import { DesktopIcon } from './components/DesktopIcon';
+import { DesktopFinder } from './components/DesktopFinder';
 import { Taskbar } from './components/Taskbar';
 import { Window } from './components/Window';
 import { StudyArchive } from './components/StudyArchive';
@@ -113,7 +114,7 @@ function DesktopShell({ desktop, dispatch }: { desktop: typeof initialDesktop; d
   const blankMenu = (point: { x: number; y: number }) => shell.showMenu(point, desktopMenu(data.authenticated).map(({ action, label }) => ({ label, onSelect: () => void runDesktop(action) })));
   const blankPress = useRef(createLongPress(point => blankMenuRef.current(point)));
   const blankMenuRef = useRef(blankMenu); blankMenuRef.current = blankMenu;
-  const onBlank = (target: EventTarget) => !(target as HTMLElement).closest('.os-window, .desktop-icon, .context-menu');
+  const onBlank = (target: EventTarget) => !(target as HTMLElement).closest('.os-window, .desktop-icon, .context-menu, .finder-sidebar, .finder-toolbar');
   const wallpaper = data.settings.wallpaper;
 
   // Work capsules reuse the window system above: each Window reports its geometry here and
@@ -160,16 +161,14 @@ function DesktopShell({ desktop, dispatch }: { desktop: typeof initialDesktop; d
         onPointerMove={(event) => blankPress.current.move(event)}
         onPointerUp={() => blankPress.current.up()}
         onPointerCancel={() => blankPress.current.cancel()}>
-      <section className="desktop-icon-column" aria-label="데스크톱 프로그램">
-        {data.items.filter((item) => !item.hidden).map((item) => {
+      <DesktopFinder items={data.items} loading={!shell.loaded} focusId={shell.renaming} renderItem={(item) => {
           const art = iconArt(item, data.assets, { trashFull: data.trash.length > 0 });
           return <DesktopIcon key={item.id} variant={art.variant} image={art.image} locked={item.locked} dimmed={item.missing}
             icon={<EntryBadge target={item.target} fileKind={item.fileKind} />} label={item.label}
             onClick={() => openEntry(item)}
             onMenu={(point) => shell.showMenu(point, menuFor(entryKind(item), data.authenticated).map(({ action, label }) => ({ label, onSelect: () => runEntry(item, action) })))}
             renaming={shell.renaming === item.id} onCancelRename={() => shell.setRenaming(null)} onRename={(name) => rename(item, name)} />;
-        })}
-      </section>
+        }} />
       {!shell.loaded && <div className="desktop-loading"><LoadingBox label="바탕화면 불러오는 중…" /></div>}
       {shell.notice && <DesktopNotice message={shell.notice} onClose={() => notify('')} />}
       {savingLayout && <CapsuleSaveDialog layout={savingLayout} onClose={() => setSavingLayout(null)}
