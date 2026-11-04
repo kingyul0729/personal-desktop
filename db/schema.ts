@@ -85,3 +85,16 @@ export const studyAttachments = sqliteTable('study_attachments', {
   name: text('name').notNull(), objectKey: text('object_key').notNull(), mime: text('mime').notNull(),
   size: integer('size').notNull(), createdAt: integer('created_at').notNull(),
 }, (t) => [index('idx_study_attachments_record').on(t.owner, t.recordId)]);
+
+// 다채움피부과 업무 공간(B): 피부팀 업무 매뉴얼과 환자 상담자료. 개인 공부 기록과 테이블·저장 경로를 공유하지 않는다.
+export const workDocs = sqliteTable('work_docs', {
+  id: text('id').primaryKey(), owner: text('owner').notNull(), kind: text('kind').notNull(),
+  title: text('title').notNull(), summary: text('summary').notNull().default(''), content: text('content').notNull().default(''),
+  createdAt: integer('created_at').notNull(), updatedAt: integer('updated_at').notNull(), trashedAt: integer('trashed_at'),
+}, (t) => [index('idx_work_docs_owner').on(t.owner, t.updatedAt)]);
+
+export const workDocAttachments = sqliteTable('work_doc_attachments', {
+  id: text('id').primaryKey(), owner: text('owner').notNull(), docId: text('doc_id').notNull(),
+  name: text('name').notNull(), objectKey: text('object_key').notNull(), mime: text('mime').notNull(),
+  size: integer('size').notNull(), createdAt: integer('created_at').notNull(),
+}, (t) => [index('idx_work_doc_attachments_doc').on(t.owner, t.docId)]);
