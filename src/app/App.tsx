@@ -30,7 +30,6 @@ import { activeWindow, desktopReducer, initialDesktop, type WindowId, type Windo
 import { createLongPress, desktopMenu, entryKind, iconArt, menuFor, type DesktopEntry } from './desktopModel';
 import { DesktopProvider, useDesktop } from './useDesktop';
 import { DesktopNotice, LoadingBox } from './components/Feedback';
-import { DEFAULT_ICONS, libraryIconSrc } from './iconLibrary';
 
 export default function App() {
   const [desktop, dispatch] = useReducer(desktopReducer, initialDesktop);
@@ -163,7 +162,8 @@ function DesktopShell({ desktop, dispatch }: { desktop: typeof initialDesktop; d
         onPointerCancel={() => blankPress.current.cancel()}>
       <DesktopFinder items={data.items} loading={!shell.loaded} focusId={shell.renaming} renderItem={(item) => {
           const art = iconArt(item, data.assets, { trashFull: data.trash.length > 0 });
-          return <DesktopIcon key={item.id} variant={art.variant} image={art.image} locked={item.locked} dimmed={item.missing}
+          // One folder picture for every item; the small badge tells programs, shortcuts and files apart.
+          return <DesktopIcon key={item.id} variant={art.variant} locked={item.locked} dimmed={item.missing}
             icon={<EntryBadge target={item.target} fileKind={item.fileKind} />} label={item.label}
             onClick={() => openEntry(item)}
             onMenu={(point) => shell.showMenu(point, menuFor(entryKind(item), data.authenticated).map(({ action, label }) => ({ label, onSelect: () => runEntry(item, action) })))}
@@ -206,8 +206,7 @@ function DesktopShell({ desktop, dispatch }: { desktop: typeof initialDesktop; d
       </Window>
 
       </div>
-      <Taskbar desktop={desktop} onOpenWindow={openWindow} onTaskClick={(id) => dispatch({ type: 'taskbar', id })} currentTime={currentTime}
-        iconFor={(id) => { const entry = data.items.find((item) => item.target === `program:${id}`); return iconArt(entry ?? { icon: null, target: `program:${id}` }, data.assets, { trashFull: data.trash.length > 0 }).image ?? (id === 'files' ? libraryIconSrc(DEFAULT_ICONS.folder) : undefined); }} />
+      <Taskbar desktop={desktop} onOpenWindow={openWindow} onTaskClick={(id) => dispatch({ type: 'taskbar', id })} currentTime={currentTime} />
     </main>
   );
 }
