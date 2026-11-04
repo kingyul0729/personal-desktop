@@ -1,11 +1,13 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { calculatePriceGuide, createPriceGuideMessage, formatGuideAmount, type PriceGuideValues, type VatView } from '../priceGuide';
 import { calculatorNumber, emptyCalculatorInputs, normalizeCalculatorInput } from '../calculatorInput';
 import { calculatePrepaid, emptyPrepaidInput, formatPrepaidAmount, prepaidResultRows, type PrepaidInput, type PrepaidResult, type PrepaidTier } from '../prepaid';
 import { chartClipboardContent, chartColors, copyChartContent, createPrepaidChart, emptyChartContext, type ChartPaymentMethod } from '../prepaidChart';
 import { PinkFolderIcon, type PinkFolderVariant } from './PinkFolderIcon';
+import { compareDiscount, formatWon, splitIncludedWon, splitVat, toWon, unitFromPackage, wonToManwon, type VatInput, type VatSplit } from '../consultCalc';
 
 type CalcMode = 'rounds' | 'vat' | 'discount' | 'prepaid';
+type DiscountBasis = 'unit' | 'package';
 const modeFolder: Record<CalcMode, PinkFolderVariant> = { rounds: 'heart', vat: 'flower', discount: 'cherry', prepaid: 'kitty' };
 
 const fmt = (value: number) => Number.isFinite(value)
@@ -36,13 +38,27 @@ function VatBasis({ separate, onChange }: { separate: boolean; onChange: (value:
 export function RoundResults({ normalUnit, discountUnit, count, vatSeparate }: { normalUnit: number; discountUnit: number; count: number; vatSeparate: boolean }) {
   const vatView: VatView = 'after';
   const prices = calculatePriceGuide({ normalUnit, discountUnit, count, vatSeparate }, vatView);
-  return <PriceGuideView prices={prices} count={count} vatView={vatView} />;
+  // Same won total as the payment line; a VAT-separate input keeps its own supply amount.
+  const paymentWon = Math.round(prices.appliedTotal * 10000);
+  const vatSplit = splitIncludedWon(paymentWon, vatSeparate ? toWon(discountUnit * count) : undefined);
+  return <PriceGuideView prices={prices} count={count} vatView={vatView} vatSplit={vatSplit} />;
 }
 
-export function PriceGuideView({ prices, count, vatView }: {
+function DiscountBasisToggle({ basis, onChange }: { basis: DiscountBasis; onChange: (basis: DiscountBasis) => void }) {
+  return <fieldset className="pc-field pc-vat-basis pc-discount-basis">
+    <legend>할인가 입력 기준</legend>
+    <div className="pc-toggle">
+      <button type="button" className={basis === 'unit' ? 'active' : ''} aria-pressed={basis === 'unit'} onClick={() => onChange('unit')}>회당 금액</button>
+      <button type="button" className={basis === 'package' ? 'active' : ''} aria-pressed={basis === 'package'} onClick={() => onChange('package')}>패키지 총액</button>
+    </div>
+  </fieldset>;
+}
+
+export function PriceGuideView({ prices, count, vatView, vatSplit }: {
   prices: PriceGuideValues;
   count: number;
   vatView: VatView;
+  vatSplit?: VatSplit;
 }) {
   const totalDiscount = prices.normalTotal - prices.appliedTotal;
   const discountRate = prices.normalTotal > 0 ? Math.abs(totalDiscount / prices.normalTotal * 100) : null;
@@ -74,6 +90,10 @@ export function PriceGuideView({ prices, count, vatView }: {
         <dt>최종 결제금액</dt>
         <dd><strong>{paymentWon} 원</strong><small>(부가세 포함)</small></dd>
       </div>
+      {vatSplit && <div className="pc-guide-vat-split">
+        <dt>부가세 별도</dt>
+        <dd><span>공급가 {formatGuideAmount(wonToManwon(vatSplit.supply))}만 원</span><small>+ 부가세 {formatGuideAmount(wonToManwon(vatSplit.vat))}만 원</small></dd>
+      </div>}
     </dl>
     <output hidden data-price-guide-message="true">{guidance}</output>
   </section>;
@@ -94,12 +114,13 @@ export function DiscountResults({ base }: { base: number }) {
   </div></section>;
 }
 
-export function DiscountPanel({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+export function DiscountPanel({ value, onChange, children }: { value: string; onChange: (value: string) => void; children?: ReactNode }) {
   return <div className="pc-grid pc-grid-discount">
     <section className="pc-card">
       <h2>기준 금액</h2>
       <Field label="정가" value={value} onChange={onChange} />
       <p className="pc-vat-note">입력 금액은 부가세 별도입니다.</p>
+      {children}
     </section>
     <DiscountResults base={calculatorNumber(value)} />
   </div>;
@@ -118,6 +139,62 @@ export function VatReferenceTable() {
           </table>
         </div>
       )}
+    </div>
+  </section>;
+}
+
+// A won-exact payment line, shown apart from the other results.
+function PaymentTotal({ label, won, note }: { label: string; won: number; note?: string }) {
+  return <div className="pc-total">
+    <span>{label}</span>
+    <strong>{formatWon(won)} 원</strong>
+    {note && <small>{note}</small>}
+  </div>;
+}
+
+export function VatPanel({ value, onChange, input, onInput }: { value: string; onChange: (value: string) => void; input: VatInput; onInput: (input: VatInput) => void }) {
+  const split = splitVat(calculatorNumber(value), input);
+  return <div className="pc-grid pc-grid-vat">
+    <section className="pc-card" aria-label="부가세 계산 입력">
+      <h2>금액 입력</h2>
+      <div className="pc-fields pc-fields-single">
+        <Field label={input === 'separate' ? '금액 (부가세 별도)' : '금액 (부가세 포함)'} value={value} onChange={onChange} />
+        <fieldset className="pc-field pc-vat-basis">
+          <legend>입력 금액 기준</legend>
+          <div className="pc-toggle">
+            <button type="button" className={input === 'separate' ? 'active' : ''} aria-pressed={input === 'separate'} onClick={() => onInput('separate')}>부가세 별도</button>
+            <button type="button" className={input === 'included' ? 'active' : ''} aria-pressed={input === 'included'} onClick={() => onInput('included')}>부가세 포함</button>
+          </div>
+        </fieldset>
+      </div>
+      <p className="pc-vat-note">{input === 'separate' ? '입력 금액에 부가세 10%를 더합니다.' : '입력 금액에서 공급가액과 부가세를 나눕니다. 부가세를 다시 더하지 않습니다.'}</p>
+    </section>
+    <section className="pc-card pc-calc-result" aria-label="부가세 계산 결과">
+      <h2>계산 결과</h2>
+      <dl className="pc-result-rows">
+        <div><dt>공급가액</dt><dd>{formatGuideAmount(wonToManwon(split.supply))}<span>만 원</span></dd></div>
+        <div><dt>부가세 (10%)</dt><dd>{formatGuideAmount(wonToManwon(split.vat))}<span>만 원</span></dd></div>
+      </dl>
+      <PaymentTotal label="최종 금액 (부가세 포함)" won={split.total} />
+    </section>
+  </div>;
+}
+
+export function DiscountComparePanel({ normal, discounted, onChange }: { normal: string; discounted: string; onChange: (value: string) => void }) {
+  const result = compareDiscount(calculatorNumber(normal), calculatorNumber(discounted));
+  const payment = splitVat(wonToManwon(result.discounted), 'separate');
+  const rate = result.rate === null ? '—' : `${formatGuideAmount(Math.abs(result.rate))}%`;
+  return <section className="pc-discount-compare" aria-label="할인율 확인">
+    <h2>할인율 확인</h2>
+    <div className="pc-compare-body">
+      <div className="pc-compare-input">
+        <Field label="할인가 (부가세 별도)" value={discounted} onChange={onChange} />
+      </div>
+      <dl className="pc-result-rows">
+        <div><dt>{result.difference < 0 ? '차액 (할인가가 높음)' : '할인금액'}</dt><dd>{formatGuideAmount(wonToManwon(Math.abs(result.difference)))}<span>만 원</span></dd></div>
+        <div><dt>{result.difference < 0 ? '증가율' : '할인율'}</dt><dd>{rate}</dd></div>
+        <div><dt>할인가 부가세 포함</dt><dd>{formatGuideAmount(wonToManwon(payment.total))}<span>만 원</span></dd></div>
+      </dl>
     </div>
   </section>;
 }
@@ -226,6 +303,7 @@ export function PrepaidPanel({ input, onChange }: { input: PrepaidInput; onChang
         <PrepaidOptionalAmount label="기존 선불권 잔액" enabled={input.hasBalance} onToggle={(value) => change('hasBalance', value)} value={input.balance} onChange={(value) => change('balance', value)} placeholder="잔액 입력" />
         <div className="pp-collected-input"><Field label={input.hasDeposit ? '추가 수납금액' : '당일 수납금액'} placeholder={input.hasDeposit ? '추가로 수납한 금액' : input.hasBalance ? '예약금 제외 실제 수납액' : '신규 선불권·차액 포함 수납액'} value={input.collected ?? (result.collectionIsAutomatic ? String(result.collected! / 10000) : '')} onChange={(value) => change('collected', value)} /></div>
       </div>
+      <p className="pp-rule-note">선불권 할인은 정상가에만 적용합니다. 이벤트 할인, 기존 할인가, 리프팅 우대가, 재티켓팅 할인, 제모 결합할인과 중복 적용하지 않습니다.</p>
     </section>
     <section className="pc-card pp-card pp-results" aria-label="선불권 결과">
       <header className="pp-results-heading">
@@ -239,6 +317,7 @@ export function PrepaidPanel({ input, onChange }: { input: PrepaidInput; onChang
           <dt>{row.label}</dt><dd>{row.text ?? formatPrepaidAmount(row.value)}{!row.text && row.value !== null && <span>만원</span>}</dd>
         </div>)}
       </dl>
+      {result.ready && <PaymentTotal label={result.hasDeposit ? '결제 필요금액 (예약금 차감 후)' : '결제 필요금액'} won={result.payable} />}
     </section>
   </div>;
 }
@@ -252,6 +331,12 @@ export function PriceCalculator() {
   const discountUnit = calculatorNumber(inputs.discountUnit);
   const count = calculatorNumber(inputs.count);
   const [vatSeparate, setVatSeparate] = useState(true);
+  // Extra inputs live here too, so a minimized window keeps everything being calculated.
+  const [discountBasis, setDiscountBasis] = useState<DiscountBasis>('unit');
+  const [discountTotal, setDiscountTotal] = useState('');
+  const [vatInput, setVatInput] = useState<VatInput>('separate');
+  const [compareDiscounted, setCompareDiscounted] = useState('');
+  const appliedUnit = discountBasis === 'unit' ? discountUnit : unitFromPackage(calculatorNumber(discountTotal), count);
 
   const vatNote = vatSeparate ? '부가세 전 금액입니다. 결제 시 부가세 10%가 추가됩니다.' : '부가세 후 금액입니다. 부가세를 추가하지 않습니다.';
 
@@ -267,13 +352,15 @@ export function PriceCalculator() {
       </div>
 
       {mode === 'rounds' && <div className="pc-grid pc-grid-rounds">
-        <section className="pc-card"><h2>금액 입력</h2><div className="pc-fields"><Field label="1회 정상가" value={inputs.normalUnit} onChange={(value) => setInput('normalUnit', value)} /><Field label="1회 할인가" value={inputs.discountUnit} onChange={(value) => setInput('discountUnit', value)} /><Field label="횟수" value={inputs.count} onChange={(value) => setInput('count', value)} suffix="회" /><VatBasis separate={vatSeparate} onChange={setVatSeparate} /></div><p className="pc-vat-note">{vatNote}</p></section>
-        <RoundResults normalUnit={normalUnit} discountUnit={discountUnit} count={count} vatSeparate={vatSeparate} />
+        <section className="pc-card"><h2>금액 입력</h2><div className="pc-fields"><DiscountBasisToggle basis={discountBasis} onChange={setDiscountBasis} /><Field label="1회 정상가" value={inputs.normalUnit} onChange={(value) => setInput('normalUnit', value)} />{discountBasis === 'unit'
+          ? <Field label="1회 할인가" value={inputs.discountUnit} onChange={(value) => setInput('discountUnit', value)} />
+          : <Field label="패키지 할인 총액" value={discountTotal} onChange={setDiscountTotal} />}<Field label="횟수" value={inputs.count} onChange={(value) => setInput('count', value)} suffix="회" /><VatBasis separate={vatSeparate} onChange={setVatSeparate} /></div><p className="pc-vat-note">{vatNote}</p>{discountBasis === 'package' && <p className="pc-vat-note pc-package-note">{count > 0 ? `패키지 총액을 횟수로 나눈 1회 ${formatGuideAmount(appliedUnit)}만 원으로 계산합니다.` : '횟수를 입력하면 1회 할인가를 계산합니다.'}</p>}</section>
+        <RoundResults normalUnit={normalUnit} discountUnit={appliedUnit} count={count} vatSeparate={vatSeparate} />
       </div>}
 
-      {mode === 'vat' && <VatReferenceTable />}
+      {mode === 'vat' && <><VatPanel value={inputs.vatBase} onChange={(value) => setInput('vatBase', value)} input={vatInput} onInput={setVatInput} /><VatReferenceTable /></>}
 
-      {mode === 'discount' && <DiscountPanel value={inputs.discountBase} onChange={(value) => setInput('discountBase', value)} />}
+      {mode === 'discount' && <DiscountPanel value={inputs.discountBase} onChange={(value) => setInput('discountBase', value)}><DiscountComparePanel normal={inputs.discountBase} discounted={compareDiscounted} onChange={setCompareDiscounted} /></DiscountPanel>}
 
       {mode === 'prepaid' && <PrepaidPanel input={prepaid} onChange={setPrepaid} />}
     </div>
