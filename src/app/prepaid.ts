@@ -1,106 +1,94 @@
 import { calculatorNumber } from './calculatorInput.ts';
 
+// 선불권 P — 병원 확정 규칙 (2026-11-06 「최종 수정 프롬프트」)
+// 시술비 = 이번 시술 정상가 × (1 − 할인율), 원 단위 반올림, 부가세 없음.
+// ① 기존 잔액만 사용   오늘 받을 금액 = MAX(0, 시술비 − 기존 잔액 − 예약금)
+//                      남은잔액       = MAX(0, 기존 잔액 − 시술비)
+// ② 선불권 추가 구매   오늘 받을 금액 = MAX(0, 구매금액 − 예약금)
+//                      남은잔액       = MAX(0, 기존 잔액 + 구매금액 − 시술비)
+// 두 방식의 결과는 섞지 않는다. 입력은 만 원, 결과는 원.
 export type PrepaidTier = 300 | 400 | 500;
+export type PrepaidMode = 'balance' | 'purchase';
 export const prepaidDiscountRates: Record<PrepaidTier, number> = { 300: 10, 400: 15, 500: 20 };
+export const prepaidModeLabels: Record<PrepaidMode, string> = { balance: '기존 잔액만 사용', purchase: '선불권 추가 구매' };
 
 export interface PrepaidInput {
+  mode: PrepaidMode;
   tier: PrepaidTier;
-  normalPrice: string;
-  hasDeposit: boolean;
-  // null uses 10% of the normal program price; a string is a manual override.
-  deposit: string | null;
-  hasBalance: boolean;
-  balance: string;
-  // null: full settlement without a deposit, no extra receipt with a deposit.
-  // A string preserves the staff's actual receipt, including zero.
-  collected: string | null;
+  balance: string;       // 기존 잔액 (만 원). 추가 구매에서는 비우면 0원
+  normalPrice: string;   // 이번 시술 정상가 (만 원)
+  hasDeposit: boolean;   // 예약금은 선택사항
+  deposit: string | null; // null: 선불권 구매금액의 10% 제안값, 문자열: 실제 받은 금액
+  collected: string | null; // null: 오늘 받을 금액을 그대로 받음, 문자열: 실제 받은 금액(0 포함)
 }
 
 export const emptyPrepaidInput: PrepaidInput = {
-  tier: 300, normalPrice: '', hasDeposit: false, deposit: null,
-  hasBalance: false, balance: '', collected: null,
+  mode: 'balance', tier: 300, balance: '', normalPrice: '', hasDeposit: false, deposit: null, collected: null,
 };
 
-// Preserve whole-won rounding without changing the user's input text.
 const toWon = (value: string) => Math.round(calculatorNumber(value) * 10000);
 
+// 숫자로 끝까지 입력된 값만 금액으로 인정한다 ('.', '' 는 미완성).
 export function enteredPrepaidAmount(value: string): number | null {
   if (!/^(?:\d+(?:\.\d*)?|\.\d+)$/.test(value)) return null;
   const won = Math.round(Number(value) * 10000);
   return Number.isSafeInteger(won) && won >= 0 ? won : null;
 }
 
-// Later collections settle only an existing receivable, never the original deposit.
+// 나중에 받은 금액은 남은 미수금만 줄인다.
 export function settlePrepaidReceivable(outstandingWon: number, newlyReceivedWon: number) {
   return Math.max(0, outstandingWon - newlyReceivedWon);
 }
 
-export function calculatePrepaid(input: PrepaidInput) {
-  const hasProgramAmount = enteredPrepaidAmount(input.normalPrice) !== null;
-  const normal = toWon(input.normalPrice);
-  const basisAmount = input.tier * 10000;
-  const discountRate = prepaidDiscountRates[input.tier];
-  const applied = Math.round(normal * (100 - discountRate) / 100);
+// 예약금 기본 제안값: 선불권 구매금액의 10%. 기존 잔액만 쓸 때는 구매가 없으므로 직접 입력한다.
+export function suggestedDeposit(input: Pick<PrepaidInput, 'mode' | 'tier'>) {
+  return input.mode === 'purchase' ? Math.round(input.tier * 10000 / 10) : 0;
+}
 
-  // No existing voucher: purchase the selected voucher today.
-  // Existing voucher: only the entered balance is available; never add the tier.
-  const startingBalance = input.hasBalance ? toWon(input.balance) : 0;
-  const newPurchase = input.hasBalance || !hasProgramAmount ? 0 : basisAmount;
-  const available = input.hasBalance ? startingBalance : newPurchase;
-  const used = Math.min(available, applied);
-  const excess = Math.max(0, applied - available);
-  const depositIsAutomatic = input.hasDeposit && input.deposit === null && hasProgramAmount;
-  const deposit = input.hasDeposit
-    ? input.deposit === null ? Math.round(normal / 10) : toWon(input.deposit)
-    : 0;
-  const payable = Math.max(0, newPurchase + excess - deposit);
-  const fundingReady = hasProgramAmount
-    && (!input.hasDeposit || depositIsAutomatic || (input.deposit !== null && enteredPrepaidAmount(input.deposit) !== null))
-    && (!input.hasBalance || enteredPrepaidAmount(input.balance) !== null);
-  // Reservation O means only the deposit has been received. Its outstanding
-  // payment stays unpaid until staff explicitly enter an additional receipt.
-  const collectionIsAutomatic = input.collected === null && !input.hasDeposit && fundingReady;
-  const collected = collectionIsAutomatic ? payable
-    : input.collected == null || input.collected === '' ? 0 : enteredPrepaidAmount(input.collected);
-  const receivable = collected === null ? null : settlePrepaidReceivable(payable, collected);
-  // Only funds actually held or received can remain after this program.
-  // A planned new purchase does not create a paid balance by itself.
-  const remaining = collected === null ? null : Math.max(0, startingBalance + deposit + collected - applied);
-  const ready = fundingReady && collected !== null;
-  // Clinic chart convention: only a received deposit can open a receivable entry.
-  // Keep settlement arithmetic separate so hiding this entry never implies payment.
-  const showReceivable = ready && input.hasDeposit && deposit > 0 && receivable !== null && receivable > 0;
-  const isUsageComplete = ready && applied > 0 && remaining === 0 && receivable === 0;
-  return { basisAmount, normal, applied, deposit, payable, collected, receivable, startingBalance,
-    isExisting: input.hasBalance, hasDeposit: input.hasDeposit, newPurchase, used, excess, remaining,
-    ready, showReceivable, collectionIsAutomatic, depositIsAutomatic, isUsageComplete };
+export function calculatePrepaid(input: PrepaidInput) {
+  const isPurchase = input.mode === 'purchase';
+  const discountRate = prepaidDiscountRates[input.tier];
+  const tierAmount = input.tier * 10000;
+  const hasPrice = enteredPrepaidAmount(input.normalPrice) !== null;
+  const normal = toWon(input.normalPrice);
+  const fee = Math.round(normal * (100 - discountRate) / 100);           // 시술비
+
+  const balanceText = input.balance.trim();
+  const balanceValid = isPurchase && balanceText === '' ? true : enteredPrepaidAmount(balanceText) !== null;
+  const balance = balanceValid ? toWon(balanceText) : 0;                  // 기존 잔액
+  const purchase = isPurchase ? tierAmount : 0;                           // 구매금액
+
+  const depositIsSuggested = input.hasDeposit && input.deposit === null;
+  const depositValid = !input.hasDeposit || depositIsSuggested || enteredPrepaidAmount(input.deposit ?? '') !== null;
+  const deposit = !input.hasDeposit ? 0 : depositIsSuggested ? suggestedDeposit(input) : depositValid ? toWon(input.deposit!) : 0;
+
+  // 확정 계산식
+  const today = isPurchase ? Math.max(0, purchase - deposit) : Math.max(0, fee - balance - deposit);
+  const remaining = isPurchase ? Math.max(0, balance + purchase - fee) : Math.max(0, balance - fee);
+  // 선불권에서 실제로 쓴 금액 (차트의 '차감')
+  const deducted = Math.min(fee, balance + purchase);
+  // 추가 구매 후에도 시술비가 남으면(정상가가 매우 큰 경우) 확정식에는 없는 부족분 — 따로 알린다.
+  const shortfall = isPurchase ? Math.max(0, fee - balance - purchase) : 0;
+  // 예약금이 받을 금액보다 많았던 경우
+  const depositExcess = isPurchase ? Math.max(0, deposit - purchase) : Math.max(0, deposit - Math.max(0, fee - balance));
+
+  const inputsReady = hasPrice && balanceValid && depositValid && (isPurchase || balanceText !== '');
+  const collectedIsAutomatic = input.collected === null;
+  const collectedValue = collectedIsAutomatic ? today : enteredPrepaidAmount(input.collected!);
+  const ready = inputsReady && collectedValue !== null;
+  const collected = collectedValue ?? 0;                                  // 오늘 실제로 받은 금액
+  const receivable = ready ? Math.max(0, today - collected) : 0;          // 미수금
+  const overpaid = ready ? Math.max(0, collected - today) + depositExcess : 0; // 초과 수납
+  const isUsageComplete = ready && fee > 0 && remaining === 0 && receivable === 0 && shortfall === 0;
+
+  return {
+    mode: input.mode, tier: input.tier, discountRate, tierAmount, normal, fee, balance, purchase,
+    deposit, depositIsSuggested, today, remaining, deducted, shortfall,
+    collected, collectedIsAutomatic, receivable, overpaid, ready, isUsageComplete,
+  };
 }
 
 export type PrepaidResult = ReturnType<typeof calculatePrepaid>;
-export const formatPrepaidAmount = (won: number | null) => won === null ? '—' : (won / 10000).toLocaleString('ko-KR', { maximumFractionDigits: 4 });
-
-export interface PrepaidResultRow {
-  key: string;
-  label: string;
-  value: number | null;
-  text?: string;
-  tone?: 'red' | 'blue';
-}
-
-export function prepaidResultRows(result: PrepaidResult): PrepaidResultRow[] {
-  return [
-    { key: 'normal', label: '프로그램 정상가', value: result.normal },
-    { key: 'applied', label: '선불권 적용가', value: result.applied },
-    { key: 'funding', label: result.isExisting ? '기존 선불권 잔액' : '선불권 금액', value: result.isExisting ? result.startingBalance : result.newPurchase },
-    ...(result.excess > 0 ? [{ key: 'excess', label: '차액 수납금액', value: result.excess }] : []),
-    ...(result.deposit > 0 ? [{ key: 'deposit', label: '예약금 수납', value: result.deposit }] : []),
-    ...(!result.hasDeposit || (result.collected !== null && result.collected > 0)
-      ? [{ key: 'collected', label: result.hasDeposit ? '추가 수납금액' : '당일 수납금액', value: result.collected }]
-      : []),
-    ...(result.showReceivable ? [{ key: 'receivable', label: '미수금', value: result.receivable }] : []),
-    { key: 'remaining', label: '남은 차액',
-      value: result.ready && result.remaining !== null && result.remaining > 0 ? result.remaining : null,
-      ...(result.isUsageComplete ? { text: '선불권제 사용완료', tone: 'red' as const }
-        : result.remaining !== null && result.remaining > 0 ? { tone: 'blue' as const } : {}) },
-  ];
-}
+export const formatWonAmount = (won: number) => `${Math.max(0, Math.round(won)).toLocaleString('ko-KR')}원`;
+// 입력칸(만 원)에 다시 넣을 때 쓰는 표기
+export const wonToManwonText = (won: number) => String(Math.round(won) / 10000);
