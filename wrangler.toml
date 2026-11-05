@@ -1,6 +1,6 @@
 # dauril.com 배포용 (Cloudflare Workers Builds). 원래 OpenAI 호스팅용 빌드(npm run build)와는 별개.
 # 빌드 명령: npm run build:cf   배포 명령: npx wrangler deploy
-name = "dauril-desktop"
+name = "personal-desktop"
 main = "cloudflare/worker.js"
 compatibility_date = "2025-10-01"
 
