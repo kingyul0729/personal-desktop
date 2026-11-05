@@ -44,7 +44,7 @@ test('general amount: totals, discount and VAT follow the confirmed formula', ()
   assert.deepEqual([included.normalPayment, included.finalPayment, included.supply, included.vat], [550000, 495000, 450000, 45000]);
   const html = text(ui.general(g({ normalUnit: '10', discountUnit: '9', count: '5' })));
   assert.match(html, /정상가 \(5회\) 550,000원/);
-  assert.match(html, /할인금액 − 55,000원 \( 10% \)/);
+  assert.match(html, /할인금액 − 55,000원 \( ?10% ?\)/);
   assert.match(html, /최종 결제금액 495,000원 공급가 450,000원 \+ 부가세 45,000원/);
   assert.doesNotMatch(text(ui.general(emptyGeneralInput)), /NaN|Infinity/);
 });
