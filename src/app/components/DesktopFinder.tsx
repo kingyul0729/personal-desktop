@@ -9,7 +9,6 @@ import type { DesktopEntry } from '../desktopModel';
 export type FinderSection = 'all' | Space | 'files';
 
 export const finderSections: { id: FinderSection; label: string; group: '공간' | '보관' }[] = [
-  { id: 'all', label: '전체', group: '공간' },
   { id: 'A', label: 'A · 개인 공간', group: '공간' },
   { id: 'B', label: 'B · 업무 공간', group: '공간' },
   { id: 'common', label: '공통 도구', group: '공간' },
@@ -32,7 +31,8 @@ export function finderItems<T extends Pick<DesktopEntry, 'kind' | 'target' | 'la
 
 type Saved = { section: FinderSection; view: 'grid' | 'list'; size: number };
 function loadSaved(): Saved {
-  const fallback: Saved = { section: 'all', view: 'grid', size: 100 };
+  // '전체' 메뉴는 없앴다: 처음 열 때는 A · 개인 공간
+  const fallback: Saved = { section: 'A', view: 'grid', size: 100 };
   try {
     const value = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
     return {

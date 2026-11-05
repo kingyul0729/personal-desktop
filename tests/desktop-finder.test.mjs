@@ -3,10 +3,10 @@ import test from 'node:test';
 import { build } from 'esbuild';
 
 const bundled = await build({
-  stdin: { contents: `export { finderItems, finderSectionOf } from './src/app/components/DesktopFinder';`, resolveDir: process.cwd(), loader: 'tsx' },
+  stdin: { contents: `export { finderItems, finderSectionOf, finderSections } from './src/app/components/DesktopFinder';`, resolveDir: process.cwd(), loader: 'tsx' },
   bundle: true, write: false, format: 'esm', platform: 'browser', jsx: 'automatic', logLevel: 'silent',
 });
-const { finderItems, finderSectionOf } = await import(`data:text/javascript;base64,${Buffer.from(bundled.outputFiles[0].text).toString('base64')}`);
+const { finderItems, finderSectionOf, finderSections } = await import(`data:text/javascript;base64,${Buffer.from(bundled.outputFiles[0].text).toString('base64')}`);
 
 const item = (id, kind, target, extra = {}) => ({ id, kind, target, label: id, hidden: false, ...extra });
 const items = [
@@ -31,4 +31,8 @@ test('each desktop item appears in exactly one space, hidden items nowhere', () 
 test('search narrows the chosen space by label', () => {
   assert.deepEqual(finderItems(items, 'all', '보관함').map(i => i.id), ['공부 보관함', '가격표 보관함']);
   assert.deepEqual(finderItems(items, 'A', '가격').map(i => i.id), []);
+});
+
+test('the sidebar has no 전체 entry; spaces start at A', () => {
+  assert.deepEqual(finderSections.map(s => s.label), ['A · 개인 공간', 'B · 업무 공간', '공통 도구', '바탕화면 파일']);
 });
