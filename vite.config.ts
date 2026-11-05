@@ -18,7 +18,8 @@ function figmaAssetResolver() {
 
 export default defineConfig({
   server: { allowedHosts: ['terminal.local'] },
-  build: { outDir: 'dist/client' },
+  // Cloudflare 빌드 환경의 열린 파일 수 제한(EMFILE)을 피하려고 동시에 읽는 파일 수를 줄인다
+  build: { outDir: 'dist/client', rollupOptions: { maxParallelFileOps: 16 } },
   plugins: [
     figmaAssetResolver(),
     // The React and Tailwind plugins are both required for Make, even if
