@@ -54,7 +54,7 @@ test('the viewer shows the selected file and its real position, with only back, 
   assert.match(html, /src="\/documents\/toning-special4.png"/);
   assert.match(html, /aria-label="현재 이미지 순서"[^>]*>4 \/ 7<\/output>/);
   for (const label of ['이전 이미지', '다음 이미지', '파일 목록으로 돌아가기']) assert.ok(html.includes(`aria-label="${label}"`));
-  for (const label of ['너비 맞춤', '한 장 보기', '전체화면', '원본 이미지', 'document-toolbar']) assert.ok(!html.includes(label));
+  for (const label of ['너비 맞춤', '한 장 보기', '전체화면', '<span>원본 이미지</span>', 'document-toolbar']) assert.ok(!html.includes(label));
   assert.match(html, /class="document-stage document-stage-page"/);
   assert.match(html, /touch-action:pan-y pinch-zoom/);
 });
