@@ -856,3 +856,6 @@ button { cursor: pointer; }
 .document-expand { padding: 0 10px; }
 .document-status { padding: 3px 10px; }
 .document-pagination button { min-height: 30px; height: 30px; min-width: 64px; padding-block: 0; }
+/* 위 도구 막대 없앰: 목록·가로/세로는 아래 막대에 */
+.document-status .document-back { min-height: 30px; height: 30px; padding: 0 8px; gap: 4px; font-size: .875rem; color: var(--shell-ink); }
+.document-status .document-orientation button { min-height: 26px; height: 26px; min-width: 44px; padding-block: 0; font-size: .8125rem; }

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowLeft, ChevronLeft, ChevronRight, Maximize2, Minimize2, ZoomIn, ZoomOut } from 'lucide-react';
+import { ArrowLeft, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from './ui/button';
 import { getImageVariant, imageFitRatios, imageSwipeDirection } from '../imageNavigation';
 import type { ImageOrientation, PriceImage } from '../priceFiles';
@@ -41,7 +41,7 @@ export function ImageDocumentViewer({ name, src: defaultSource, variants, index,
   const [large, setLarge] = useState(false);
   const [controlsVisible, setControlsVisible] = useState(false);
   const [mode, setMode] = useState<'width' | 'page' | 'manual'>('page');
-  const [zoom, setZoom] = useState(1);
+  const [zoom] = useState(1);
   const [loadedImage, setLoadedImage] = useState({ src: '', width: 1334, height: 1888 });
   const natural = loadedImage.src === src ? loadedImage : { width: 1334, height: 1888 };
   const [viewport, setViewport] = useState({ width: 640, height: 540 });
@@ -112,18 +112,9 @@ export function ImageDocumentViewer({ name, src: defaultSource, variants, index,
     if (next >= 0 && next < count) onNavigate(next);
   };
   const canSwipe = count > 1 && ratio <= widthRatio + 0.001;
-  const changeZoom = (factor: number) => {
-    setZoom(Math.max(0.1, Math.min(3, ratio * factor)));
-    setMode('manual');
-  };
   const fit = (next: 'width' | 'page') => {
     setMode(next);
     stage.current?.scrollTo({ left: 0, top: 0 });
-  };
-  const toggleFullscreen = () => {
-    fit('page');
-    setControlsVisible(false);
-    setLarge(!large);
   };
 
   const content = <div
@@ -147,23 +138,6 @@ export function ImageDocumentViewer({ name, src: defaultSource, variants, index,
       }
     }}
   >
-    <div className="document-toolbar" hidden={large && !controlsVisible}>
-      <Button variant="ghost" size="sm" onClick={() => { setLarge(false); onBack(); }} aria-label="파일 목록으로 돌아가기">
-        <ArrowLeft size={16} /> 목록
-      </Button>
-      <span className="document-title">{name}</span>
-      {variants && <ImageOrientationControl variants={variants} orientation={orientation} onChange={value => { setPreferredOrientation(value); fit('page'); }} />}
-      <div className="document-actions">
-        <Button variant="ghost" size="icon" onClick={() => changeZoom(1 / 1.25)} aria-label="축소" disabled={ratio <= 0.1}><ZoomOut size={18} /></Button>
-        <output aria-label="확대 비율">{Math.round(ratio * 100)}%</output>
-        <Button variant="ghost" size="icon" onClick={() => changeZoom(1.25)} aria-label="확대" disabled={ratio >= 3}><ZoomIn size={18} /></Button>
-        <Button variant="ghost" size="sm" onClick={() => fit('width')} aria-pressed={mode === 'width'}>너비 맞춤</Button>
-        <Button variant="ghost" size="sm" onClick={() => fit('page')} aria-pressed={mode === 'page'}>한 장 보기</Button>
-        <button ref={expandButton} className="document-expand" onClick={toggleFullscreen}>
-          {large ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
-          {large ? '창으로 보기' : '전체화면'}
-        </button>
-      </div>
     </div>
     {large && <span className="sr-only">화면을 누르면 도구를 표시하거나 숨깁니다. 좌우로 밀어 이미지를 넘길 수 있습니다. Esc 키로 전체화면을 닫습니다.</span>}
     <div ref={stage} className={`document-stage ${mode === 'page' ? 'document-stage-page' : ''}`} tabIndex={0} aria-label="가격표 이미지 열람 영역"
@@ -216,7 +190,10 @@ export function ImageDocumentViewer({ name, src: defaultSource, variants, index,
           />
         </div>}
     </div>
-    <footer className="document-status document-gallery-status" hidden={large && !controlsVisible}><span>원본 이미지</span><ImageNavigation index={index} count={count} onNavigate={onNavigate} /></footer>
+    <footer className="document-status document-gallery-status" hidden={large && !controlsVisible}>
+      <Button variant="ghost" size="sm" className="document-back" onClick={() => { setLarge(false); onBack(); }} aria-label="파일 목록으로 돌아가기"><ArrowLeft size={16} /> 목록</Button>
+      {variants && <ImageOrientationControl variants={variants} orientation={orientation} onChange={value => { setPreferredOrientation(value); fit('page'); }} />}
+      <ImageNavigation index={index} count={count} onNavigate={onNavigate} /></footer>
   </div>;
 
   return large ? createPortal(content, document.body) : content;
