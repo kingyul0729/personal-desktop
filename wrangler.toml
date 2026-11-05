@@ -1,0 +1,26 @@
+# dauril.com 배포용 (Cloudflare Workers Builds). 원래 OpenAI 호스팅용 빌드(npm run build)와는 별개.
+# 빌드 명령: npm run build:cf   배포 명령: npx wrangler deploy
+name = "dauril-desktop"
+main = "cloudflare/worker.js"
+compatibility_date = "2025-10-01"
+
+[assets]
+directory = "dist/client"
+binding = "ASSETS"
+run_worker_first = true      # 모든 요청을 Worker가 먼저 받아 로그인 확인
+not_found_handling = "none"
+html_handling = "none"
+
+# 동의서·환불정산 시스템과 같은 D1 → 같은 직원 계정으로 로그인
+[[d1_databases]]
+binding = "DB"
+database_name = "dauril-consent"
+database_id = "f1b8e866-d05a-4d78-9873-5ace007aa152"
+
+# 파일(가격표·첨부 이미지) 저장: R2를 켜면 아래 주석을 풀어 연결. 없으면 D1에 저장됨.
+# [[r2_buckets]]
+# binding = "BUCKET"
+# bucket_name = "dauril-files"
+
+[observability]
+enabled = true

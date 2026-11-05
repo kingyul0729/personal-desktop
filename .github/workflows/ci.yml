@@ -18,3 +18,4 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run build
+      - run: npm run build:cf   # dauril.com(Cloudflare) 빌드 확인

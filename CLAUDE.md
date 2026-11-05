@@ -23,3 +23,10 @@ Web desktop (React 18 + Vite, Cloudflare Worker in `worker/`). Programs open as 
 - The calculation formulas in `priceGuide.ts` and `prepaid.ts` are confirmed by the clinic. Do not change them; report any difference first.
 - Input in 만 원, settlement in whole won. 만 원 amounts show up to 2 decimals (prepaid keeps up to 4 so chart text stays exact); final payments are shown in won.
 - Calculator state lives in `PriceCalculator`; minimizing only hides the window, so input survives until the window is closed.
+
+## dauril.com 배포 (브랜치 `dauril`, Cloudflare Workers `dauril-desktop`)
+- `cloudflare/worker.js`가 원래 앱(`worker/index.js`) 앞에서 직원 로그인을 처리하고 `oai-authenticated-user-*` 헤더를 서버에서 채운다. 브라우저가 보낸 `oai-*` 헤더는 버린다.
+- D1은 동의서·환불정산 시스템(`dachaeum-consent`, consent.dauril.com)과 같은 DB를 쓴다. `users`·`kv`(session_secret) 공유 → 같은 계정, 쿠키 `dc_session`(Domain=dauril.com)으로 한 번 로그인.
+- DB 표는 `drizzle/*.sql`을 `cloudflare/gen-migrations.mjs`가 `cloudflare/migrations.js`로 묶고, Worker가 처음 요청 때 `desktop_migrations`에 기록하며 1회씩 적용한다. 새 마이그레이션을 추가하면 `npm run build:cf`가 다시 묶는다.
+- 파일 저장: R2(`BUCKET`)가 연결돼 있으면 R2, 없으면 D1 `desktop_blobs`에 900KB 조각으로 저장.
+- 빌드 `npm run build:cf`, 배포 `npx wrangler deploy` (루트 `wrangler.toml`). 기존 `npm run build`(OpenAI 호스팅용)는 그대로 둔다.

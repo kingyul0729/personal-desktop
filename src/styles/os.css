@@ -818,3 +818,7 @@ button { cursor: pointer; }
 .finder-status input[type="range"] { -webkit-appearance: none; appearance: none; height: 4px; border-radius: 2px; background: #d3d3d7; }
 .finder-status input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: #fff; border: 1px solid #b5b5ba; box-shadow: 0 1px 2px #0000001f; }
 .finder-status input[type="range"]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 50%; background: #fff; border: 1px solid #b5b5ba; }
+
+/* dauril.com: 보안 설정 탭의 로그아웃 */
+.settings-logout { display: inline-flex; align-items: center; height: 36px; padding: 0 14px; border: 1px solid #dce0e5; border-radius: 9px; color: #444a52; text-decoration: none; font-size: 13px; background: #fff; }
+.settings-logout:hover { background: #f6f7f9; }

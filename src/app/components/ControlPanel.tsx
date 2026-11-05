@@ -224,6 +224,7 @@ function SecuritySettings() {
     if (await feedback.run(() => act(body), done)) reset();
   };
   return <>
+    <div className="settings-row"><a className="settings-logout" href="/auth/signout" target="_top">로그아웃</a></div>
     <label className="settings-form">잠글 파일·폴더<select value={selected?.id ?? ''} onChange={event => { setSecurityId(event.target.value || null); reset(); }}>
       <option value="">선택해 주세요</option>
       {data.files.map(file => <option key={file.id} value={file.id}>{parentChain(data.files, file.id).map(item => item.name).join(' / ')}{file.locked ? ' (잠금)' : ''}</option>)}

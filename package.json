@@ -7,7 +7,8 @@
     "dev": "vite --host 0.0.0.0",
     "build": "node scripts/build-worker.mjs",
     "test": "node --test tests/*.test.mjs",
-    "db:generate": "drizzle-kit generate"
+    "db:generate": "drizzle-kit generate",
+    "build:cf": "node cloudflare/gen-migrations.mjs && node node_modules/vite/bin/vite.js build"
   },
   "dependencies": {
     "drizzle-orm": "^0.45.2",
