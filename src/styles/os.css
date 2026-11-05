@@ -847,3 +847,12 @@ button { cursor: pointer; }
 .pp-collected-details[open] summary { margin-bottom: 8px; }
 .pc-vat-details { padding: 12px 16px; }
 .pc-vat-details[open] > .pc-vat-reference { margin-top: 10px; box-shadow: none; border: 0; padding: 0; }
+
+/* 가격표 보기: 위·아래 도구 막대를 얇게 (버튼 높이 44 → 32px) */
+.document-toolbar { padding: 4px 8px; gap: 4px; }
+.document-toolbar button { min-height: 32px; height: 32px; padding-block: 0; }
+.document-orientation { padding: 2px; gap: 2px; }
+.document-orientation button { min-height: 28px; height: 28px; min-width: 46px; }
+.document-expand { padding: 0 10px; }
+.document-status { padding: 3px 10px; }
+.document-pagination button { min-height: 30px; height: 30px; min-width: 64px; padding-block: 0; }
