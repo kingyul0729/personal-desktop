@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, BookOpen, CalendarDays, Check, ChevronLeft, ChevronRight, Download, FileText, FolderOpen, Heart, ImagePlus, LayoutGrid, Layers, LockKeyhole, Pencil, Plus, Search, Star, Trash2, Upload, X } from 'lucide-react';
+import { ArrowLeft, BookOpen, CalendarDays, Check, ChevronLeft, ChevronRight, Download, FileText, FolderOpen, ImagePlus, LayoutGrid, Layers, LockKeyhole, Pencil, Plus, Search, Star, Trash2, Upload, X } from 'lucide-react';
 import '../../styles/study.css';
 import { StudyNoteText } from './StudyNoteText';
 
@@ -188,7 +188,7 @@ export function StudyArchive({ onDirtyChange }: { onDirtyChange?: (dirty: boolea
     </aside>
     <main className="study-main">
       {(!reading || editor) && <header className="study-heading">
-        <div><p>MY STUDY ARCHIVE</p><h1>{editor ? editor.version ? '공부 기록 수정' : '새 공부 기록' : heading}</h1><span>{editor ? '자료와 함께 배운 내용을 남겨 보세요.' : '이미지와 PDF, 나의 메모를 한곳에 모아두세요.'}</span></div>
+        <div><h1>{editor ? editor.version ? '공부 기록 수정' : '새 공부 기록' : heading}</h1><span>{editor ? '자료와 함께 배운 내용을 남겨 보세요.' : '이미지와 PDF, 나의 메모를 한곳에 모아두세요.'}</span></div>
         {!editor && <button className="study-primary" onClick={() => open()} disabled={!ready || !authenticated}><Plus size={18} />기록 추가</button>}
       </header>}
       {error && <div className="study-alert" role="alert">{error}<button onClick={() => void load()} disabled={busy}>목록 새로고침</button></div>}
@@ -264,7 +264,7 @@ export function StudyArchive({ onDirtyChange }: { onDirtyChange?: (dirty: boolea
           })}</div> : <div className="study-empty"><img src="/icons/pink-folder-ribbon.png" alt="" /><h2>{query ? '검색한 기록이 없어요' : filter === 'favorite' ? '다시 보고 싶은 기록을 모아보세요' : filter === 'trash' ? '삭제한 기록이 없어요' : '오늘 배운 것을 첫 기록으로'}</h2><p>{query ? '다른 제목이나 태그로 검색해 보세요.' : filter === 'favorite' ? '기록의 별을 누르면 이곳에서 모아볼 수 있어요.' : filter === 'trash' ? '삭제한 공부 기록은 여기에서 복원할 수 있어요.' : '공부한 이미지·PDF를 올리고\n나만의 메모를 함께 남겨보세요.'}</p>{filter === 'all' && !query && <button className="study-primary" onClick={() => open()}><Plus size={17} />첫 기록 남기기</button>}</div>}
         </div>
       </>}
-      <footer className="study-footer"><Heart size={12} /><span>조금씩 쌓이는 나의 공부 기록</span><span>{authenticated ? '계정에 저장' : '로그인 후 이용'}</span></footer>
+      <footer className="study-footer"><span>조금씩 쌓이는 나의 공부 기록</span><span>{authenticated ? '계정에 저장' : '로그인 후 이용'}</span></footer>
     </main>
     {removing && <div className="study-modal-backdrop"><div className="study-modal" role="dialog" aria-modal="true" aria-labelledby="study-delete-title"><h2 id="study-delete-title">기록을 삭제할까요?</h2><p>‘{removing.title}’ 기록과 첨부 자료를<br />삭제한 기록으로 옮깁니다. 다시 복원할 수 있어요.</p>{error && <p role="alert">{error}</p>}<div><button onClick={() => setRemoving(null)} disabled={busy}>취소</button><button className="study-primary" onClick={() => void mutate(removing, 'trash')} disabled={busy}>{busy ? '이동 중…' : '삭제한 기록으로 이동'}</button></div></div></div>}
     {preview && <div className="study-preview" role="dialog" aria-modal="true" aria-label={preview.name} onKeyDown={event => { if (event.key === 'Escape') setPreview(null); }}><header><strong>{preview.name}</strong><a href={`${preview.url}?download=1`} target="_blank" rel="noopener noreferrer"><Download size={18} />다운로드</a><button onClick={() => setPreview(null)} aria-label="미리보기 닫기"><X size={22} /></button></header>{preview.mime.startsWith('image/') ? <img src={preview.url} alt={preview.name} /> : <div className="study-pdf"><a href={preview.url} target="_blank" rel="noopener noreferrer">PDF가 보이지 않으면 새 창에서 열기</a><iframe src={preview.url} title={preview.name} /></div>}</div>}

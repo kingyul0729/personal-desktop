@@ -859,3 +859,51 @@ button { cursor: pointer; }
 /* 위 도구 막대 없앰: 목록·가로/세로는 아래 막대에 */
 .document-status .document-back { min-height: 30px; height: 30px; padding: 0 8px; gap: 4px; font-size: .875rem; color: var(--shell-ink); }
 .document-status .document-orientation button { min-height: 26px; height: 26px; min-width: 44px; padding-block: 0; font-size: .8125rem; }
+
+/* ── 깔끔한 정리 (2026-11-06) ─────────────────────────────────────────────
+   기본 글씨체는 고딕, 손글씨체는 환경설정에서 고를 때만. 반짝이는 그라데이션·하트·폴더 귀·번호 장식을 걷어 낸다. */
+:root, :root[data-font="gothic"] { --desktop-font: Pretendard, -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR"; }
+:root[data-font="beomseok-neo"] { --desktop-font: "PD Beomseok Neo"; }
+body { -webkit-font-smoothing: antialiased; letter-spacing: -.005em; }
+
+/* 창·작업표시줄: 평평하게 */
+.web-os { --shell-raised: #ffffff; }
+.os-window { border-radius: 10px; border-color: #d4d6db; }
+.window-titlebar, .price-files-window .window-titlebar { background: #f6f7f8; box-shadow: inset 0 -1px 0 #e3e5e8; }
+.start-button { background: #fff; box-shadow: inset 0 0 0 1px #d4d6db; }
+.taskbar-clock { font-variant-numeric: tabular-nums; }
+
+/* 바탕화면 탐색기: 이름 앞 01·02 번호 없앰 */
+.finder-grid .desktop-icon:not(.is-renaming) > span::before { content: none; }
+
+/* 가격표 보관함: 겹친 폴더 탭 → 한 줄 탭, 분홍빛 배경 → 흰색 */
+.pf-navigation { background: #f6f7f8; border-bottom: 1px solid #e3e5e8; padding: 8px 12px; }
+.pf-address { border: 1px solid #d4d8de; border-radius: 8px; background: #fff; height: 34px; padding: 6px 12px; }
+.pf-content, .price-file-manager { background: #fff; }
+.pf-tools { padding: 12px 20px 4px; }
+.pf-tools-actions button, .pf-tools-actions a { background: #fff; border-color: #d4d8de; color: #4a525d; border-radius: 8px; }
+.pf-folder-tabs { display: flex; flex-wrap: nowrap; gap: 4px; padding: 0; overflow-x: auto; border-bottom: 1px solid #e3e5e8; scrollbar-width: none; }
+.pf-folder-tab, .pf-folder-tab[aria-pressed="true"], .pf-folder-tab:hover:not([aria-pressed="true"]) { transform: none; box-shadow: none; }
+.pf-folder-tab { display: flex; align-items: baseline; gap: 6px; flex: 0 0 auto; min-height: 44px; margin: 0 0 -1px; padding: 10px 14px; border-radius: 0; background: transparent; border-bottom: 2px solid transparent; color: #6b7380; font-weight: 500; }
+.pf-folder-tab::before, .pf-tab-no, .pf-sheet-no { display: none; }
+.pf-folder-tab:hover:not([aria-pressed="true"]) { color: #2f3a48; background: transparent; }
+.pf-folder-tab[aria-pressed="true"] { color: #1f2a37; border-bottom-color: #4a6c8f; font-weight: 600; }
+.pf-folder-tab strong { font-size: 15px; }
+.pf-folder-tab small { color: #9aa1ab; }
+.pf-sheet, .pf-search-sheet { padding: 20px 0 8px; border-radius: 0; background: transparent; box-shadow: none; animation: none; }
+.pf-sheet-head { margin-bottom: 14px; align-items: baseline; }
+.pf-sheet-head h2 { font-size: 22px; font-weight: 700; color: #1f2a37; }
+.pf-sheet-tools button { background: #fff; border-color: #d4d8de; }
+.pf-price-row { border: 1px solid #e3e5e8; box-shadow: none; }
+.pf-price-row:hover { border-color: #c9ced6; }
+.pf-price-text strong { color: #1f2a37; }
+
+/* 알림·불러오기: 하트 대신 점 하나 */
+.desktop-notice-heart, .loading-box-heart { display: none; }
+.desktop-notice::before { content: ''; flex: 0 0 8px; width: 8px; height: 8px; border-radius: 50%; background: #4a6c8f; }
+.desktop-notice { border: 1px solid #d4d8de; border-radius: 10px; background: #fff; box-shadow: 0 8px 24px #0000001f; color: #1f2a37; font-weight: 500; }
+.desktop-notice button { border: 0; background: transparent; color: #6b7380; }
+.desktop-notice button:hover { background: #f1f2f4; }
+.loading-box { grid-template-columns: 1fr; border: 1px solid #d4d8de; border-radius: 10px; background: #fff; box-shadow: none; color: #4a525d; font-weight: 500; }
+.loading-box-track { height: 4px; border: 0; background: #e6e9ed; }
+.loading-box-track div { background: #4a6c8f; }

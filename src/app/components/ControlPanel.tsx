@@ -10,7 +10,7 @@ import { InlineRename } from './InlineRename';
 import { DEFAULT_FONT, FONTS } from '../fonts';
 
 const TABS: [SettingsTab, string][] = [['wallpaper', '배경화면'], ['font', '글씨체'], ['desktop', '바탕화면'], ['files', '파일 설정'], ['security', '보안 설정']];
-const DEFAULT_WALLPAPER = '/wallpapers/pink-cloud-grid.png';
+const DEFAULT_WALLPAPER = '/wallpapers/plain-gray.svg';
 
 export function ControlPanel() {
   const { data, loaded, settingsTab, setSettingsTab } = useDesktop();

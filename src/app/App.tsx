@@ -3,7 +3,6 @@ import {
   Calculator,
   FileText,
   FolderOpen,
-  Heart,
   Layers,
   Settings,
   BookOpen,
@@ -183,7 +182,7 @@ function DesktopShell({ desktop, dispatch }: { desktop: typeof initialDesktop; d
         onClose={() => { if (!workDirty || window.confirm('저장하지 않은 업무 자료가 있습니다. 창을 닫을까요?')) dispatch({ type: 'close', id: 'workLibrary' }); }}>
         <WorkLibrary onDirtyChange={setWorkDirty} />
       </Window>
-      <Window title="가격표 보관함" className="price-files-window" icon={<Heart size={22} />} defaultPosition={{ x: 240, y: 24 }} defaultSize={{ width: 920, height: 760 }} {...shared('fileExplorer')}>
+      <Window title="가격표 보관함" className="price-files-window" icon={<FolderOpen size={20} />} defaultPosition={{ x: 240, y: 24 }} defaultSize={{ width: 920, height: 760 }} {...shared('fileExplorer')}>
         <FileExplorer />
       </Window>
       <Window title="환경설정" className="settings-window" icon={<Settings size={18} />} defaultPosition={{ x: 390, y: 190 }} defaultSize={{ width: 720, height: 500 }} {...shared('controlPanel')}>
