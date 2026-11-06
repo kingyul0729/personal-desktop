@@ -1092,3 +1092,4 @@ body { -webkit-font-smoothing: antialiased; letter-spacing: -.005em; }
 }
 .finder-grid > button.desktop-icon { display: flex; flex-direction: column; align-items: center; cursor: pointer; }
 .finder-grid > button.desktop-icon > span { text-align: center; font-size: 15px; }
+.desktop-folder-art .tone-folder { position: absolute; inset: 0; width: 72px; height: 54px; }
