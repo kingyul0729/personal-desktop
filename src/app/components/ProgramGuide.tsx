@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
-import { Columns3, Expand, FolderOpen, LayoutGrid, Shrink } from 'lucide-react';
+import { Columns3, Expand, FolderOpen, LayoutGrid, Microscope, Shrink } from 'lucide-react';
+import { TreatmentMethod } from './TreatmentMethod';
 import { FinderMain, FinderPath } from './FinderFrame';
 import { ToneDot, ToneFolder } from './ToneFolder';
 import { findProgram, guideCategories, sessionCells, treatments, type GuideProgram } from '../programGuide';
@@ -7,7 +8,7 @@ import { formatWonAmount } from '../prepaid';
 import { readWon } from '../koreanAmount';
 
 // 상담 중 고객에게 보여 주는 프로그램 안내. 카테고리 폴더 → 프로그램 목록 → 한 화면 브리핑 / 한눈에 비교.
-type View = { kind: 'root' } | { kind: 'category'; id: string } | { kind: 'program'; id: string } | { kind: 'compare'; id: string };
+type View = { kind: 'root' } | { kind: 'category'; id: string } | { kind: 'program'; id: string } | { kind: 'compare'; id: string } | { kind: 'method'; id: string };
 
 const Money = ({ won }: { won: number }) => <span className="pg-money"><b>{formatWonAmount(won)}</b><em>{readWon(won)}</em></span>;
 
@@ -86,29 +87,36 @@ export function ProgramGuide() {
     else setFull(!full); // 전체화면을 못 쓰는 브라우저: 메뉴만 가린다
   };
 
-  const category = view.kind === 'category' || view.kind === 'compare' ? guideCategories.find(c => c.id === view.id) : view.kind === 'program' ? findProgram(view.id)?.category : undefined;
+  const category = view.kind === 'category' || view.kind === 'compare' || view.kind === 'method' ? guideCategories.find(c => c.id === view.id) : view.kind === 'program' ? findProgram(view.id)?.category : undefined;
   const program = view.kind === 'program' ? findProgram(view.id)?.program : undefined;
-  const title = program?.name ?? (view.kind === 'compare' ? `${category?.name} 비교` : category?.name ?? '프로그램 안내');
+  const title = program?.name ?? (view.kind === 'compare' ? `${category?.name} 비교` : view.kind === 'method' ? `${category?.name} 치료 방법` : category?.name ?? '프로그램 안내');
   const parts = [{ icon: <FolderOpen size={14} strokeWidth={1.7} />, label: '프로그램 안내', onClick: view.kind !== 'root' ? () => go({ kind: 'root' }) : undefined }];
   if (category) parts.push({ icon: <ToneDot name={category.name} />, label: category.name, onClick: view.kind !== 'category' ? () => go({ kind: 'category', id: category.id }) : undefined });
   if (program) parts.push({ icon: <LayoutGrid size={14} strokeWidth={1.7} />, label: program.name, onClick: undefined });
+  if (view.kind === 'method') parts.push({ icon: <Microscope size={14} strokeWidth={1.7} />, label: '치료 방법', onClick: undefined });
   const count = view.kind === 'root' ? guideCategories.length : category?.programs.length;
 
   const tools = <>
-    {category && view.kind !== 'compare' && <button type="button" title="한눈에 비교" aria-label="한눈에 비교" onClick={() => go({ kind: 'compare', id: category.id })}><Columns3 size={19} strokeWidth={1.6} /></button>}
+    {category?.id === 'pigment' && view.kind !== 'method' && <button type="button" title="치료 방법" aria-label="치료 방법" onClick={() => go({ kind: 'method', id: category.id })}><Microscope size={19} strokeWidth={1.6} /></button>}
+    {category && view.kind !== 'compare' && view.kind !== 'method' && <button type="button" title="한눈에 비교" aria-label="한눈에 비교" onClick={() => go({ kind: 'compare', id: category.id })}><Columns3 size={19} strokeWidth={1.6} /></button>}
     <button type="button" title={full ? '작게 보기' : '크게 보기'} aria-label={full ? '작게 보기' : '크게 보기'} onClick={toggleFull}>{full ? <Shrink size={19} strokeWidth={1.6} /> : <Expand size={19} strokeWidth={1.6} />}</button>
   </>;
 
   return <div ref={root} className={`program-guide${full ? ' is-full' : ''}`}>
     <FinderMain title={title} tools={tools} path={<FinderPath parts={parts} />}
       onBack={history.at > 0 ? () => step(-1) : undefined} onForward={history.at < history.list.length - 1 ? () => step(1) : undefined}
-      status={view.kind === 'program' ? '' : `${count ?? 0}개 항목`}>
+      status={view.kind === 'program' || view.kind === 'method' ? '' : `${count ?? 0}개 항목`}>
       {view.kind === 'root' && <div className="finder-grid" style={{ ['--finder-scale' as string]: 1 }}>
         {guideCategories.map(c => <button key={c.id} type="button" className="desktop-icon" onClick={() => go({ kind: 'category', id: c.id })}>
           <div className="desktop-folder-art"><ToneFolder /></div><span><ToneDot name={c.name} />{c.name}</span>
         </button>)}
       </div>}
       {view.kind === 'category' && category && <div className="pg-list">
+        {category.id === 'pigment' && <button type="button" className="pg-card pg-method-card" onClick={() => go({ kind: 'method', id: category.id })}>
+          <div className="pg-card-head"><Microscope size={18} strokeWidth={1.6} /><b>색소 치료 방법</b></div>
+          <p>색소가 피부 어디에 있는지, 레이저가 어떻게 지우는지, 장비마다 닿는 깊이를 그림으로 보여 줘요.</p>
+          <div className="pg-card-foot"><span>그림 설명 4단계</span><span>보기 ›</span></div>
+        </button>}
         {category.programs.map(p => <button key={p.id} type="button" className="pg-card" onClick={() => go({ kind: 'program', id: p.id })}>
           <div className="pg-card-head"><b>{p.name}</b>{p.tag && <span className="pg-tag">{p.tag}</span>}</div>
           <p>{p.summary}</p>
@@ -118,6 +126,7 @@ export function ProgramGuide() {
       </div>}
       {view.kind === 'program' && program && category && <Briefing program={program} category={category.name} />}
       {view.kind === 'compare' && category && <Compare programs={category.programs} category={category.name} />}
+      {view.kind === 'method' && <TreatmentMethod />}
     </FinderMain>
   </div>;
 }
