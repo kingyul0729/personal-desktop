@@ -1,3 +1,4 @@
+import { SavingMark } from './Feedback';
 import { useEffect, useMemo, useRef, useState, type PointerEvent } from 'react';
 import { ArrowLeft, ChevronLeft, ChevronRight, FileText, GalleryHorizontal, ImagePlus, List, Pencil, Plus, Search, Trash2, Upload, X } from 'lucide-react';
 import '../../styles/work.css';
@@ -179,7 +180,7 @@ export function WorkLibrary({ onDirtyChange }: { onDirtyChange?: (dirty: boolean
           {files.map((file, index) => <li key={`${file.name}-${index}`}><ImagePlus size={16} /><span>{file.name}<small>{sizeLabel(file.size)} · 저장 시 첨부</small></span><button type="button" aria-label={`${file.name} 선택 취소`} onClick={() => setFiles(list => list.filter((_, i) => i !== index))}><X size={15} /></button></li>)}
         </ul>}
       </fieldset>
-      <footer className="wl-editor-actions"><button type="button" onClick={() => leave(() => {})} disabled={busy}>취소</button><button type="submit" className="wl-primary" disabled={busy}>{busy ? '저장 중…' : '저장'}</button></footer>
+      <footer className="wl-editor-actions"><button type="button" onClick={() => leave(() => {})} disabled={busy}>취소</button><button type="submit" className="wl-primary" disabled={busy}>{busy ? <><SavingMark />저장 중…</> : '저장'}</button></footer>
     </form>
     : reading ? <article className="wl-reader">
       <div className="wl-reader-bar">
@@ -245,7 +246,7 @@ export function WorkLibrary({ onDirtyChange }: { onDirtyChange?: (dirty: boolean
 
     {removing && <div className="wl-modal-backdrop"><div className="wl-modal" role="dialog" aria-modal="true" aria-labelledby="wl-remove-title">
       <h2 id="wl-remove-title">자료를 삭제할까요?</h2><p>‘{removing.title}’을 삭제한 자료로 옮깁니다. 다시 복원할 수 있습니다.</p>
-      <footer><button type="button" onClick={() => setRemoving(null)} disabled={busy}>취소</button><button type="button" className="wl-primary" onClick={() => void mutate(removing, 'trash')} disabled={busy}>{busy ? '이동 중…' : '삭제한 자료로 이동'}</button></footer>
+      <footer><button type="button" onClick={() => setRemoving(null)} disabled={busy}>취소</button><button type="button" className="wl-primary" onClick={() => void mutate(removing, 'trash')} disabled={busy}>{busy ? <><SavingMark />이동 중…</> : '삭제한 자료로 이동'}</button></footer>
     </div></div>}
     {preview && <div className="wl-preview" role="dialog" aria-modal="true" aria-label={preview.name} onClick={event => { if (event.target === event.currentTarget) setPreview(null); }}>
       <header><strong>{preview.name}</strong><button type="button" onClick={() => setPreview(null)} aria-label="미리보기 닫기"><X size={20} /></button></header>

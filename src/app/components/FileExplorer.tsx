@@ -4,7 +4,7 @@ import { FinderMain, FinderPath } from './FinderFrame';
 import { ToneFolder } from './ToneFolder';
 import { ImageDocumentViewer } from './ImageDocumentViewer';
 import { KittyDialog } from './KittyDialog';
-import { LoadingBox } from './Feedback';
+import { LoadingBox, SavingMark } from './Feedback';
 import { announceTrash, useTrashChange } from '../trash';
 import { initialPriceFiles, type PriceFiles, type PriceFolder, type PriceImage } from '../priceFiles';
 
@@ -163,7 +163,7 @@ export function FileExplorer() {
           {editor.type !== 'folder' && <label className="kitty-field">저장할 폴더<select value={folderId} onChange={event => setFolderId(event.target.value)} disabled={pending} required>{files.folders.map(folder => <option key={folder.id} value={folder.id}>{folder.name}</option>)}</select></label>}
         </>}
         {error && <p className="kitty-error" role="alert">{error}</p>}
-        <footer className="kitty-dialog-actions"><button type="button" onClick={closeEditor} disabled={pending}>취소</button><button type="submit" className="kitty-primary" disabled={pending || (editor.type !== 'delete' && !name.trim())}>{pending ? '처리 중…' : editor.type === 'delete' ? '휴지통으로 이동' : '저장'}</button></footer>
+        <footer className="kitty-dialog-actions"><button type="button" onClick={closeEditor} disabled={pending}>취소</button><button type="submit" className="kitty-primary" disabled={pending || (editor.type !== 'delete' && !name.trim())}>{pending ? <><SavingMark />처리 중…</> : editor.type === 'delete' ? '휴지통으로 이동' : '저장'}</button></footer>
       </form>
     </KittyDialog>}
   </div>;

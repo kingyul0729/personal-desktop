@@ -1093,3 +1093,17 @@ body { -webkit-font-smoothing: antialiased; letter-spacing: -.005em; }
 .finder-grid > button.desktop-icon { display: flex; flex-direction: column; align-items: center; cursor: pointer; }
 .finder-grid > button.desktop-icon > span { text-align: center; font-size: 15px; }
 .desktop-folder-art .tone-folder { position: absolute; inset: 0; width: 72px; height: 54px; }
+
+/* 아이콘 (2026-11-06 사용자가 고른 그림 기준) */
+.loading-box { grid-template-columns: auto; justify-items: center; gap: 10px; width: auto; padding: 18px 22px; }
+.loading-box span { color: #7d838b; font-size: 13px; font-weight: 500; letter-spacing: .02em; }
+.spinner { display: block; fill: #3a3d42; animation: spinner-steps 1s steps(12) infinite; }
+@keyframes spinner-steps { to { transform: rotate(360deg); } }
+.saving-mark { display: inline-block; flex-shrink: 0; margin-right: 5px; vertical-align: -3px; overflow: visible; }
+.saving-dot { fill: currentColor; }
+.saving-arc { fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; opacity: .55; transform-origin: 10px 11.5px; animation: saving-orbit 1.1s linear infinite; }
+@keyframes saving-orbit { to { transform: rotate(360deg); } }
+.download-mark { display: inline-block; flex-shrink: 0; fill: currentColor; overflow: visible; }
+a:hover > .download-mark .download-arrow, a:focus-visible > .download-mark .download-arrow, a:active > .download-mark .download-arrow { animation: download-drop .7s ease-in-out; }
+@keyframes download-drop { 0% { transform: translateY(0); } 40% { transform: translateY(3px); opacity: .6; } 41% { transform: translateY(-6px); opacity: 0; } 100% { transform: translateY(0); opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .spinner, .saving-arc, .download-mark .download-arrow { animation: none !important; } }

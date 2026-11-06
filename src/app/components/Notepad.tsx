@@ -1,3 +1,4 @@
+import { SavingMark } from './Feedback';
 import { useEffect, useRef, useState } from 'react';
 import { Save, ArrowLeft, File, Trash2 } from 'lucide-react';
 import { Button } from './ui/button';
@@ -218,7 +219,7 @@ export function Notepad() {
         {error && <p className="kitty-error" role="alert">{error}</p>}
         <footer className="kitty-dialog-actions">
           <button type="button" onClick={() => setDeleting(null)} disabled={busy}>취소</button>
-          <button type="button" className="kitty-primary" onClick={() => void remove()} disabled={busy}>{busy ? '이동 중…' : '휴지통으로 이동'}</button>
+          <button type="button" className="kitty-primary" onClick={() => void remove()} disabled={busy}>{busy ? <><SavingMark />이동 중…</> : '휴지통으로 이동'}</button>
         </footer>
       </KittyDialog>}
 
@@ -228,7 +229,7 @@ export function Notepad() {
         <footer className="kitty-dialog-actions">
           <button type="button" onClick={() => setPendingAction(null)} disabled={busy}>취소</button>
           <button type="button" onClick={() => void resolvePending(false)} disabled={busy}>저장 안 함</button>
-          <button type="button" className="kitty-primary" onClick={() => void resolvePending(true)} disabled={busy}>{busy ? '저장 중…' : '저장 후 이동'}</button>
+          <button type="button" className="kitty-primary" onClick={() => void resolvePending(true)} disabled={busy}>{busy ? <><SavingMark />저장 중…</> : '저장 후 이동'}</button>
         </footer>
       </KittyDialog>}
     </div>
