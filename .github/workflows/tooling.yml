@@ -2,8 +2,11 @@ name: tooling (temporary)
 on:
   push:
     branches: [tmp-tooling]
+permissions:
+  contents: write
 jobs:
   pack:
+    if: "!contains(github.event.head_commit.message, '[packed]')"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -11,9 +14,8 @@ jobs:
         with:
           node-version: '22'
       - run: npm ci
-      - run: tar -czf nm.tgz node_modules
-      - uses: actions/upload-artifact@v4
-        with:
-          name: nm
-          path: nm.tgz
-          retention-days: 1
+      - run: |
+          mkdir -p pack && tar -czf - node_modules | split -b 45m - pack/nm.tgz.part-
+          ls -la pack
+          git config user.name ci && git config user.email ci@example.invalid
+          git add -f pack && git commit -m "[packed] node_modules" && git push
