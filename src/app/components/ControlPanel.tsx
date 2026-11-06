@@ -17,7 +17,6 @@ export function ControlPanel() {
   const { data, loaded, settingsTab: chosen, setSettingsTab } = useDesktop();
   const settingsTab = TABS.some(([tab]) => tab === chosen) ? chosen : 'font';
   return <div className="settings">
-    <h1 className="settings-title">환경설정</h1>
     <nav className="settings-nav" role="tablist" aria-label="환경설정 메뉴">
       {TABS.map(([tab, label]) => <button key={tab} type="button" role="tab" id={`settings-tab-${tab}`} aria-selected={settingsTab === tab} aria-controls="settings-panel" onClick={() => setSettingsTab(tab)}>{label}</button>)}
     </nav>

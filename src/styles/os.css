@@ -1045,3 +1045,50 @@ body { -webkit-font-smoothing: antialiased; letter-spacing: -.005em; }
 .kitty-dialog-actions .kitty-primary { outline: 0; background: #2d3136; border-color: #2d3136; color: #fff; }
 .kitty-question { font-size: 15px; }
 .app-pane-trash .app-pane-body, .app-pane-files .app-pane-body { padding: 8px 24px 24px; }
+
+/* ── Finder 창 모양 (2026-11-06 사용자가 보낸 Finder 화면 기준) ──────────────────────
+   왼쪽: 회색 점 3개 + 작은 회색 그룹 이름 + 선 아이콘 메뉴 / 오른쪽: ‹ › 제목 도구, 큰 폴더, 경로 막대, 항목 수·크기 조절 */
+.app-finder { grid-template-columns: clamp(200px, 22%, 270px) minmax(0, 1fr); font-size: 15px; }
+.app-finder .finder-sidebar { padding: 16px 10px 14px; }
+.app-finder .finder-group-bottom { margin-top: auto; }
+.app-finder .app-content { position: relative; min-width: 0; min-height: 0; background: #fff; }
+.app-finder .app-pane { position: absolute; inset: 0; display: grid; }
+.app-finder .app-pane[hidden] { display: none; }
+.app-finder .finder-main { height: 100%; min-height: 0; }
+.finder-body { position: relative; min-height: 0; overflow: auto; overscroll-behavior: contain; container: app-window / inline-size; background: #fff; }
+.finder-path-part { display: inline-flex; align-items: center; gap: 6px; }
+.finder-path-part > svg, .finder-path-part > button > svg { color: #7a8ea6; }
+.finder-path-part button { display: inline-flex; align-items: center; gap: 6px; padding: 0; border: 0; background: none; color: inherit; font: inherit; }
+.finder-path-part button:hover span { text-decoration: underline; text-underline-offset: 3px; }
+.finder-login { color: #55555b; font-size: 13px; text-decoration: none; }
+
+/* 가격표: 폴더 아이콘 격자 / 폴더 안은 같은 크기 썸네일 + 가운데 이름 */
+.app-finder .price-file-manager { height: 100%; background: #fff; }
+.app-finder .price-file-manager > .finder-main { height: 100%; }
+.finder-grid.pf-thumb-grid { grid-template-columns: repeat(auto-fill, minmax(calc(210px * var(--finder-scale)), 1fr)); gap: 30px 24px; padding: 30px 28px; }
+.finder-grid .pf-thumb { display: flex; flex-direction: column; align-items: center; min-width: 0; }
+.finder-grid .pf-thumb-open { display: flex; flex-direction: column; align-items: center; gap: 8px; width: 100%; padding: 8px; border-radius: 10px; }
+.finder-grid .pf-thumb-open:hover { background: #f2f2f4; }
+.finder-grid .pf-thumb-image { width: 100%; aspect-ratio: 4 / 3; border-color: #e3e3e6; border-radius: 4px; }
+.finder-grid .pf-thumb-name { max-width: 100%; color: #262629; font-size: 14px; text-align: center; white-space: normal; word-break: keep-all; line-height: 1.35; }
+.finder-grid .pf-thumb-folder { color: #8a8a90; font-size: 12px; }
+.finder-grid .pf-thumb-actions { justify-content: center; margin-top: 0; }
+.app-finder .pf-feedback { margin: 16px 28px 0; }
+.app-finder .pf-loading { grid-column: 1 / -1; display: grid; place-items: center; padding: 48px 0; }
+
+/* 다른 화면: 제목은 도구 막대에 있으므로 겹치는 머리말은 숨긴다 */
+.app-finder .pc-header { display: none; }
+.app-finder .pc-page { padding: 24px 28px 36px; }
+.app-finder .wl-header, .app-finder .study-heading { padding: 22px 28px 12px; }
+.app-finder .wl-kinds { margin: 0 28px; }
+.app-finder .settings-nav { margin-top: 0; padding: 14px 28px 0; }
+.app-finder .settings-body { padding: 22px 28px 36px; }
+.app-pane-trash .finder-body, .app-pane-files .finder-body { padding: 8px 18px 18px; }
+@media (max-width: 640px) {
+  .app-finder { grid-template-columns: minmax(0, 1fr); }
+  .app-finder .finder-group-bottom { margin-top: 0; }
+  .app-finder .pc-page, .app-finder .settings-body { padding: 16px; }
+  .finder-grid.pf-thumb-grid { padding: 18px 12px; gap: 18px 12px; }
+}
+.finder-grid > button.desktop-icon { display: flex; flex-direction: column; align-items: center; cursor: pointer; }
+.finder-grid > button.desktop-icon > span { text-align: center; font-size: 15px; }
