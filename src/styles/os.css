@@ -1332,3 +1332,5 @@ a:hover > .download-mark .download-arrow, a:focus-visible > .download-mark .down
 /* 영수증 이음선: 연한 작은 동그라미 점 */
 .rc-row i { height: 3px; border: 0; background: radial-gradient(circle, #cfd5dd 0.9px, transparent 1.3px) 0 50% / 7px 3px repeat-x; transform: translateY(-3px); }
 .rc-lines hr { border-top: 1px dashed #e6e9ed; }
+/* 영수증 줄 사이 구분선: 짧은 선을 넓은 간격으로 */
+.rc-lines hr { height: 1px; margin: 8px 0; border: 0; background: repeating-linear-gradient(90deg, #dde1e7 0 5px, transparent 5px 13px); }
