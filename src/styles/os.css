@@ -1244,3 +1244,18 @@ a:hover > .download-mark .download-arrow, a:focus-visible > .download-mark .down
   .app-finder .price-program .pc-calc-result .pc-result-rows > div { min-height: 36px; padding: 6px 0; }
   .app-finder .price-program .pc-big { margin-top: 10px; }
 }
+
+/* ── 금액 계산 단순하게 (2026-11-07): 꼭 필요한 것만 보이게 ─────────────────────────
+   칸 이름 + 입력칸 + 결과 띠. 칸마다 붙던 안내 줄·구역 제목·설명 문장은 숨긴다('만' 읽기는 결과에만). */
+.app-finder .price-program .pc-card > h2, .app-finder .price-program .pp-results-heading > h2 { display: none; }
+.app-finder .price-program .pp-results-heading { justify-content: flex-end; margin-bottom: 0; }
+.app-finder .price-program .pc-field:not(fieldset) > .pc-field-hint, .app-finder .price-program .pc-vat-note { display: none; }
+.app-finder .price-program fieldset > .pc-field-hint { font-size: 12px; color: #9aa0a7; }
+.app-finder .price-program .pp-rule-note { margin-top: 18px; font-size: 11.5px; color: #a7acb2; }
+.app-finder .price-program .pc-result-rows > div { border-bottom: 0; min-height: 34px; padding: 4px 0; }
+.app-finder .price-program .pc-result-rows .amt-read { display: none; }
+.app-finder .price-program .pc-big > small { display: none; }
+.app-finder .price-program .pc-big-blue > small { display: block; }
+.app-finder .price-program :is(.pc-fields, .pp-fields) { gap: 10px; }
+.app-finder .price-program .pc-vat-details { margin-top: 24px; padding-top: 12px; border-top: 0; }
+.app-finder .price-program .pc-vat-details > summary { font-size: 12.5px; color: #9aa0a7; }

@@ -27,6 +27,7 @@ Web desktop (React 18 + Vite, Cloudflare Worker in `worker/`). 앱 화면(`src/a
 - Input in 만 원, settlement in whole won. 만 원 amounts show up to 2 decimals (prepaid keeps up to 4 so chart text stays exact); final payments are shown in won.
 - 화면 모양(2026-11-07): 포인트색은 진한 남색 #3d5a80 하나(고른 버튼·받을 금액 띠). 숫자는 17~22px로 고르게, 한 숫자만 거대하게 하지 않는다. 금액 옆에는 작게 '만' 읽기(`koreanAmount.ts`의 `readWon`: 1,028,500원 → 102만 8,500원), 입력칸 아래에도 '= 원 · 만' 안내. 입력은 줄마다 이름 | 칸.
 - 입력 방식: 터치 기기는 화면 숫자 패드(`NumberPad`, 시스템 키보드 안 뜸), 컴퓨터는 자판 + Enter(다음 칸)/Shift+Enter(이전 칸). '숫자 패드' 버튼으로 켜고 끄며 기기별로 기억한다. 좁을 때(패드 켜짐)는 결과가 맨 위, 넓으면 입력 | 결과 두 칸. 스타일은 `os.css`의 '금액 계산 v3' 블록.
+- 단순하게(2026-11-07 '디자인이 너무 복잡'): 구역 제목, 칸 아래 '= 원 · 만' 줄, 부가세 설명 문장, 공급가 줄은 숨긴다. '만' 읽기는 결과 띠에만. 보이는 것은 칸 이름 + 입력칸 + 결과 띠.
 - Calculator state lives in `PriceCalculator`; the pane stays mounted when you switch menus, so input survives until the page reloads.
 
 ## dauril.com 배포 (브랜치 `dauril`, Cloudflare Workers `personal-desktop`)
