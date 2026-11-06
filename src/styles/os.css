@@ -1339,3 +1339,12 @@ a:hover > .download-mark .download-arrow, a:focus-visible > .download-mark .down
 .rc-lines hr { margin: 18px 0; background: none; border: 0; border-top: 1px dashed #e3e6ea; height: 0; }
 .rc-total { margin-top: 22px; }
 .rc-extra { margin-top: 16px; }
+/* 영수증 테두리: 위아래 톱니(찢은 종이) 가장자리, 각진 모서리, 살짝 따뜻한 종이색, 그림자는 종이 모양을 따라 */
+.receipt { border-radius: 0; background: #fffefa; box-shadow: none; padding: 34px 28px 34px;
+  -webkit-mask: conic-gradient(from 135deg at top, #0000, #000 1deg 89deg, #0000 90deg) top / 14px 51% repeat-x, conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) bottom / 14px 51% repeat-x;
+          mask: conic-gradient(from 135deg at top, #0000, #000 1deg 89deg, #0000 90deg) top / 14px 51% repeat-x, conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) bottom / 14px 51% repeat-x; }
+.receipt::after { content: none; }
+.app-finder .price-program :is(.pc-calc-result, .pp-results) { filter: drop-shadow(0 1px 1px #1f3b6614) drop-shadow(0 8px 18px #1f3b6612); }
+.rc-head { border-bottom: 0; background: repeating-linear-gradient(90deg, #2d3136 0 6px, transparent 6px 10px) bottom / 100% 1.5px no-repeat; }
+.rc-head::before { content: "다채움피부과"; position: absolute; left: 0; right: 0; top: 14px; text-align: center; color: #b3b8bf; font-size: 11px; letter-spacing: .3em; }
+.receipt { position: relative; }
