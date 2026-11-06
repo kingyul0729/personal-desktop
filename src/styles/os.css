@@ -1334,3 +1334,8 @@ a:hover > .download-mark .download-arrow, a:focus-visible > .download-mark .down
 .rc-lines hr { border-top: 1px dashed #e6e9ed; }
 /* 영수증 줄 사이 구분선: 짧은 선을 넓은 간격으로 */
 .rc-lines hr { height: 1px; margin: 8px 0; border: 0; background: repeating-linear-gradient(90deg, #dde1e7 0 5px, transparent 5px 13px); }
+/* 영수증: 점선(동그라미)이 아닌 구분선·합계 띠 위아래를 넉넉하게 */
+.rc-head { padding-bottom: 18px; margin-bottom: 16px; }
+.rc-lines hr { margin: 18px 0; background: none; border: 0; border-top: 1px dashed #e3e6ea; height: 0; }
+.rc-total { margin-top: 22px; }
+.rc-extra { margin-top: 16px; }
