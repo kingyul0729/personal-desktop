@@ -43,9 +43,8 @@ test('general amount: totals, discount and VAT follow the confirmed formula', ()
   const included = calculateGeneral(g({ normalUnit: '11', discountUnit: '9.9', count: '5', vat: 'included' }));
   assert.deepEqual([included.normalPayment, included.finalPayment, included.supply, included.vat], [550000, 495000, 450000, 45000]);
   const html = text(ui.general(g({ normalUnit: '10', discountUnit: '9', count: '5' })));
-  assert.match(html, /정상가 \(5회\) 550,000원 55만원/);
-  assert.match(html, /할인금액 − 55,000원 \( ?10% ?\)/);
-  assert.match(html, /최종 결제금액 495,000원 49만 5,000원 공급가 450,000원 \+ 부가세 45,000원/);
+  // 오른쪽 영수증: 정상가 → 할인 → 공급가·부가세 → 결제하실 금액(만 단위 읽기) → 1회당
+  assert.match(html, /정상가 \(5회\) 1회 110,000원 550,000원 할인 10% − 55,000원 공급가 450,000원 부가세 10% 45,000원 결제하실 금액 495,000원 49만 5,000원 1회당 99,000원/);
   // 입력칸 아래에도 원·만 단위로 읽어 준다
   assert.match(html, /1회 정상가 만원 = 100,000원 · 10만원/);
   assert.doesNotMatch(text(ui.general(emptyGeneralInput)), /NaN|Infinity/);
@@ -73,9 +72,11 @@ test('quick discount rates fill the discount price and a typed price updates the
 test('prepaid panel shows two big results, the no-stacking rule and no old wording', () => {
   const both = { ...emptyPrepaidInput, tier: 300, balance: '15.29', normalPrice: '154' };
   const balance = text(ui.prepaid({ ...both, mode: 'balance' }));
-  assert.match(balance, /오늘 받을 금액 1,233,100원 123만 3,100원 남은잔액 0원 잔액 0원 · 사용완료/);
+  // 영수증 줄을 더하면 합계가 된다: 1,386,000 − 152,900 = 1,233,100
+  assert.match(balance, /시술 정상가 1,540,000원 선불권 할인 10% − 154,000원 시술비 1,386,000원 기존 잔액에서 차감 − 152,900원 오늘 받을 금액 1,233,100원 123만 3,100원 남은잔액 잔액 0원 · 사용완료 0원/);
   const purchase = text(ui.prepaid({ ...both, mode: 'purchase' }));
-  assert.match(purchase, /오늘 받을 금액 3,000,000원 300만원 남은잔액 1,766,900원 176만 6,900원/);
+  // 152,900 + 3,000,000 − 1,386,000 = 1,766,900 / 오늘 결제 3,000,000
+  assert.match(purchase, /기존 잔액 152,900원 300만원권 구매 \+ 3,000,000원 시술비 차감 − 1,386,000원 남은잔액 1,766,900원 300만원권 결제 3,000,000원 오늘 받을 금액 3,000,000원 300만원/);
   for (const html of [balance, purchase]) {
     assert.match(html, /이벤트 할인, 기존 할인가, 리프팅 우대가, 재티켓팅 할인, 제모 결합할인과 중복 적용하지 않습니다/);
     assert.doesNotMatch(html, /신규 충전|충전 있음|충전 없음|NaN/);
