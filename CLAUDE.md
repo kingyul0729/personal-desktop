@@ -26,7 +26,7 @@ Web desktop (React 18 + Vite, Cloudflare Worker in `worker/`). 앱 화면(`src/a
 - The calculation formulas in `priceGuide.ts` and `prepaid.ts` are confirmed by the clinic. Do not change them; report any difference first.
 - Input in 만 원, settlement in whole won. 만 원 amounts show up to 2 decimals (prepaid keeps up to 4 so chart text stays exact); final payments are shown in won.
 - 화면 모양(2026-11-07 v4): 왼쪽 입력(칸 이름 위·칸 아래, 넉넉한 간격, 선택은 글자 길이만한 알약 버튼), 오른쪽 영수증(`Receipt`: 줄마다 이름 ……… 금액, 점선 구분, 맨 아래 연파랑 합계 띠 + '만' 읽기). 포인트는 맑은 파랑 #2f6fd6 하나. 숫자는 15~24px로 고르게, 한 숫자만 거대하게 하지 않는다. '만' 읽기는 `koreanAmount.ts`의 `readWon`(1,028,500원 → 102만 8,500원). 가로로 꽉 찬 긴 탭은 쓰지 않는다. 스타일은 `os.css`의 '금액 계산 v4' 블록(앞 v3 블록 위에 덮어씀).
-- 영수증 줄은 더하면 합계가 되게 쓴다: 일반 = 정상가 − 할인 → 공급가·부가세 → 결제하실 금액(1회당). 선불권 ① 시술비 − 기존 잔액 차감 − 예약금 = 오늘 받을 금액, ② 기존 잔액 + 구매 − 시술비 차감 = 남은잔액, 구매 − 예약금 = 오늘 받을 금액.
+- 영수증은 간결하게(2026-11-07 '꼭 다 써야 하나'): 일반 = 정상가(N회) · 할인 → 결제하실 금액 → 1회당 · 부가세 포함(공급가) 한 줄. 선불권 = 시술비(정상가에서 N% 할인) → ① 기존 잔액에서 차감 / ② N만원권 결제 → 예약금 → 오늘 받을 금액 → 남은잔액 한 줄. 위아래 톱니 가장자리 종이 모양.
 - 입력 방식: 터치 기기는 화면 숫자 패드(`NumberPad`, 시스템 키보드 안 뜸), 컴퓨터는 자판 + Enter(다음 칸)/Shift+Enter(이전 칸). '숫자 패드' 버튼으로 켜고 끄며 기기별로 기억한다. 내용 폭 560px 이상이면 입력 | 영수증 나란히(아이패드 가로 + 패드도), 더 좁으면 영수증이 위.
 - Calculator state lives in `PriceCalculator`; the pane stays mounted when you switch menus, so input survives until the page reloads.
 

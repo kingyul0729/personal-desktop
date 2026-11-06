@@ -140,12 +140,12 @@ export function GeneralPanel({ input, onChange, pad }: { input: GeneralInput; on
         lines={[
           { label: `정상가${result.count > 0 ? ` (${fmt(result.count)}회)` : ''}`, won: result.normalPayment, note: result.count > 0 && result.normalPayment ? `1회 ${formatWonAmount(Math.round(result.normalPayment / result.count))}` : undefined },
           result.discountPayment !== 0 && { label: result.discountPayment < 0 ? '차액 (할인가가 높음)' : `할인 ${rateText}`, won: Math.abs(result.discountPayment), sign: result.discountPayment < 0 ? '+' : '−' },
-          'rule',
-          { label: '공급가', won: result.supply },
-          { label: '부가세 10%', won: result.vat },
         ]}
         total={{ label: '결제하실 금액', won: result.ready ? result.finalPayment : null }}
-        extra={[result.ready && result.count > 1 && { label: '1회당', won: Math.round(result.finalPayment / result.count) }]} />
+        extra={[
+          result.ready && result.count > 1 && { label: '1회당', won: Math.round(result.finalPayment / result.count) },
+          result.ready && { label: '부가세 포함', won: result.vat, note: `공급가 ${formatWonAmount(result.supply)}` },
+        ]} />
     </section>
     <details className="pc-card pc-wide pc-vat-details">
       <summary>부가세 전후 가격표 (10~100만 원)</summary>
@@ -267,25 +267,15 @@ export function PrepaidPanel({ input, onChange, method, onMethod, pad }: { input
         actions={<div className="pp-actions"><PrepaidChartCopy result={result} method={method} /></div>}
         empty={isPurchase ? '이번 시술 정상가를 입력하면 여기에 금액이 정리됩니다.' : '기존 잔액과 이번 시술 정상가를 입력하면 여기에 금액이 정리됩니다.'}
         lines={[
-          { label: '시술 정상가', won: result.normal },
-          { label: `선불권 할인 ${result.discountRate}%`, won: result.normal - result.fee, sign: '−' },
-          { label: '시술비', won: result.fee },
+          // 꼭 필요한 줄만: 시술비 → (오늘 결제 계산) → 오늘 받을 금액, 남은잔액은 아래 한 줄
+          { label: '시술비', won: result.fee, note: `${readWon(result.normal).replace(/원$/, '')}원에서 ${result.discountRate}% 할인` },
           'rule',
-          ...(isPurchase ? [
-            { label: '기존 잔액', won: result.balance },
-            { label: `${input.tier}만원권 구매`, won: result.purchase, sign: '+' as const },
-            { label: '시술비 차감', won: result.deducted, sign: '−' as const },
-            { label: '남은잔액', won: result.remaining, note: result.isUsageComplete ? '사용완료' : undefined },
-            'rule' as const,
-            { label: `${input.tier}만원권 결제`, won: result.purchase },
-          ] : [
-            { label: '기존 잔액에서 차감', won: result.deducted, sign: '−' as const },
-          ]),
+          isPurchase ? { label: `${input.tier}만원권 결제`, won: result.purchase } : { label: '기존 잔액에서 차감', won: result.deducted, sign: '−' },
           result.deposit > 0 && { label: '예약금', won: result.deposit, sign: '−' },
         ]}
         total={{ label: '오늘 받을 금액', won: result.ready ? result.today : null }}
         extra={[
-          !isPurchase && { label: '남은잔액', won: result.remaining, note: result.isUsageComplete ? '잔액 0원 · 사용완료' : `기존 ${formatWonAmount(result.balance)}에서` },
+          { label: '남은잔액', won: result.remaining, note: result.isUsageComplete ? '사용완료' : isPurchase ? '시술비 차감 후' : undefined },
           result.ready && result.receivable > 0 && { label: '미수금', won: result.receivable, note: '아직 받지 않은 금액', tone: 'warn' },
           result.ready && result.overpaid > 0 && { label: '초과 수납', won: result.overpaid, note: '받을 금액보다 더 받음', tone: 'warn' },
           result.ready && result.shortfall > 0 && { label: '시술비 부족분', won: result.shortfall, note: '따로 결제', tone: 'warn' },
