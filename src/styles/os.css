@@ -1329,3 +1329,6 @@ a:hover > .download-mark .download-arrow, a:focus-visible > .download-mark .down
 
 .app-finder .price-program.has-pad { grid-template-columns: minmax(0, 1fr) clamp(230px, 26%, 300px); }
 .app-finder .price-program.has-pad .pc-page { padding-left: 24px; padding-right: 22px; }
+/* 영수증 이음선: 연한 작은 동그라미 점 */
+.rc-row i { height: 3px; border: 0; background: radial-gradient(circle, #cfd5dd 0.9px, transparent 1.3px) 0 50% / 7px 3px repeat-x; transform: translateY(-3px); }
+.rc-lines hr { border-top: 1px dashed #e6e9ed; }
