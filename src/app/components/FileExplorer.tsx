@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Folder, FolderOpen, FolderPlus, ImagePlus, Pencil, Search, Trash2, X } from 'lucide-react';
 import { FinderMain, FinderPath } from './FinderFrame';
-import { ToneFolder } from './ToneFolder';
+import { ToneDot, ToneFolder } from './ToneFolder';
 import { ImageDocumentViewer } from './ImageDocumentViewer';
 import { KittyDialog } from './KittyDialog';
 import { LoadingBox, SavingMark } from './Feedback';
@@ -104,8 +104,8 @@ export function FileExplorer() {
     if (!files.folders.length) return loading ? <div className="pf-loading"><LoadingBox label="가격표 불러오는 중…" /></div>
       : <p className="finder-empty">{files.authenticated ? '폴더가 없습니다. 위쪽 새 폴더 버튼으로 만들어 주세요.' : '폴더가 없습니다.'}</p>;
     return files.folders.map(folder => <button key={folder.id} type="button" className="desktop-icon" onClick={() => navigate(folder.id)}>
-      <div className="desktop-folder-art"><ToneFolder name={folder.name} /></div>
-      <span>{folder.name}</span>
+      <div className="desktop-folder-art"><ToneFolder /></div>
+      <span><ToneDot name={folder.name} />{folder.name}</span>
     </button>);
   }
   function renderImages() {

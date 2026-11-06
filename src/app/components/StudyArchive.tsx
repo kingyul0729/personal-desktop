@@ -1,4 +1,5 @@
 import { DownloadMark, SavingMark } from './Feedback';
+import { ToneDot } from './ToneFolder';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, BookOpen, CalendarDays, Check, ChevronLeft, ChevronRight, FileText, FolderOpen, ImagePlus, LayoutGrid, Layers, LockKeyhole, Pencil, Plus, Search, Star, Trash2, Upload, X } from 'lucide-react';
 import '../../styles/study.css';
@@ -182,7 +183,7 @@ export function StudyArchive({ onDirtyChange }: { onDirtyChange?: (dirty: boolea
         <button className={!category && filter === 'all' ? 'selected' : ''} onClick={() => navigate('all')}><BookOpen size={17} />전체 기록<span>{active.length}</span></button>
         <button className={filter === 'favorite' ? 'selected' : ''} onClick={() => navigate('favorite')}><Star size={17} />즐겨찾기<span>{active.filter(item => item.favorite).length}</span></button>
         <p className="study-nav-label">주제별 보관함</p>
-        {folders.map(name => <button key={name} className={category === name ? 'selected' : ''} onClick={() => navigate('all', name)}><FolderOpen size={16} />{name}<span>{counts.get(name)}</span></button>)}
+        {folders.map(name => <button key={name} className={category === name ? 'selected' : ''} onClick={() => navigate('all', name)}><ToneDot name={name} />{name}<span>{counts.get(name)}</span></button>)}
         <button className={`study-trash-nav ${filter === 'trash' ? 'selected' : ''}`} onClick={() => navigate('trash')}><Trash2 size={16} />삭제한 기록<span>{records.filter(item => item.trashedAt).length}</span></button>
       </nav>
       <div className="study-private"><LockKeyhole size={14} /><span>로그인한 나만 보는<br />개인 공부 기록</span></div>
