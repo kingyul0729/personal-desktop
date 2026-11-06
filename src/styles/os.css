@@ -1111,3 +1111,62 @@ a:hover > .download-mark .download-arrow, a:focus-visible > .download-mark .down
 .tone-dot { display: inline-block; flex-shrink: 0; width: 8px; height: 8px; margin-right: 7px; border-radius: 50%; vertical-align: 1px; }
 .finder-grid > button.desktop-icon > span { display: inline-flex; align-items: center; justify-content: center; }
 .app-finder .study-sidebar .tone-dot, .study-shell .tone-dot { margin: 0 6px 0 4px; }
+
+/* ── 금액 계산: 상자를 걷어 내고 정돈된 두 칸(입력 | 결과) ─────────────────────────────
+   상자·그림자·파랑 결과칸 없이 얇은 세로선 하나로 나누고, 선택 버튼은 모두 같은 회색 트랙 + 흰 선택 칸. */
+.app-finder .price-program { --c-ink: #2d3136; --c-muted: #7d838b; --c-line: #e1e4e8; --c-track: #f1f2f4; --c-accent: #829bb2; color: var(--c-ink); }
+.app-finder .price-program .pc-page { max-width: 1080px; padding: 26px 32px 40px; }
+.app-finder .price-program .pc-mode-row { margin-bottom: 26px; }
+.app-finder .price-program :is(.pc-grid, .pp-layout) { grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); gap: 0; align-items: start; }
+.app-finder .price-program .pc-card { padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.app-finder .price-program :is(.pc-grid, .pp-layout) > .pc-card:first-child { padding-right: 36px; }
+.app-finder .price-program :is(.pc-grid, .pp-layout) > .pc-card:nth-child(2) { position: sticky; top: 0; padding-left: 36px; border-left: 1px solid var(--c-line); min-height: 100%; }
+.app-finder .price-program .pc-card h2 { margin: 0 0 18px; color: var(--c-muted); font-size: 13px; font-weight: 500; letter-spacing: 0; }
+.app-finder .price-program .pc-card h2 small { margin-left: 6px; color: #a2a7ae; font-size: 12px; font-weight: 400; }
+.app-finder .price-program :is(.pc-fields, .pp-fields) { gap: 18px 14px; }
+/* 입력칸 */
+.app-finder .price-program .pc-field { gap: 7px; color: var(--c-muted); font-size: 13px; }
+.app-finder .price-program .pc-field > div:not(.pc-toggle) { min-height: 42px; border: 1px solid var(--c-line); border-radius: 6px; background: #fff; }
+.app-finder .price-program .pc-field > div:not(.pc-toggle):focus-within { border-color: var(--c-accent); box-shadow: none; }
+.app-finder .price-program .pc-field input { padding: 9px 10px; color: var(--c-ink); font-size: 17px; text-align: right; font-variant-numeric: tabular-nums; }
+.app-finder .price-program .pc-field input::placeholder { color: #b4b8be; font-size: 14px; }
+.app-finder .price-program .pc-field b { flex-basis: 2.6rem; color: #9aa0a7; font-size: 13px; }
+.app-finder .price-program .pc-field-hint { color: #9aa0a7; font-size: 12px; }
+/* 선택 버튼: 한 가지 모양 */
+.app-finder .price-program :is(.pc-toggle, .pp-choice) { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 2px; padding: 3px; border: 0; border-radius: 8px; background: var(--c-track); overflow: visible; }
+.app-finder .price-program :is(.pc-toggle, .pp-choice) button { min-height: 34px; padding: 0 6px; border: 0; border-radius: 6px; background: transparent; box-shadow: none; color: #60666e; font-size: 13.5px; font-weight: 400; }
+.app-finder .price-program :is(.pc-toggle, .pp-choice) button:hover:not([aria-pressed="true"]) { color: var(--c-ink); background: #e8e9ec; border-color: transparent; }
+.app-finder .price-program :is(.pc-toggle button.active, .pc-toggle button[aria-pressed="true"], .pp-choice button[aria-pressed="true"]) { background: #fff; color: var(--c-ink); font-weight: 500; box-shadow: 0 0 0 1px var(--c-line); }
+.app-finder .price-program .pp-choice button small { margin-left: 3px; color: #9aa0a7; font-size: 11.5px; }
+.app-finder .price-program .pp-choice button[aria-pressed="true"] small { color: var(--c-muted); }
+.app-finder .price-program fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
+.app-finder .price-program fieldset > legend { margin-bottom: 7px; padding: 0; color: var(--c-muted); font-size: 13px; }
+.app-finder .price-program .pp-option-body { gap: 8px; }
+/* 결과 */
+.app-finder .price-program .pc-result-rows > div { min-height: 44px; padding: 10px 0; border-bottom: 1px solid #eef0f2; }
+.app-finder .price-program .pc-result-rows dt { color: var(--c-muted); font-size: 14px; }
+.app-finder .price-program .pc-result-rows dd { color: var(--c-ink); font-size: 16px; }
+.app-finder .price-program .pc-big { display: grid; justify-content: stretch; gap: 6px; margin-top: 22px; padding: 0 0 20px; border: 0; border-bottom: 1px solid #eef0f2; border-radius: 0; background: transparent; color: var(--c-ink); }
+.app-finder .price-program .pc-big:last-of-type { border-bottom: 0; }
+.app-finder .price-program .pc-big span { color: var(--c-muted); font-size: 13px; font-weight: 500; }
+.app-finder .price-program .pc-big strong { font-size: clamp(30px, 4.4vw, 40px); font-weight: 600; letter-spacing: -.02em; line-height: 1.15; }
+.app-finder .price-program .pc-big small { color: #9aa0a7; font-size: 12.5px; }
+.app-finder .price-program .pc-big-blue strong { color: #4f6a85; }
+.app-finder .price-program .pc-big-red strong { color: #b4442b; font-size: 24px; }
+.app-finder .price-program .pp-results-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 2px; }
+.app-finder .price-program .pp-results-heading h2 { margin: 0; }
+.app-finder .price-program .pp-actions button { min-height: 30px; padding: 0 10px; border: 1px solid var(--c-line); border-radius: 6px; background: #fff; color: var(--c-ink); font-size: 13px; box-shadow: none; }
+.app-finder .price-program .pp-actions button:hover { background: #f5f6f7; }
+.app-finder .price-program :is(.pp-empty, .pc-vat-note) { margin: 18px 0 0; color: #9aa0a7; font-size: 13px; }
+.app-finder .price-program .pp-warning { margin: 16px 0 0; padding: 2px 0 2px 12px; border: 0; border-left: 2px solid #c98a7c; border-radius: 0; background: transparent; color: #8a4a3c; font-size: 13px; }
+.app-finder .price-program .pp-rule-note { margin: 24px 0 0; padding: 0; border: 0; background: transparent; color: #9aa0a7; font-size: 12px; line-height: 1.6; }
+.app-finder .price-program details > summary { color: var(--c-muted); font-size: 13px; cursor: pointer; }
+.app-finder .price-program .pc-vat-details { grid-column: 1 / -1; margin-top: 32px; padding-top: 16px; border-top: 1px solid var(--c-line); }
+@media (max-width: 860px) {
+  .app-finder .price-program :is(.pc-grid, .pp-layout) { grid-template-columns: minmax(0, 1fr); }
+  .app-finder .price-program :is(.pc-grid, .pp-layout) > .pc-card:first-child { padding-right: 0; }
+  .app-finder .price-program :is(.pc-grid, .pp-layout) > .pc-card:nth-child(2) { position: static; margin-top: 28px; padding: 24px 0 0; border-left: 0; border-top: 1px solid var(--c-line); }
+  .app-finder .price-program .pc-page { padding: 20px 18px 32px; }
+}
+.app-finder .price-program .pc-field > div.pp-choice { min-height: 0; border: 0; border-radius: 8px; background: var(--c-track); overflow: visible; }
+.app-finder .price-program .pc-quick-rates { margin-top: 18px; }

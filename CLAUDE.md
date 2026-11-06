@@ -25,6 +25,7 @@ Web desktop (React 18 + Vite, Cloudflare Worker in `worker/`). 앱 화면(`src/a
 - UI: `src/app/components/PriceCalculator.tsx`. Pure logic: `priceGuide.ts`, `prepaid.ts`, `consultCalc.ts`, `calculatorInput.ts`.
 - The calculation formulas in `priceGuide.ts` and `prepaid.ts` are confirmed by the clinic. Do not change them; report any difference first.
 - Input in 만 원, settlement in whole won. 만 원 amounts show up to 2 decimals (prepaid keeps up to 4 so chart text stays exact); final payments are shown in won.
+- 화면 모양: 상자·그림자·파랑 결과칸 없이 입력 | 결과 두 칸을 얇은 세로선으로 나눈다. 선택 버튼은 모두 같은 회색 트랙 + 흰 선택 칸, 결과 금액은 크고 진한 글자(남은잔액만 청회색, 미수금·초과는 적갈색). 스타일은 `os.css`의 `.app-finder .price-program` 블록.
 - Calculator state lives in `PriceCalculator`; the pane stays mounted when you switch menus, so input survives until the page reloads.
 
 ## dauril.com 배포 (브랜치 `dauril`, Cloudflare Workers `personal-desktop`)
