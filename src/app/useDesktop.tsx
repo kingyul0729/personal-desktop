@@ -43,7 +43,7 @@ export function DesktopProvider({ openWindow, children }: { openWindow: (id: Win
   const [picker, setPicker] = useState<{ current: string | null; resolve: (icon: string | null | undefined) => void } | null>(null);
   const [menu, setMenu] = useState<{ point: { x: number; y: number }; items: ContextMenuItem[] } | null>(null);
   const [viewing, setViewing] = useState<string | null>(null);
-  const [settingsTab, setSettingsTab] = useState<SettingsTab>('wallpaper');
+  const [settingsTab, setSettingsTab] = useState<SettingsTab>('font');
   const [securityId, setSecurityId] = useState<string | null>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
   const [notice, setNotice] = useState('');

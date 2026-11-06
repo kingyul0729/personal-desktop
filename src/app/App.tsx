@@ -1,211 +1,82 @@
-import { useEffect, useLayoutEffect, useReducer, useRef, useState } from 'react';
-import {
-  Calculator,
-  FileText,
-  FolderOpen,
-  Layers,
-  Settings,
-  BookOpen,
-  Trash2,
-  Presentation,
-} from 'lucide-react';
-import { DesktopIcon } from './components/DesktopIcon';
-import { DesktopFinder } from './components/DesktopFinder';
-import { Taskbar } from './components/Taskbar';
-import { Window } from './components/Window';
+import { useEffect, useReducer, useState, type ReactNode } from 'react';
+import { X } from 'lucide-react';
 import { StudyArchive } from './components/StudyArchive';
 import { WorkLibrary } from './components/WorkLibrary';
 import { FileExplorer } from './components/FileExplorer';
 import { ControlPanel } from './components/ControlPanel';
-import { WorkCapsule } from './components/WorkCapsule';
-import { CAPSULE_WINDOW, type CapsuleLayout } from './workCapsules';
-import { CapsuleSaveDialog } from './components/CapsuleSaveDialog';
 import { Notepad } from './components/Notepad';
 import { PriceCalculator } from './components/PriceCalculator';
 import { FileWindow } from './components/FileWindow';
 import { TrashWindow } from './components/TrashWindow';
-import { EntryBadge } from './components/EntryIcon';
-import { activeWindow, desktopReducer, initialDesktop, type WindowId, type WindowRect } from './desktopState';
-import { createLongPress, desktopMenu, entryKind, iconArt, menuFor, type DesktopEntry } from './desktopModel';
+import { activeWindow, desktopReducer, initialDesktop, type WindowId } from './desktopState';
 import { DesktopProvider, useDesktop } from './useDesktop';
 import { DesktopNotice, LoadingBox } from './components/Feedback';
 
+// 앱 화면: 왼쪽 고정 메뉴 + 오른쪽 선택한 화면. 떠다니는 창·작업표시줄은 쓰지 않는다.
+// 한 번 연 화면은 숨겨 둘 뿐 닫지 않아서, 메뉴를 오가도 입력 중인 내용(계산기 등)이 남는다.
+export const SIDEBAR_GROUPS: { title: string; items: { id: WindowId; label: string }[] }[] = [
+  { title: '업무', items: [{ id: 'fileExplorer', label: '가격표' }, { id: 'priceCalculator', label: '금액 계산' }, { id: 'workLibrary', label: '업무 자료' }] },
+  { title: '개인', items: [{ id: 'terminal', label: '공부 보관함' }, { id: 'notepad', label: '메모장' }] },
+];
+const HOME: WindowId = 'fileExplorer';
+// 메뉴에 없는 화면(환경설정에서 여는 휴지통·파일)은 제목 줄과 닫기 버튼을 붙여 보여 준다.
+const SECONDARY: Partial<Record<WindowId, string>> = { trash: '휴지통', files: '파일' };
+
 export default function App() {
-  const [desktop, dispatch] = useReducer(desktopReducer, initialDesktop);
+  const [desktop, dispatch] = useReducer(desktopReducer, initialDesktop, state => desktopReducer(state, { type: 'open', id: HOME }));
   return <DesktopProvider openWindow={(id) => dispatch({ type: 'open', id })}>
-    <DesktopShell desktop={desktop} dispatch={dispatch} />
+    <AppShell desktop={desktop} dispatch={dispatch} />
   </DesktopProvider>;
 }
 
-function DesktopShell({ desktop, dispatch }: { desktop: typeof initialDesktop; dispatch: (action: Parameters<typeof desktopReducer>[1]) => void }) {
+export function AppShell({ desktop, dispatch }: { desktop: typeof initialDesktop; dispatch: (action: Parameters<typeof desktopReducer>[1]) => void }) {
   const shell = useDesktop();
-  const { data, act, notify } = shell;
-  const workareaRef = useRef<HTMLDivElement>(null);
-  const [bounds, setBounds] = useState({ width: 0, height: 0 });
-  const [currentTime, setCurrentTime] = useState('');
+  const active = activeWindow(desktop) ?? HOME;
   const [studyDirty, setStudyDirty] = useState(false);
   const [workDirty, setWorkDirty] = useState(false);
-  const active = activeWindow(desktop);
+  const open = (id: WindowId) => dispatch({ type: 'open', id });
+  // 메뉴에 없는 화면을 보고 있으면 환경설정을 선택된 것으로 보여 준다.
+  const selected = SECONDARY[active] ? 'controlPanel' : active;
 
-  useLayoutEffect(() => {
-    const element = workareaRef.current;
-    if (!element) return;
-    const measure = () => {
-      const width = element.clientWidth;
-      const height = element.clientHeight;
-      setBounds((previous) => previous.width === width && previous.height === height ? previous : { width, height });
-    };
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(element);
-    window.addEventListener('resize', measure);
-    return () => { observer.disconnect(); window.removeEventListener('resize', measure); };
-  }, []);
-
+  // 화면을 바꿔도 작성 중인 기록은 그대로 남는다. 페이지를 떠날 때만 저장 안 된 내용을 알린다.
   useEffect(() => {
-    const update = () => setCurrentTime(new Date().toLocaleTimeString('ko-KR', {
-      hour: '2-digit', minute: '2-digit', hour12: false,
-    }));
-    update();
-    const timer = window.setInterval(update, 1000);
-    return () => window.clearInterval(timer);
-  }, []);
+    if (!studyDirty && !workDirty) return;
+    const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [studyDirty, workDirty]);
 
-  const openWindow = (id: WindowId) => dispatch({ type: 'open', id });
-  const report = (result: { ok: boolean; error?: string }, done = '') => notify(result.ok ? done : result.error ?? '');
-  // Three different removals: programs are only hidden, shortcuts are removed from the desktop,
-  // and real files move to the trash. None of them deletes data here.
-  const runEntry = (entry: DesktopEntry, action: ReturnType<typeof menuFor>[number]['action']) => {
-    const fileId = entry.target.startsWith('file:') ? entry.target.slice(5) : '';
-    if (action === 'open') openEntry(entry);
-    else if (action === 'rename') shell.setRenaming(entry.id);
-    else if (action === 'icon') void shell.pickIcon(entry.icon).then(icon => { if (icon !== undefined) void act({ action: 'update-item', id: entry.id, icon }).then(result => report(result)); });
-    else if (action === 'hide') void act({ action: 'update-item', id: entry.id, hidden: true }).then(result => report(result, '숨겼습니다. 환경설정 › 바탕화면에서 다시 표시할 수 있습니다.'));
-    else if (action === 'remove') void act({ action: 'remove-shortcut', id: entry.id }).then(result => report(result, '바탕화면에서 제거했습니다. 연결된 원본은 그대로입니다.'));
-    else if (action === 'security') shell.openSettings('security', fileId);
-    else if (action === 'trash') void act({ action: 'trash-file', id: fileId }).then(result => report(result, '휴지통으로 이동했습니다.'));
-  };
-  const openEntry = (entry: DesktopEntry) => {
-    if (entry.missing) { notify('연결된 항목이 휴지통에 있거나 삭제되었습니다.'); return; }
-    shell.openTarget(entry.target);
-  };
-  const rename = (entry: DesktopEntry, name: string) => {
-    shell.setRenaming(null);
-    const body = entry.kind === 'file' ? { action: 'rename-file', id: entry.target.slice(5), name } : { action: 'update-item', id: entry.id, label: name };
-    void act(body).then(result => report(result));
-  };
-  const runDesktop = async (action: ReturnType<typeof desktopMenu>[number]['action']) => {
-    if (action === 'settings') shell.openSettings(shell.settingsTab);
-    else if (action === 'wallpaper') shell.openSettings('wallpaper');
-    else if (action === 'save-layout') {
-      // Same save as the 작업 캡슐 window, without having to open it first.
-      const layout = currentLayout();
-      if (layout.windows.length) setSavingLayout(layout); else notify('열려 있는 창이 없습니다. 작업할 창을 연 뒤 저장해 주세요.');
-    }
-    else {
-      const result = await act({ action: 'create-file', kind: action === 'new-file' ? 'file' : 'folder', name: action === 'new-file' ? '새 파일' : '새 폴더', parentId: null });
-      if (!result.ok) { notify(result.error); return; }
-      const created = result.data.items.find(item => item.target === `file:${result.data.created}`);
-      if (created) shell.setRenaming(created.id);
-    }
-  };
-  const blankMenu = (point: { x: number; y: number }) => shell.showMenu(point, desktopMenu(data.authenticated).map(({ action, label }) => ({ label, onSelect: () => void runDesktop(action) })));
-  const blankPress = useRef(createLongPress(point => blankMenuRef.current(point)));
-  const blankMenuRef = useRef(blankMenu); blankMenuRef.current = blankMenu;
-  const onBlank = (target: EventTarget) => !(target as HTMLElement).closest('.os-window, .desktop-icon, .context-menu, .finder-sidebar, .finder-toolbar');
-  const wallpaper = data.settings.wallpaper;
+  const pane = (id: WindowId, label: string, children: ReactNode) => desktop.running.includes(id)
+    ? <section key={id} className={`app-pane app-pane-${id}`} aria-label={label} hidden={active !== id}>
+      {SECONDARY[id] && <header className="app-pane-head"><h1>{label}</h1>
+        <button type="button" aria-label={`${label} 닫기`} onClick={() => dispatch({ type: 'close', id })}><X size={16} />닫기</button></header>}
+      <div className="app-pane-body">{children}</div>
+    </section> : null;
 
-  // Work capsules reuse the window system above: each Window reports its geometry here and
-  // takes a saved one back through `layout`; open/minimized/order go through the reducer.
-  const geometry = useRef<Partial<Record<WindowId, { rect: WindowRect; maximized: boolean }>>>({});
-  const [savingLayout, setSavingLayout] = useState<CapsuleLayout | null>(null);
-  const [capsuleVersion, setCapsuleVersion] = useState(0);
-  const [layouts, setLayouts] = useState<Partial<Record<WindowId, { rect: WindowRect; maximized: boolean; nonce: number }>>>({});
-  const currentLayout = (): CapsuleLayout => {
-    const ids = desktop.stack.filter((id) => id !== CAPSULE_WINDOW && desktop.running.includes(id) && geometry.current[id]);
-    const front = [...desktop.stack].reverse().find((id) => ids.includes(id) && !desktop.minimized.includes(id)) ?? null;
-    return {
-      windows: ids.map((id) => ({ id, ...geometry.current[id]!.rect, maximized: geometry.current[id]!.maximized, minimized: desktop.minimized.includes(id) })),
-      active: front,
-      view: { ...(ids.includes('controlPanel') ? { settingsTab: shell.settingsTab } : {}), ...(ids.includes('files') ? { filesViewing: shell.viewing } : {}) },
-    };
-  };
-  const openLayout = (layout: CapsuleLayout) => {
-    const nonce = Date.now();
-    setLayouts((current) => ({ ...current, ...Object.fromEntries(layout.windows.map(({ id, x, y, width, height, maximized }) => [id, { rect: { x, y, width, height }, maximized, nonce }])) }));
-    if (layout.view.settingsTab) shell.setSettingsTab(layout.view.settingsTab);
-    if ('filesViewing' in layout.view) shell.setViewing(layout.view.filesViewing ?? null);
-    dispatch({ type: 'layout', windows: layout.windows.map((window) => window.id), minimized: layout.windows.filter((window) => window.minimized).map((window) => window.id), active: layout.active ?? undefined });
-  };
-
-  const shared = (id: WindowId) => ({
-    isOpen: desktop.running.includes(id),
-    isMinimized: desktop.minimized.includes(id),
-    isActive: active === id,
-    bounds,
-    onClose: () => dispatch({ type: 'close', id }),
-    onMinimize: () => dispatch({ type: 'minimize', id }),
-    zIndex: 10 + desktop.stack.indexOf(id),
-    onFocus: () => dispatch({ type: 'focus', id }),
-    layout: layouts[id],
-    onLayout: (rect: WindowRect, maximized: boolean) => { geometry.current[id] = { rect, maximized }; },
-  });
-
-  return (
-    <main className="web-os" style={{ backgroundImage: wallpaper ? `url(${wallpaper.src})` : undefined, backgroundSize: data.settings.fit }}>
-      <div className="desktop-workarea" ref={workareaRef}
-        onContextMenu={(event) => { if (!onBlank(event.target)) return; event.preventDefault(); blankPress.current.cancel(); blankMenu({ x: event.clientX, y: event.clientY }); }}
-        onPointerDown={(event) => { if (event.pointerType !== 'mouse' && onBlank(event.target)) blankPress.current.down(event); }}
-        onPointerMove={(event) => blankPress.current.move(event)}
-        onPointerUp={() => blankPress.current.up()}
-        onPointerCancel={() => blankPress.current.cancel()}>
-      <DesktopFinder items={data.items} loading={!shell.loaded} focusId={shell.renaming} renderItem={(item) => {
-          const art = iconArt(item, data.assets, { trashFull: data.trash.length > 0 });
-          // One folder picture for every item; the small badge tells programs, shortcuts and files apart.
-          return <DesktopIcon key={item.id} variant={art.variant} locked={item.locked} dimmed={item.missing}
-            icon={<EntryBadge target={item.target} fileKind={item.fileKind} />} label={item.label}
-            onClick={() => openEntry(item)}
-            onMenu={(point) => shell.showMenu(point, menuFor(entryKind(item), data.authenticated).map(({ action, label }) => ({ label, onSelect: () => runEntry(item, action) })))}
-            renaming={shell.renaming === item.id} onCancelRename={() => shell.setRenaming(null)} onRename={(name) => rename(item, name)} />;
-        }} />
-      {!shell.loaded && <div className="desktop-loading"><LoadingBox label="바탕화면 불러오는 중…" /></div>}
-      {shell.notice && <DesktopNotice message={shell.notice} onClose={() => notify('')} />}
-      {savingLayout && <CapsuleSaveDialog layout={savingLayout} onClose={() => setSavingLayout(null)}
-        onSaved={() => { setSavingLayout(null); setCapsuleVersion((version) => version + 1); notify('작업을 저장했습니다. 작업 캡슐에서 다시 열 수 있습니다.'); }} />}
-      <img className="desktop-kitty" src="/theme/kitty-peek.png" alt="" aria-hidden="true" draggable={false} />
-
-      <Window title="공부 보관함" className="study-window" icon={<BookOpen size={18} />} defaultPosition={{ x: 190, y: 45 }} defaultSize={{ width: 980, height: 720 }} {...shared('terminal')}
-        onClose={() => { if (!studyDirty || window.confirm('저장하지 않은 공부 기록이 있습니다. 창을 닫을까요?')) dispatch({ type: 'close', id: 'terminal' }); }}>
-        <StudyArchive onDirtyChange={setStudyDirty} />
-      </Window>
-      <Window title="업무 자료실" className="work-window" icon={<Presentation size={18} />} defaultPosition={{ x: 210, y: 36 }} defaultSize={{ width: 1000, height: 720 }} {...shared('workLibrary')}
-        onClose={() => { if (!workDirty || window.confirm('저장하지 않은 업무 자료가 있습니다. 창을 닫을까요?')) dispatch({ type: 'close', id: 'workLibrary' }); }}>
-        <WorkLibrary onDirtyChange={setWorkDirty} />
-      </Window>
-      <Window title="가격표 보관함" className="price-files-window" icon={<FolderOpen size={20} />} defaultPosition={{ x: 240, y: 24 }} defaultSize={{ width: 920, height: 760 }} {...shared('fileExplorer')}>
-        <FileExplorer />
-      </Window>
-      <Window title="환경설정" className="settings-window" icon={<Settings size={18} />} defaultPosition={{ x: 390, y: 190 }} defaultSize={{ width: 720, height: 500 }} {...shared('controlPanel')}>
-        <ControlPanel />
-      </Window>
-      <Window title="작업 캡슐" icon={<Layers size={18} />} defaultPosition={{ x: 440, y: 120 }} defaultSize={{ width: 560, height: 520 }} {...shared('programManager')}>
-        <WorkCapsule currentLayout={currentLayout} openLayout={openLayout} version={capsuleVersion} />
-      </Window>
-      <Window title="메모장" icon={<FileText size={18} />} defaultPosition={{ x: 300, y: 135 }} defaultSize={{ width: 680, height: 480 }} {...shared('notepad')}>
-        <Notepad />
-      </Window>
-      <Window title="휴지통" icon={<Trash2 size={18} />} defaultPosition={{ x: 330, y: 110 }} defaultSize={{ width: 640, height: 460 }} {...shared('trash')}>
-        <TrashWindow />
-      </Window>
-      <Window title="파일" icon={<FolderOpen size={18} />} defaultPosition={{ x: 280, y: 70 }} defaultSize={{ width: 700, height: 500 }} {...shared('files')}>
-        <FileWindow />
-      </Window>
-      <Window title="금액 계산" icon={<Calculator size={18} />} defaultPosition={{ x: 250, y: 52 }} defaultSize={{ width: 980, height: 680 }} {...shared('priceCalculator')}>
-        <PriceCalculator />
-      </Window>
-
+  return <main className="web-os app-shell">
+    <nav className="app-sidebar" aria-label="메뉴">
+      <p className="app-brand">다채움</p>
+      {SIDEBAR_GROUPS.map(group => <div key={group.title} className="app-nav-group">
+        <p className="app-nav-title">{group.title}</p>
+        <ul>{group.items.map(item => <li key={item.id}>
+          <button type="button" aria-current={selected === item.id ? 'page' : undefined} onClick={() => open(item.id)}>{item.label}</button>
+        </li>)}</ul>
+      </div>)}
+      <div className="app-nav-bottom">
+        <button type="button" aria-current={selected === 'controlPanel' ? 'page' : undefined} onClick={() => open('controlPanel')}>환경설정</button>
       </div>
-      <Taskbar desktop={desktop} onOpenWindow={openWindow} onTaskClick={(id) => dispatch({ type: 'taskbar', id })} currentTime={currentTime} />
-    </main>
-  );
+    </nav>
+    <div className="app-content">
+      {!shell.loaded && <div className="desktop-loading"><LoadingBox label="불러오는 중…" /></div>}
+      {shell.notice && <DesktopNotice message={shell.notice} onClose={() => shell.notify('')} />}
+      {pane('fileExplorer', '가격표 보관함', <FileExplorer />)}
+      {pane('priceCalculator', '금액 계산', <PriceCalculator />)}
+      {pane('workLibrary', '업무 자료', <WorkLibrary onDirtyChange={setWorkDirty} />)}
+      {pane('terminal', '공부 보관함', <StudyArchive onDirtyChange={setStudyDirty} />)}
+      {pane('notepad', '메모장', <Notepad />)}
+      {pane('controlPanel', '환경설정', <ControlPanel />)}
+      {pane('trash', '휴지통', <TrashWindow />)}
+      {pane('files', '파일', <FileWindow />)}
+    </div>
+  </main>;
 }

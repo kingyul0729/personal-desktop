@@ -141,7 +141,7 @@ export function WorkLibrary({ onDirtyChange }: { onDirtyChange?: (dirty: boolean
   };
 
   const header = <header className="wl-header">
-    <div><p>B · 다채움피부과 업무 공간</p><h1>{editor ? editor.version ? '자료 수정' : '새 자료' : '업무 매뉴얼 · 상담자료'}</h1></div>
+    <div><h1>{editor ? editor.version ? '자료 수정' : '새 자료' : '업무 매뉴얼 · 상담자료'}</h1></div>
     {!editor && !reading && <div className="wl-header-tools">
       <label className="wl-search"><Search size={16} /><input type="search" aria-label="업무 자료 검색" value={query} onChange={event => setQuery(event.target.value)} placeholder="제목, 설명, 본문 검색" /></label>
       <div className="wl-view-toggle" role="group" aria-label="보기 방식">

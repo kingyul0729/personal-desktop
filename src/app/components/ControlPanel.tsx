@@ -9,12 +9,15 @@ import { EntryBadge } from './EntryIcon';
 import { InlineRename } from './InlineRename';
 import { DEFAULT_FONT, FONTS } from '../fonts';
 
-const TABS: [SettingsTab, string][] = [['wallpaper', '배경화면'], ['font', '글씨체'], ['desktop', '바탕화면'], ['files', '파일 설정'], ['security', '보안 설정']];
+// 앱 화면에는 배경화면·바탕화면 아이콘이 없어서 그 두 탭은 보이지 않는다(저장된 설정은 그대로).
+const TABS: [SettingsTab, string][] = [['font', '글씨체'], ['files', '파일 설정'], ['security', '보안 설정']];
 const DEFAULT_WALLPAPER = '/wallpapers/plain-gray.svg';
 
 export function ControlPanel() {
-  const { data, loaded, settingsTab, setSettingsTab } = useDesktop();
+  const { data, loaded, settingsTab: chosen, setSettingsTab } = useDesktop();
+  const settingsTab = TABS.some(([tab]) => tab === chosen) ? chosen : 'font';
   return <div className="settings">
+    <h1 className="settings-title">환경설정</h1>
     <nav className="settings-nav" role="tablist" aria-label="환경설정 메뉴">
       {TABS.map(([tab, label]) => <button key={tab} type="button" role="tab" id={`settings-tab-${tab}`} aria-selected={settingsTab === tab} aria-controls="settings-panel" onClick={() => setSettingsTab(tab)}>{label}</button>)}
     </nav>

@@ -3,11 +3,9 @@ import { normalizeCalculatorInput } from '../calculatorInput';
 import { calculateGeneral, discountUnitForRate, emptyGeneralInput, matchingQuickRate, quickDiscountRates, type GeneralInput, type VatBasis } from '../generalCalc';
 import { calculatePrepaid, emptyPrepaidInput, enteredPrepaidAmount, formatWonAmount, prepaidDiscountRates, prepaidModeLabels, wonToManwonText, type PrepaidInput, type PrepaidMode, type PrepaidResult, type PrepaidTier } from '../prepaid';
 import { chartClipboardContent, chartColors, copyChartContent, createPrepaidChart, emptyChartContext, type ChartPaymentMethod } from '../prepaidChart';
-import { PinkFolderIcon, type PinkFolderVariant } from './PinkFolderIcon';
 
 // 계산기 메뉴는 두 가지: 일반 금액 계산(정가·할인가, 횟수, 부가세, 할인율)과 선불권 P.
 type CalcMode = 'general' | 'prepaid';
-const modeFolder: Record<CalcMode, PinkFolderVariant> = { general: 'heart', prepaid: 'kitty' };
 const modeLabels: Record<CalcMode, string> = { general: '일반 금액 계산', prepaid: '선불권 P' };
 
 const fmt = (value: number) => Number.isFinite(value) ? value.toLocaleString('ko-KR', { maximumFractionDigits: 2 }) : '0';
@@ -235,11 +233,11 @@ export function PriceCalculator() {
 
   return <div className={`price-program${mode === 'prepaid' ? ' pc-prepaid-mode' : ''}`}>
     <header className="pc-header pc-header-simple">
-      <div><b>금액 계산기</b><span>입력은 만 원, 결과는 원</span></div>
+      <div><h1>금액 계산</h1><span>입력은 만 원, 결과는 원</span></div>
     </header>
     <div className="pc-page">
       <div className="pc-mode-row">
-        <div className="pc-mode-tabs">{(['general', 'prepaid'] as CalcMode[]).map((id) => <button key={id} className={mode === id ? 'active' : ''} onClick={() => setMode(id)}><PinkFolderIcon variant={modeFolder[id]} />{modeLabels[id]}</button>)}</div>
+        <div className="pc-mode-tabs">{(['general', 'prepaid'] as CalcMode[]).map((id) => <button key={id} className={mode === id ? 'active' : ''} onClick={() => setMode(id)}>{modeLabels[id]}</button>)}</div>
       </div>
       {mode === 'general' && <GeneralPanel input={general} onChange={setGeneral} />}
       {mode === 'prepaid' && <PrepaidPanel input={prepaid} onChange={setPrepaid} method={method} onMethod={setMethod} />}
