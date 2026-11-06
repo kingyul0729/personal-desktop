@@ -1,8 +1,9 @@
 import { useEffect, useReducer, useState, type ReactNode } from 'react';
-import { BookOpen, Calculator, FileText, FolderOpen, Presentation, Settings, Trash2, X, type LucideIcon } from 'lucide-react';
+import { BookOpen, Calculator, FileText, FolderOpen, LayoutGrid, Presentation, Settings, Trash2, X, type LucideIcon } from 'lucide-react';
 import { StudyArchive } from './components/StudyArchive';
 import { WorkLibrary } from './components/WorkLibrary';
 import { FileExplorer } from './components/FileExplorer';
+import { ProgramGuide } from './components/ProgramGuide';
 import { ControlPanel } from './components/ControlPanel';
 import { Notepad } from './components/Notepad';
 import { PriceCalculator } from './components/PriceCalculator';
@@ -17,7 +18,7 @@ import { DesktopNotice, LoadingBox } from './components/Feedback';
 // 한 번 연 화면은 숨겨 두기만 해서 메뉴를 오가도 입력 중인 내용(계산기 등)이 남는다.
 type MenuItem = { id: WindowId; label: string; icon: LucideIcon };
 export const SIDEBAR_GROUPS: { title: string; items: MenuItem[] }[] = [
-  { title: '업무', items: [{ id: 'fileExplorer', label: '가격표', icon: FolderOpen }, { id: 'priceCalculator', label: '금액 계산', icon: Calculator }, { id: 'workLibrary', label: '업무 자료', icon: Presentation }] },
+  { title: '업무', items: [{ id: 'fileExplorer', label: '가격표', icon: FolderOpen }, { id: 'programGuide', label: '프로그램 안내', icon: LayoutGrid }, { id: 'priceCalculator', label: '금액 계산', icon: Calculator }, { id: 'workLibrary', label: '업무 자료', icon: Presentation }] },
   { title: '개인', items: [{ id: 'terminal', label: '공부 보관함', icon: BookOpen }, { id: 'notepad', label: '메모장', icon: FileText }] },
   { title: '설정', items: [{ id: 'controlPanel', label: '환경설정', icon: Settings }] },
 ];
@@ -74,7 +75,7 @@ export function AppShell({ desktop, dispatch }: { desktop: typeof initialDesktop
     if (!desktop.running.includes(id)) return null;
     const label = SECONDARY[id]?.label ?? menuOf(id)!.label;
     return <section key={id} className={`app-pane app-pane-${id}`} aria-label={label} hidden={active !== id}>
-      {id === 'fileExplorer' ? <FileExplorer />
+      {id === 'fileExplorer' ? <FileExplorer /> : id === 'programGuide' ? <ProgramGuide />
         : <FinderMain title={label} onBack={back} onForward={forward} path={pathFor(id)}
           tools={SECONDARY[id] ? <button type="button" aria-label={`${label} 닫기`} title="닫기" onClick={() => dispatch({ type: 'close', id })}><X size={19} strokeWidth={1.6} /></button> : undefined}>
           {content}
@@ -97,6 +98,7 @@ export function AppShell({ desktop, dispatch }: { desktop: typeof initialDesktop
         {!shell.loaded && <div className="desktop-loading"><LoadingBox label="불러오는 중…" /></div>}
         {shell.notice && <DesktopNotice message={shell.notice} onClose={() => shell.notify('')} />}
         {pane('fileExplorer', null)}
+        {pane('programGuide', null)}
         {pane('priceCalculator', <PriceCalculator />)}
         {pane('workLibrary', <WorkLibrary onDirtyChange={setWorkDirty} />)}
         {pane('terminal', <StudyArchive onDirtyChange={setStudyDirty} />)}

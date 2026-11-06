@@ -1348,3 +1348,87 @@ a:hover > .download-mark .download-arrow, a:focus-visible > .download-mark .down
 .rc-head { border-bottom: 0; background: repeating-linear-gradient(90deg, #2d3136 0 6px, transparent 6px 10px) bottom / 100% 1.5px no-repeat; }
 .rc-head::before { content: "다채움피부과"; position: absolute; left: 0; right: 0; top: 14px; text-align: center; color: #b3b8bf; font-size: 11px; letter-spacing: .3em; }
 .receipt { position: relative; }
+
+/* ── 프로그램 안내 (상담 중 고객에게 보여 주는 화면) ───────────────────────────────
+   한 화면에 다 보이게. 시술 종류는 차분한 팔레트 색 칸으로, 금액 옆에는 작게 '만' 읽기. */
+.program-guide { height: 100%; background: #fff; --pg-ink: #2d3136; --pg-muted: #7d838b; --pg-line: #e6e8ec; --pg-accent: #2f6fd6;
+  --t-sage: #9fb39b; --t-blue: #a9b9cf; --t-navy: #6f86a8; --t-rose: #d6a8a6; --t-sand: #e3c9a6; --t-gray: #c4bac8; }
+.program-guide > .finder-main { height: 100%; }
+.program-guide.is-full { position: fixed; inset: 0; z-index: 50; }
+.program-guide:fullscreen { background: #fff; }
+[data-tone="sage"] { --tone: var(--t-sage); } [data-tone="blue"] { --tone: var(--t-blue); } [data-tone="navy"] { --tone: var(--t-navy); }
+[data-tone="rose"] { --tone: var(--t-rose); } [data-tone="sand"] { --tone: var(--t-sand); } [data-tone="gray"] { --tone: var(--t-gray); }
+.pg-money { display: inline-flex; flex-direction: column; align-items: flex-end; line-height: 1.25; }
+.pg-money b { font-weight: 700; font-variant-numeric: tabular-nums; }
+.pg-money em { color: #6c84a3; font-size: 12px; font-style: normal; }
+.pg-tag { display: inline-block; margin-left: 8px; padding: 2px 8px; border-radius: 999px; background: #eef1f6; color: #4f6a85; font-size: 12px; font-weight: 600; vertical-align: 3px; }
+.pg-muted { color: var(--pg-muted); font-size: 13px; }
+/* 구성 칸 */
+.pg-strip { display: flex; gap: 4px; }
+.pg-strip i { flex: 1; height: 26px; border-radius: 5px; background: var(--tone); }
+/* 목록 */
+.pg-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 18px; padding: 28px; }
+.pg-card { display: grid; gap: 12px; padding: 20px; border: 1px solid var(--pg-line); border-radius: 12px; background: #fff; text-align: left; color: var(--pg-ink); font: inherit; }
+.pg-card:hover { border-color: #c9d2de; background: #fbfcfd; }
+.pg-card:focus-visible { outline: 2px solid var(--pg-accent); outline-offset: 2px; }
+.pg-card-head b { font-size: 18px; font-weight: 700; }
+.pg-card p { margin: 0; color: #5d636b; font-size: 14px; line-height: 1.5; min-height: 42px; }
+.pg-card .pg-strip i { height: 14px; border-radius: 3px; }
+.pg-card-foot { display: flex; align-items: flex-end; justify-content: space-between; padding-top: 10px; border-top: 1px solid #f0f1f3; color: var(--pg-muted); font-size: 14px; }
+.pg-card-foot .pg-money b { font-size: 18px; color: var(--pg-ink); }
+/* 브리핑 */
+.pg-brief { display: grid; gap: 26px; max-width: 1040px; padding: 30px 36px 40px; color: var(--pg-ink); }
+.pg-brief-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; padding-bottom: 22px; border-bottom: 1px solid var(--pg-line); }
+.pg-kicker { display: flex; align-items: center; margin: 0 0 6px; color: var(--pg-muted); font-size: 13.5px; }
+.pg-brief-head h2 { margin: 0; font-size: 28px; font-weight: 700; letter-spacing: -.02em; }
+.pg-summary { margin: 8px 0 0; color: #4d535b; font-size: 16px; }
+.pg-price { display: grid; justify-items: end; gap: 2px; padding: 14px 18px; border-radius: 12px; background: #eaf1fd; color: #1f56b3; white-space: nowrap; }
+.pg-price > span { font-size: 14px; font-weight: 600; }
+.pg-price .pg-money b { font-size: 26px; }
+.pg-price .pg-money em { color: #5b7fb8; font-size: 13px; }
+.pg-price small { margin-top: 4px; color: #5b7fb8; font-size: 12.5px; }
+.pg-block h3 { display: flex; align-items: baseline; gap: 10px; margin: 0 0 12px; font-size: 15px; font-weight: 700; }
+.pg-block h3 small { color: var(--pg-muted); font-size: 12.5px; font-weight: 400; }
+.pg-treatments { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+.pg-treat { padding: 16px 18px; border: 1px solid var(--pg-line); border-radius: 12px; background: #fff; }
+.pg-treat-head { display: flex; align-items: center; gap: 9px; margin-bottom: 8px; }
+.pg-treat-head i { flex: 0 0 12px; height: 12px; border-radius: 3px; background: var(--tone); }
+.pg-treat-head b { font-size: 16.5px; font-weight: 700; }
+.pg-treat-head span { margin-left: auto; padding: 3px 10px; border-radius: 999px; background: #f2f3f5; color: #4d535b; font-size: 13px; font-weight: 600; white-space: nowrap; }
+.pg-treat p { margin: 0; color: #4d535b; font-size: 14.5px; line-height: 1.6; }
+.pg-extras h3 small { white-space: normal; }
+.pg-extra-rows { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+.pg-extra-rows > div { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; border: 1px dashed #d8dde5; border-radius: 10px; font-size: 14.5px; }
+.pg-extra-rows .pg-money b { font-size: 16px; }
+/* 비교 */
+.pg-compare { display: grid; padding: 24px 28px 32px; color: var(--pg-ink); }
+.pg-compare-row { display: grid; grid-template-columns: 96px repeat(var(--cols), minmax(0, 1fr)); gap: 16px; align-items: center; padding: 14px 0; border-bottom: 1px solid #eef0f2; font-size: 14.5px; }
+.pg-compare-row > span:first-child { color: var(--pg-muted); font-size: 13px; }
+.pg-compare-names b { font-size: 17px; font-weight: 700; }
+.pg-compare-row .pg-money { align-items: flex-start; }
+.pg-compare-row .pg-money b { font-size: 17px; }
+.pg-compare-row .pg-strip i { height: 16px; border-radius: 3px; }
+.pg-compare-list { align-items: start; }
+.pg-compare-list ul { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.pg-compare-list li { display: flex; align-items: center; gap: 7px; font-size: 13.5px; }
+.pg-compare-list li i { flex: 0 0 10px; height: 10px; border-radius: 3px; background: var(--tone); }
+.pg-compare-list li em { margin-left: auto; color: var(--pg-muted); font-style: normal; font-size: 12.5px; }
+.pg-compare-note { display: flex; align-items: center; margin-top: 14px; }
+@media (max-width: 760px) {
+  .pg-brief { padding: 20px 16px 28px; }
+  .pg-brief-head { flex-direction: column; }
+  .pg-price { justify-items: start; }
+  .pg-compare { overflow-x: auto; }
+  .pg-compare-row { min-width: 720px; }
+}
+/* 브리핑을 한 화면에: 시술 카드 3열, 간격 조금 줄임 */
+.pg-brief { gap: 20px; padding-top: 24px; }
+.pg-brief-head { padding-bottom: 18px; }
+.pg-treatments { grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; }
+.pg-treat { padding: 14px 16px; }
+.pg-treat-head b { font-size: 15.5px; }
+.pg-treat p { font-size: 13.5px; line-height: 1.55; }
+.pg-strip i { height: 22px; }
+.pg-treat-head b { word-break: keep-all; line-height: 1.3; }
+.pg-compare-list li em { white-space: nowrap; }
+.pg-compare-list li, .pg-card p, .pg-compare .pg-muted { word-break: keep-all; }
