@@ -907,3 +907,8 @@ body { -webkit-font-smoothing: antialiased; letter-spacing: -.005em; }
 .loading-box { grid-template-columns: 1fr; border: 1px solid #d4d8de; border-radius: 10px; background: #fff; box-shadow: none; color: #4a525d; font-weight: 500; }
 .loading-box-track { height: 4px; border: 0; background: #e6e9ed; }
 .loading-box-track div { background: #4a6c8f; }
+/* 환경설정 → 파일 설정: 업로드 자료 모두 삭제 */
+.settings-danger { display: grid; gap: 10px; margin-top: 22px; padding-top: 16px; border-top: 1px solid #e3e5e8; }
+.settings-danger strong { color: #1f2a37; font-size: 15px; }
+.settings-danger p { margin: 4px 0 0; color: #6b7380; font-size: 13px; line-height: 1.5; }
+.settings-danger .settings-row button.is-danger, .settings-danger .settings-row button.is-danger:hover:not(:disabled) { opacity: 1; background: #b42318; border-color: #b42318; color: #fff; }

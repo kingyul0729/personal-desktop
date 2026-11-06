@@ -386,3 +386,33 @@ test('adding the font column keeps the saved wallpaper settings', async () => {
   assert.deepEqual(env.sqlite.prepare('SELECT owner, wallpaper_asset_id, wallpaper_fit, updated_at FROM desktop_settings').all(), saved);
   assert.deepEqual((await call(env, '/api/desktop')).data.settings, { wallpaper: null, fit: 'contain', font: null });
 });
+
+test('trash-uploads moves every price image and only work/study entries with files to the trash', async () => {
+  const env = environment();
+  const now = Date.now();
+  env.sqlite.exec(`INSERT INTO price_images (id, owner, name, folder_id, object_key, mime, created_at) VALUES ('p1','me','a','f','k1','image/png',${now}), ('p2','me','b','f','k2','image/png',${now}), ('px','other','c','f','k3','image/png',${now})`);
+  env.sqlite.exec(`INSERT INTO work_docs (id, owner, kind, title, created_at, updated_at) VALUES ('w1','me','manual','파일 있음',${now},${now}), ('w2','me','manual','글만',${now},${now})`);
+  env.sqlite.exec(`INSERT INTO work_doc_attachments (id, owner, doc_id, name, object_key, mime, size, created_at) VALUES ('wa','me','w1','a.pdf','k4','application/pdf',1,${now})`);
+  env.sqlite.exec(`INSERT INTO study_records (id, owner, title, category, studied_on, created_at, updated_at) VALUES ('s1','me','파일 있음','skin','2026-11-06',${now},${now}), ('s2','me','글만','skin','2026-11-06',${now},${now})`);
+  env.sqlite.exec(`INSERT INTO study_attachments (id, owner, record_id, name, object_key, mime, size, created_at) VALUES ('sa','me','s1','a.png','k5','image/png',1,${now})`);
+  const result = await act(env, { action: 'trash-uploads' });
+  assert.equal(result.status, 200);
+  assert.deepEqual(result.data.trashedUploads, { price: 2, work: 1, study: 1 });
+  const trashed = (table) => env.sqlite.prepare(`SELECT id FROM ${table} WHERE trashed_at IS NOT NULL ORDER BY id`).all().map(row => row.id);
+  assert.deepEqual(trashed('price_images'), ['p1', 'p2']);
+  assert.deepEqual(trashed('work_docs'), ['w1']);
+  assert.deepEqual(trashed('study_records'), ['s1']);
+  assert.equal(env.objects.size, 0);
+  assert.equal((await act(env, { action: 'trash-uploads' }, { owner: '' })).status, 401);
+});
+
+test('bundled price sheets stay gone after trash-uploads and emptying the trash', async () => {
+  const env = environment();
+  const before = (await call(env, '/api/price-files')).data;
+  assert.ok(before.images.length > 0);
+  await act(env, { action: 'trash-uploads' });
+  assert.equal((await call(env, '/api/price-files')).data.images.length, 0);
+  await act(env, { action: 'empty-trash' });
+  assert.equal((await call(env, '/api/price-files')).data.images.length, 0);
+  assert.equal(env.sqlite.prepare('SELECT COUNT(*) AS n FROM price_images').get().n, 0);
+});

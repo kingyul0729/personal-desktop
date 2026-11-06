@@ -209,7 +209,36 @@ function FileSettings() {
       {!children.length && <li className="settings-empty">비어 있습니다.</li>}
     </ul>
     {feedback.view}
+    <TrashUploads />
   </>;
+}
+
+// 다시 올리기 전에 업로드한 자료를 한 번에 지운다. 확인을 한 번 더 받고, 휴지통으로만 보낸다.
+function TrashUploads() {
+  const { act } = useDesktop();
+  const feedback = useFeedback();
+  const [confirming, setConfirming] = useState(false);
+  const [done, setDone] = useState('');
+  const run = () => feedback.run(async () => {
+    const result = await act({ action: 'trash-uploads' });
+    if (result.ok) {
+      const n = (result.data as { trashedUploads?: { price: number; work: number; study: number } }).trashedUploads ?? { price: 0, work: 0, study: 0 };
+      setDone(`가격표 이미지 ${n.price}개, 업무 자료 ${n.work}개, 공부 기록 ${n.study}개를 지웠습니다.`);
+    }
+    setConfirming(false);
+    return result;
+  });
+  return <section className="settings-danger" aria-label="업로드 자료 모두 삭제">
+    <div>
+      <strong>업로드 자료 모두 삭제</strong>
+      <p>가격표 이미지 전부와 파일이 첨부된 업무 자료·공부 기록을 지웁니다. 글만 있는 기록은 남습니다. 지운 자료는 각 화면의 삭제 목록과 휴지통에서 되돌릴 수 있습니다.</p>
+    </div>
+    {confirming
+      ? <div className="settings-row"><button type="button" className="is-danger" disabled={feedback.busy} onClick={() => void run()}><Trash2 size={16} />모두 삭제</button><button type="button" disabled={feedback.busy} onClick={() => setConfirming(false)}>취소</button></div>
+      : <div className="settings-row"><button type="button" onClick={() => { setDone(''); setConfirming(true); }}><Trash2 size={16} />모두 삭제…</button></div>}
+    {done && <p className="settings-message" role="status">{done}</p>}
+    {feedback.view}
+  </section>;
 }
 
 function SecuritySettings() {

@@ -492,6 +492,15 @@ async function desktopAction(env, owner, body, unlocked) {
       await purge(env, owner, descendants(files, target.id));
       return null;
     }
+    // 업로드한 자료를 한 번에 휴지통으로: 가격표 이미지 전부, 첨부파일이 있는 업무 자료·공부 기록.
+    // 지우지 않고 trashed_at만 표시하므로 각 화면의 삭제 목록·휴지통에서 되돌릴 수 있다. 글만 있는 기록은 남는다.
+    case 'trash-uploads': {
+      const now = Date.now();
+      const price = await statement(env, 'UPDATE price_images SET trashed_at = ? WHERE owner = ? AND trashed_at IS NULL', now, owner).run();
+      const work = await statement(env, 'UPDATE work_docs SET trashed_at = ?, updated_at = ? WHERE owner = ? AND trashed_at IS NULL AND id IN (SELECT doc_id FROM work_doc_attachments WHERE owner = ?)', now, now, owner, owner).run();
+      const study = await statement(env, 'UPDATE study_records SET trashed_at = ?, updated_at = ? WHERE owner = ? AND trashed_at IS NULL AND id IN (SELECT record_id FROM study_attachments WHERE owner = ?)', now, now, owner, owner).run();
+      return { trashedUploads: { price: price.meta?.changes ?? 0, work: work.meta?.changes ?? 0, study: study.meta?.changes ?? 0 } };
+    }
     case 'empty-trash': {
       let skipped = 0;
       for (const file of files.values()) {
