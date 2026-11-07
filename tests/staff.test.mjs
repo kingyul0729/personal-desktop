@@ -61,3 +61,30 @@ test('a broken inventory database reports the cause and its tables', async () =>
   assert.match(r.data.detail, /staff_leave_log/);
   assert.ok(r.data.tables.includes('staff') && !r.data.tables.includes('staff_leave_log'));
 });
+
+test('importing from the old app fills an empty database with staff, attendance and leave history', async t => {
+  const e = env(); e.inv.close();
+  e.inv = new DatabaseSync(':memory:'); e.INV_DB = d1(e.inv); // 빈 DB(실제 사이트와 같은 상태)
+  const old = {
+    '/api/staff/list?include_retired=1': [{ id: 7, name: '김유리', position: '팀장', is_leader: 1, hire_date: '2018-03-02', status: 'active', total_leave: 16, used_leave: 3, remain_leave: 13, personal_color: '#EFA7B7' }],
+    '/api/staff/leave-log/7': [{ id: 1, staff_id: 7, log_type: 'use', log_date: '2026-10-02', amount: 1, after_remain: 13 }],
+    '/api/staff/info-log/7': [],
+  };
+  t.mock.method(globalThis, 'fetch', async url => {
+    const path = new URL(url).pathname + new URL(url).search;
+    if (path.startsWith('/api/staff/month')) {
+      const m = new URL(url).searchParams.get('month');
+      return Response.json(m === '2026-10' ? { attendance: [{ id: 9, staff_id: 7, work_date: '2026-10-02', attendance: '연차', summary_only: 1 }], day_status: [{ work_date: '2026-10-09', status: 'clinic_off' }] } : { attendance: [], day_status: [] });
+    }
+    return Response.json(old[path] ?? { error: 'nope' }, { status: old[path] ? 200 : 404 });
+  });
+  const start = await call(e, '/api/staff-import', { method: 'POST', body: { step: 'start' } });
+  assert.equal(start.status, 200, JSON.stringify(start.data));
+  assert.equal(start.data.months[0], '2025-01');
+  for (const month of start.data.months) assert.equal((await call(e, '/api/staff-import', { method: 'POST', body: { step: 'month', month } })).status, 200);
+  const list = await call(e, '/api/staff/list');
+  assert.deepEqual(list.data.map(s => [s.name, s.total_leave, s.used_leave]), [['김유리', 16, 3]]);
+  assert.equal(e.inv.prepare("SELECT attendance FROM staff_attendance WHERE work_date='2026-10-02'").get().attendance, '연차');
+  assert.equal(e.inv.prepare('SELECT COUNT(*) n FROM staff_day_status').get().n, 1);
+  assert.equal(e.inv.prepare('SELECT COUNT(*) n FROM staff_leave_log').get().n, 1);
+});

@@ -1,0 +1,32 @@
+// 예전 재고관리 앱의 직원 표 구조(마이그레이션 0009·0010·0014·0022) — tests/fixtures/inv-staff.sql 에서 만든 것.
+// 빈 데이터베이스에 직원 표가 없을 때 한 번만 실행한다.
+export const INV_STAFF_SCHEMA = [
+ "CREATE TABLE IF NOT EXISTS staff (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  name TEXT NOT NULL,\n  position TEXT DEFAULT '직원',         \n  is_leader INTEGER DEFAULT 0,          \n  hire_date TEXT,                       \n  retire_date TEXT,                     \n  status TEXT DEFAULT 'active',         \n  total_leave INTEGER DEFAULT 0,        \n  used_leave INTEGER DEFAULT 0,         \n  second_shift_count INTEGER DEFAULT 0, \n  memo TEXT,                            \n  sort_order INTEGER DEFAULT 0,         \n  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,\n  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP\n)",
+ "CREATE TABLE IF NOT EXISTS staff_attendance (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  staff_id INTEGER NOT NULL,\n  work_date TEXT NOT NULL,              \n  attendance TEXT NOT NULL,             \n  etc_type TEXT,                        \n  etc_detail TEXT,                      \n  start_time TEXT,                      \n  end_time TEXT,                        \n  work_minutes INTEGER,                 \n  manual_adjust INTEGER DEFAULT 0,      \n  adjust_reason TEXT,                   \n  managed_count INTEGER,                \n  designated_count INTEGER,             \n  memo TEXT,                            \n  editor TEXT DEFAULT '관리자',         \n  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,\n  UNIQUE(staff_id, work_date),\n  FOREIGN KEY (staff_id) REFERENCES staff(id)\n)",
+ "CREATE TABLE IF NOT EXISTS staff_day_status (\n  work_date TEXT PRIMARY KEY,           \n  status TEXT NOT NULL,                 \n  memo TEXT,\n  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP\n)",
+ "CREATE TABLE IF NOT EXISTS staff_leave_log (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  staff_id INTEGER NOT NULL,\n  log_type TEXT NOT NULL,\n  log_date TEXT,                        \n  amount INTEGER,                       \n  before_total INTEGER,                 \n  after_total INTEGER,                  \n  before_used INTEGER,                  \n  after_used INTEGER,                   \n  after_remain INTEGER,                 \n  reason TEXT,                          \n  memo TEXT,\n  editor TEXT DEFAULT '관리자',         \n  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,\n  FOREIGN KEY (staff_id) REFERENCES staff(id)\n)",
+ "CREATE TABLE IF NOT EXISTS staff_info_log (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  staff_id INTEGER NOT NULL,\n  changes TEXT,                         \n  editor TEXT DEFAULT '관리자',\n  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,\n  FOREIGN KEY (staff_id) REFERENCES staff(id)\n)",
+ "CREATE INDEX IF NOT EXISTS idx_att_staff_date ON staff_attendance(staff_id, work_date)",
+ "CREATE INDEX IF NOT EXISTS idx_att_date ON staff_attendance(work_date)",
+ "CREATE INDEX IF NOT EXISTS idx_leave_staff ON staff_leave_log(staff_id)",
+ "CREATE INDEX IF NOT EXISTS idx_info_staff ON staff_info_log(staff_id)",
+ "INSERT OR IGNORE INTO staff (id, name, position, is_leader, hire_date, status, total_leave, used_leave, second_shift_count) VALUES\n  (1, '김유리', '팀장', 1, '2018-03-02', 'active', 15, 0, 0),\n  (2, '최윤희', '직원', 0, '2020-06-01', 'active', 15, 0, 0),\n  (3, '최지혜', '직원', 0, '2021-09-13', 'active', 15, 0, 0),\n  (4, '안이람', '직원', 0, '2023-04-10', 'active', 15, 0, 0),\n  (5, '차혜진', '직원', 0, '2024-11-05', 'active', 15, 0, 0)",
+ "ALTER TABLE staff ADD COLUMN staff_type TEXT DEFAULT 'regular'",
+ "ALTER TABLE staff ADD COLUMN is_demo INTEGER DEFAULT 0",
+ "ALTER TABLE staff_attendance ADD COLUMN record_mode TEXT",
+ "ALTER TABLE staff_attendance ADD COLUMN partial_start TEXT",
+ "ALTER TABLE staff_attendance ADD COLUMN partial_end TEXT",
+ "ALTER TABLE staff_attendance ADD COLUMN is_demo INTEGER DEFAULT 0",
+ "ALTER TABLE staff_day_status ADD COLUMN is_demo INTEGER DEFAULT 0",
+ "UPDATE staff_attendance\n   SET attendance='기타', etc_type='time', etc_detail='2시 출근'\n WHERE attendance='2출'",
+ "UPDATE staff_attendance\n   SET etc_type='unpaid'\n WHERE attendance='기타' AND (etc_type IS NULL OR etc_type='')",
+ "UPDATE staff SET staff_type='regular' WHERE staff_type IS NULL",
+ "ALTER TABLE staff ADD COLUMN personal_color TEXT",
+ "UPDATE staff SET personal_color = '#EFA7B7' WHERE name = '김유리' AND (personal_color IS NULL OR personal_color = '')",
+ "UPDATE staff SET personal_color = '#8FCFA9' WHERE name = '최윤희' AND (personal_color IS NULL OR personal_color = '')",
+ "UPDATE staff SET personal_color = '#E6C85C' WHERE name = '최지혜' AND (personal_color IS NULL OR personal_color = '')",
+ "UPDATE staff SET personal_color = '#8FB7E8' WHERE name = '안이람' AND (personal_color IS NULL OR personal_color = '')",
+ "UPDATE staff SET personal_color = '#B6A4E8' WHERE name = '차혜진' AND (personal_color IS NULL OR personal_color = '')",
+ "CREATE TABLE IF NOT EXISTS consult_team_managed (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  work_date TEXT NOT NULL,           \n  team_managed INTEGER,              \n  editor TEXT,                       \n  updated_at TEXT DEFAULT CURRENT_TIMESTAMP,\n  UNIQUE(work_date)\n)",
+ "CREATE INDEX IF NOT EXISTS idx_consult_team_managed_date ON consult_team_managed(work_date)"
+];

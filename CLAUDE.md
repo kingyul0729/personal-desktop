@@ -32,7 +32,7 @@ Web desktop (React 18 + Vite, Cloudflare Worker in `worker/`). 앱 화면(`src/a
 - Calculator state lives in `PriceCalculator`; the pane stays mounted when you switch menus, so input survives until the page reloads.
 
 ## 직원 자료 (예전 재고관리 앱에서 옮김)
-- 데이터는 예전 앱 D1 `webapp-production`(id ec4ff5ee-…, 바인딩 `INV_DB`)에 그대로 있고, `worker/staff.js`가 `/api/staff/*`로 읽고 쓴다(로그인·같은 출처 확인 뒤). `worker/staff.js`는 예전 `src/staff.ts`를 타입만 지워 옮긴 것: 근무시간·연차 차감·성과 집계 계산식을 바꾸지 않는다.
+- 예전 앱과 그 D1은 Genspark 호스팅(https://8ce98084-2f64-4a7f-bee9-80d23abd07b2.vip.gensparksite.com, 로그인 없이 열림)이라 사용자 Cloudflare 계정에 없다. 바인딩 `INV_DB`(id ec4ff5ee-…)는 사용자 계정의 빈 D1 `test-permission-check-invalid`이고, 직원 화면의 '예전 앱에서 직원 자료 가져오기'(`worker/staffImport.js`, POST `/api/staff-import` start→month 단계)가 예전 앱 API를 읽어 이 DB에 표를 만들고 채운다. 다시 가져오기는 이 사이트 직원 자료를 예전 앱 자료로 모두 바꾼다. 이후 `worker/staff.js`가 `/api/staff/*`로 읽고 쓴다(로그인·같은 출처 확인 뒤). `worker/staff.js`는 예전 `src/staff.ts`를 타입만 지워 옮긴 것: 근무시간·연차 차감·성과 집계 계산식을 바꾸지 않는다.
 - 사용자 지시(2026-11-07): 예전 앱은 숫자만 가져오고 레이아웃은 가져오지 않는다(직원 스케줄·연차 달력만 그대로 가져와도 됨). 예전 앱의 주문결제 방법은 잘못됐으니 가져오지 않는다. 사용자가 가져오라는 것만 가져온다.
 - 화면 규칙은 `src/app/staffRules.ts`(예전 staff.js의 상태·저장값). 테스트 표 구조는 `tests/fixtures/inv-staff.sql`(예전 마이그레이션 0009·0010·0014·0022).
 

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { LoadingBox, SavingMark } from './Feedback';
-import { StaffUnavailable } from './StaffSchedule';
+import { StaffImport, StaffUnavailable } from './StaffSchedule';
 import { staffGet, staffPost, StaffApiError } from '../staffApi';
 import { type StaffMember, WEEKDAYS, dateIn, daysInMonth, todayLocal, weekdayOf } from '../staffRules';
 
@@ -28,7 +28,7 @@ export default function StaffLeave() {
   useEffect(() => { void load(); }, [load]);
   useEffect(() => { if (sid == null) return; setLogs(null); staffGet(`/leave-log/${sid}`).then(setLogs, () => setLogs([])); }, [sid, staff]);
   if (state.loading) return <LoadingBox />;
-  if (state.error) return <StaffUnavailable message={state.error} unavailable={state.unavailable} detail={state.detail} />;
+  if (state.error) return <StaffUnavailable message={state.error} unavailable={state.unavailable} detail={state.detail} onImported={() => void load()} />;
   const s = staff.find(x => x.id === sid);
   const mine = new Set(dates[String(sid)] || []);
   const today = todayLocal();
@@ -65,6 +65,7 @@ export default function StaffLeave() {
           <span>{[l.log_date, l.reason, `잔여 ${l.after_remain ?? '-'}`].filter(Boolean).join(' · ')}</span>
           <small>{(l.created_at || '').slice(0, 16).replace('T', ' ')}{l.editor ? ` · ${l.editor}` : ''}</small></li>)}</ul>}
     </>}
+    <StaffImport again onDone={() => void load()} />
     {editing && s && <LeaveAdjust staff={s} onClose={() => setEditing(false)} onSaved={async () => { setEditing(false); await load(); }} />}
   </div>;
 }

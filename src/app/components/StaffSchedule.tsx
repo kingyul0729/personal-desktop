@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { LoadingBox, SavingMark } from './Feedback';
-import { staffGet, staffPost, StaffApiError } from '../staffApi';
+import { staffGet, staffImportStep, staffPost, StaffApiError } from '../staffApi';
 import {
   type AttendanceRecord, type MonthData, type StaffMember, WEEKDAYS, WORK_STATES, ST_LEADER, ST_STAFF, calendarLines, dateIn, dayLabelKo, daysInMonth, diffMin,
   isReadonly, isTimeEtc, leaveCumulative, losesManaged, monthLabel, optionsFor, payloadFor, shiftMonth, stateOf, statePatch, stdTime, todayLocal, weekdayOf,
@@ -36,10 +36,38 @@ export function useStaffMonth(month: string) {
   return { staff, setStaff, all, cum, ...state, reload: load };
 }
 
-export function StaffUnavailable({ message, unavailable, detail }: { message: string; unavailable: boolean; detail?: string }) {
-  return <div className="pending-screen"><strong>{unavailable ? '직원 자료 연결 전' : '불러오지 못했어요'}</strong><p>{message}</p>
-    {unavailable && <small>예전 재고관리 앱의 데이터베이스(webapp-production)를 이 사이트에 연결하면 바로 보여요.</small>}
-    {detail && <pre className="sf-detail">{detail}</pre>}</div>;
+export function StaffUnavailable({ message, unavailable, detail, onImported }: { message: string; unavailable: boolean; detail?: string; onImported?: () => void }) {
+  const empty = !!detail && /no such table/.test(detail);
+  return <div className="pending-screen"><strong>{unavailable ? '직원 자료 연결 전' : empty ? '아직 가져온 직원 자료가 없어요' : '불러오지 못했어요'}</strong>
+    <p>{empty ? '예전 재고관리 앱에 있는 직원·근태·연차 자료를 이 사이트로 가져와요.' : message}</p>
+    {unavailable && <small>예전 재고관리 앱의 데이터베이스를 이 사이트에 연결하면 바로 보여요.</small>}
+    {!unavailable && onImported && <StaffImport onDone={onImported} />}
+    {detail && !empty && <pre className="sf-detail">{detail}</pre>}</div>;
+}
+
+// 예전 앱 → 이 사이트로 직원 자료 가져오기(서버가 예전 앱 API를 읽어 옮김). 주문·결제 자료는 가져오지 않는다.
+export function StaffImport({ onDone, again = false }: { onDone: () => void; again?: boolean }) {
+  const [state, setState] = useState<{ running: boolean; text: string; error: string; ask: boolean }>({ running: false, text: '', error: '', ask: false });
+  const run = async () => {
+    setState({ running: true, text: '직원 목록을 가져오는 중…', error: '', ask: false });
+    try {
+      const start = await staffImportStep({ step: 'start' });
+      let total = 0;
+      for (let i = 0; i < start.months.length; i++) {
+        setState(s => ({ ...s, text: `근태 가져오는 중 ${i + 1} / ${start.months.length}` }));
+        total += (await staffImportStep({ step: 'month', month: start.months[i] })).attendance || 0;
+      }
+      setState({ running: false, text: `직원 ${start.staff}명 · 근태 ${total}건 · 연차 이력 ${start.leaveLogs}건을 가져왔어요.`, error: '', ask: false });
+      onDone();
+    } catch (e) { setState({ running: false, text: '', error: e instanceof Error ? e.message : '가져오지 못했어요.', ask: false }); }
+  };
+  return <div className="sf-import">
+    {state.ask ? <div className="sf-confirm">이 사이트의 직원 자료를 예전 앱 자료로 모두 바꿔요. 계속할까요?
+      <span><button type="button" className="sf-btn" onClick={() => setState(s => ({ ...s, ask: false }))}>취소</button><button type="button" className="sf-btn is-primary" onClick={() => void run()}>가져오기</button></span></div>
+      : <button type="button" className={`sf-btn${again ? '' : ' is-primary'}`} disabled={state.running} onClick={() => (again ? setState(s => ({ ...s, ask: true })) : void run())}>{state.running && <SavingMark />}{again ? '예전 앱 자료 다시 가져오기' : '예전 앱에서 직원 자료 가져오기'}</button>}
+    {state.text && <p className="sf-hint">{state.text}</p>}
+    {state.error && <p className="sf-hint is-warn">{state.error}</p>}
+  </div>;
 }
 
 export default function StaffSchedule() {
@@ -61,7 +89,7 @@ export default function StaffSchedule() {
         <button type="button" role="tab" aria-selected={tab === 'perf'} onClick={() => setTab('perf')}>성과</button>
       </div>
     </div>
-    {data.loading && !data.staff.length ? <LoadingBox /> : data.error ? <StaffUnavailable message={data.error} unavailable={data.unavailable} detail={data.detail} />
+    {data.loading && !data.staff.length ? <LoadingBox /> : data.error ? <StaffUnavailable message={data.error} unavailable={data.unavailable} detail={data.detail} onImported={() => void data.reload()} />
       : tab === 'schedule' ? <Schedule month={month} data={data} notify={setToast} /> : <Performance month={month} data={data} notify={setToast} />}
     {toast && <div className="sf-toast" role="status">{toast}</div>}
   </div>;
