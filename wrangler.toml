@@ -17,6 +17,12 @@ binding = "DB"
 database_name = "dauril-consent"
 database_id = "f1b8e866-d05a-4d78-9873-5ace007aa152"
 
+# 예전 재고관리 앱 D1 — 직원 스케줄·연차·성과 원본(worker/staff.js). 주문·결제 표는 쓰지 않음.
+[[d1_databases]]
+binding = "INV_DB"
+database_name = "webapp-production"
+database_id = "ec4ff5ee-5e57-4628-91c1-a5c2a9dc172d"
+
 # 파일(가격표·첨부 이미지) 저장: R2를 켜면 아래 주석을 풀어 연결. 없으면 D1에 저장됨.
 # [[r2_buckets]]
 # binding = "BUCKET"

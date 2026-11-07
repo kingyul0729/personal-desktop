@@ -1,5 +1,6 @@
 import { handleStudy } from './study.js';
 import { handleWork } from './work.js';
+import { handleStaff } from './staff.js';
 
 const defaults = [
   ['toning', '색소·토닝', 'heart'], ['acne', '여드름·흉터', 'kitty'],
@@ -666,6 +667,7 @@ export async function handleApi(request, env) {
   if (!['GET', 'HEAD'].includes(request.method) && request.headers.get('Origin') !== url.origin) return json({ error: '요청을 확인할 수 없습니다.' }, 403);
   if (url.pathname === '/api/study' || url.pathname.startsWith('/api/study/')) return handleStudy(request, env, owner, url);
   if (url.pathname === '/api/work' || url.pathname.startsWith('/api/work/')) return handleWork(request, env, owner, url);
+  if (url.pathname.startsWith('/api/staff/')) return handleStaff(request, env, url);
   if (url.pathname === '/api/capsules') return handleCapsules(request, env, owner);
   if (url.pathname.startsWith('/api/desktop') || url.pathname.startsWith('/api/files/')) {
     const response = await handleDesktop(request, env, owner, url);

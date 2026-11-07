@@ -9,6 +9,8 @@ import { PriceCalculator } from './components/PriceCalculator';
 import { FileWindow } from './components/FileWindow';
 import { TrashWindow } from './components/TrashWindow';
 import { FinderMain, FinderPath } from './components/FinderFrame';
+import StaffSchedule from './components/StaffSchedule';
+import StaffLeave from './components/StaffLeave';
 import { activeWindow, desktopReducer, initialDesktop, type WindowId } from './desktopState';
 import { DesktopProvider, useDesktop } from './useDesktop';
 import { DesktopNotice, LoadingBox } from './components/Feedback';
@@ -27,7 +29,7 @@ export const SIDEBAR_GROUPS: { title: string; items: MenuItem[] }[] = [
 // 아직 기존 자료 파일을 옮겨 오기 전인 화면
 const PENDING: Partial<Record<WindowId, string>> = {
   stockCheck: '재고 현황을 확인하고 체크하는 화면', stockOrder: '부족한 품목을 주문하고 기록하는 화면', stockMove: '입고·출고를 기록하는 화면', stockReport: '월말·연말 재고 보고서',
-  staffSchedule: '직원 근무 스케줄과 성과(지난 매출 포함)', staffLeave: '직원 연차 현황과 신청', staffTraining: '신입 직원 교육 자료',
+  staffTraining: '신입 직원 교육 자료',
 };
 const HOME: WindowId = 'fileExplorer';
 // 메뉴에 없는 화면(환경설정에서 여는 휴지통·파일)은 환경설정 아래에 있는 것으로 보이고 닫기 버튼이 붙는다.
@@ -141,6 +143,8 @@ export function AppShell({ desktop, dispatch }: { desktop: typeof initialDesktop
         {pane('priceCalculator', <PriceCalculator />)}
                 {pane('terminal', <StudyArchive onDirtyChange={setStudyDirty} {...sub('terminal')} />)}
         {pane('notepad', <Notepad />)}
+        {pane('staffSchedule', <StaffSchedule />)}
+        {pane('staffLeave', <StaffLeave />)}
         {(Object.keys(PENDING) as WindowId[]).map(id => pane(id, <div className="pending-screen"><strong>{menuOf(id)!.label}</strong><p>{PENDING[id]}</p><small>기존 자료 파일을 받아 이 화면으로 옮길 예정이에요.</small></div>))}
         {pane('controlPanel', <ControlPanel />)}
         {pane('trash', <TrashWindow />)}

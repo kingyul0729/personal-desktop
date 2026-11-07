@@ -1,6 +1,6 @@
 # personal-desktop
 
-Web desktop (React 18 + Vite, Cloudflare Worker in `worker/`). 앱 화면(`src/app/App.tsx`의 `AppShell`)은 macOS Finder 창 하나처럼 생겼다: 왼쪽 메뉴(회색 점 3개, 2026-11-07 사용자 지정 묶음 `SIDEBAR_GROUPS`: 상담 — 가격표·계산 / 재고 — 재고체크·재고주문·재고입출고·월말/연말보고서 / 직원 — 직원스케줄/성과표·직원연차·신입교육 / 개인 — 공부·메모 / 맨 아래 설정 — 휴지통·환경설정. 묶음 이름(˅)을 누르면 접고 펼치며 처음엔 지금 화면의 묶음만 펼침. 재고·직원 화면은 사용자의 기존 자료 파일(직원 스케줄·성과·지난 매출·PDF/이미지 등)을 받아 그 틀로 옮길 예정이라 지금은 '준비 중' 화면(`PENDING`). 업무 자료(업무 매뉴얼·상담자료)는 메뉴에서 뺐다 — 코드·저장 자료는 남아 있음), 오른쪽은 `FinderMain`(`components/FinderFrame.tsx`: ‹ › 제목 도구 막대, 내용, 경로 막대, 항목 수·크기 조절 상태 막대). 왼쪽 메뉴는 아코디언(2026-11-07): 메뉴 이름 자체를 누르면 그 화면이 열리면서 하위 목록이 펼쳐지고 다시 누르면 접힌다(오른쪽 ˅ 는 표시만). 첫 화면에서는 모두 접혀 있고 펼침 상태를 기억하지 않는다. 가격표 → 가격표 폴더, 업무 자료 → 업무 매뉴얼·상담자료(개수), 공부 보관함 → 주제(개수). 누르면 그 화면의 해당 폴더·분류로 바로 간다(각 화면의 `onSubs`/`onFolders`·`goto`·`onLocation`, App의 `subs`·`gotos`·`ats`). 떠다니는 창·작업표시줄·바탕화면 아이콘은 쓰지 않는다. 한 번 연 화면은 숨겨 두기만 해서 메뉴를 오가도 입력이 남는다. 휴지통은 왼쪽 메뉴 '설정' 그룹의 독립 메뉴로, 모든 메뉴에서 지운 항목(가격표·파일·메모·업무 자료·공부 기록)을 한곳에서 복원·완전 삭제한다(업무 자료·공부 기록은 `/api/work`·`/api/study`에서 불러오고 완전 삭제는 휴지통에 있는 것만 DELETE). 각 화면의 '삭제한 자료/기록' 탭은 없앴다(2026-11-07). 파일은 환경설정에서 열고 제목 줄+닫기로 보인다. `Window`·`Taskbar`·`DesktopFinder`·작업 캡슐 코드는 남아 있지만 화면에 쓰지 않는다.
+Web desktop (React 18 + Vite, Cloudflare Worker in `worker/`). 앱 화면(`src/app/App.tsx`의 `AppShell`)은 macOS Finder 창 하나처럼 생겼다: 왼쪽 메뉴(회색 점 3개, 2026-11-07 사용자 지정 묶음 `SIDEBAR_GROUPS`: 상담 — 가격표·계산 / 재고 — 재고체크·재고주문·재고입출고·월말/연말보고서 / 직원 — 직원스케줄/성과표·직원연차·신입교육 / 개인 — 공부·메모 / 맨 아래 설정 — 휴지통·환경설정. 묶음 이름(˅)을 누르면 접고 펼치며 처음엔 지금 화면의 묶음만 펼침. 재고 화면·신입교육은 아직 '준비 중' 화면(`PENDING`). 직원스케줄/성과표(`StaffSchedule.tsx`)·직원연차(`StaffLeave.tsx`)는 예전 재고관리 앱(Genspark로 만든 webapp)의 직원 달력·성과 입력·연차를 옮긴 것(2026-11-07). 업무 자료(업무 매뉴얼·상담자료)는 메뉴에서 뺐다 — 코드·저장 자료는 남아 있음), 오른쪽은 `FinderMain`(`components/FinderFrame.tsx`: ‹ › 제목 도구 막대, 내용, 경로 막대, 항목 수·크기 조절 상태 막대). 왼쪽 메뉴는 아코디언(2026-11-07): 메뉴 이름 자체를 누르면 그 화면이 열리면서 하위 목록이 펼쳐지고 다시 누르면 접힌다(오른쪽 ˅ 는 표시만). 첫 화면에서는 모두 접혀 있고 펼침 상태를 기억하지 않는다. 가격표 → 가격표 폴더, 업무 자료 → 업무 매뉴얼·상담자료(개수), 공부 보관함 → 주제(개수). 누르면 그 화면의 해당 폴더·분류로 바로 간다(각 화면의 `onSubs`/`onFolders`·`goto`·`onLocation`, App의 `subs`·`gotos`·`ats`). 떠다니는 창·작업표시줄·바탕화면 아이콘은 쓰지 않는다. 한 번 연 화면은 숨겨 두기만 해서 메뉴를 오가도 입력이 남는다. 휴지통은 왼쪽 메뉴 '설정' 그룹의 독립 메뉴로, 모든 메뉴에서 지운 항목(가격표·파일·메모·업무 자료·공부 기록)을 한곳에서 복원·완전 삭제한다(업무 자료·공부 기록은 `/api/work`·`/api/study`에서 불러오고 완전 삭제는 휴지통에 있는 것만 DELETE). 각 화면의 '삭제한 자료/기록' 탭은 없앴다(2026-11-07). 파일은 환경설정에서 열고 제목 줄+닫기로 보인다. `Window`·`Taskbar`·`DesktopFinder`·작업 캡슐 코드는 남아 있지만 화면에 쓰지 않는다.
 
 ## Commands
 - `npm test`: node test runner over `tests/*.test.mjs` (components are rendered with esbuild + `react-dom/server`)
@@ -30,6 +30,11 @@ Web desktop (React 18 + Vite, Cloudflare Worker in `worker/`). 앱 화면(`src/a
 - 영수증은 간결하게(2026-11-07 '꼭 다 써야 하나'): 일반 = 정상가(N회) · 할인 → 결제하실 금액 → 1회당 · 부가세 포함(공급가) 한 줄. 선불권 = 시술비(정상가에서 N% 할인) → ① 기존 잔액에서 차감 / ② N만원권 결제 → 예약금 → 오늘 받을 금액 → 남은잔액 한 줄. 위아래 톱니 가장자리 종이 모양.
 - 입력 방식: 터치 기기는 화면 숫자 패드(`NumberPad`, 시스템 키보드 안 뜸), 컴퓨터는 자판 + Enter(다음 칸)/Shift+Enter(이전 칸). '숫자 패드' 버튼으로 켜고 끄며 기기별로 기억한다. 내용 폭 560px 이상이면 입력 | 영수증 나란히(아이패드 가로 + 패드도), 더 좁으면 영수증이 위.
 - Calculator state lives in `PriceCalculator`; the pane stays mounted when you switch menus, so input survives until the page reloads.
+
+## 직원 자료 (예전 재고관리 앱에서 옮김)
+- 데이터는 예전 앱 D1 `webapp-production`(id ec4ff5ee-…, 바인딩 `INV_DB`)에 그대로 있고, `worker/staff.js`가 `/api/staff/*`로 읽고 쓴다(로그인·같은 출처 확인 뒤). `worker/staff.js`는 예전 `src/staff.ts`를 타입만 지워 옮긴 것: 근무시간·연차 차감·성과 집계 계산식을 바꾸지 않는다.
+- 사용자 지시(2026-11-07): 예전 앱은 숫자만 가져오고 레이아웃은 가져오지 않는다(직원 스케줄·연차 달력만 그대로 가져와도 됨). 예전 앱의 주문결제 방법은 잘못됐으니 가져오지 않는다. 사용자가 가져오라는 것만 가져온다.
+- 화면 규칙은 `src/app/staffRules.ts`(예전 staff.js의 상태·저장값). 테스트 표 구조는 `tests/fixtures/inv-staff.sql`(예전 마이그레이션 0009·0010·0014·0022).
 
 ## dauril.com 배포 (브랜치 `dauril`, Cloudflare Workers `personal-desktop`)
 - `cloudflare/worker.js`가 원래 앱(`worker/index.js`) 앞에서 직원 로그인을 처리하고 `oai-authenticated-user-*` 헤더를 서버에서 채운다. 브라우저가 보낸 `oai-*` 헤더는 버린다.
