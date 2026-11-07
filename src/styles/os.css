@@ -1532,3 +1532,9 @@ a:hover > .download-mark .download-arrow, a:focus-visible > .download-mark .down
 .pg-goal small b { color: #1f56b3; font-weight: 600; }
 @media (max-width: 900px) { .pg-goals { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .pg-goal { align-content: start; }
+/* 의학 단면 그림 */
+.skin-section { display: block; width: 100%; height: auto; border-radius: 12px; }
+.skin-layer-tags text { fill: #6f6560; font-size: 10.5px; font-weight: 600; paint-order: stroke; stroke: rgba(255,255,255,.75); stroke-width: 3px; }
+.pg-goal .skin-section { margin-bottom: 10px; }
+.pg-goal { padding: 14px 14px 18px; }
+.pg-goal { padding: 12px 12px 14px; gap: 4px; } .pg-goal .skin-section { margin-bottom: 6px; } .pg-goal small { margin-top: 4px; }
