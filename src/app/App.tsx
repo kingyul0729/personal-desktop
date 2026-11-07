@@ -1,4 +1,5 @@
-import { useEffect, useReducer, useState, type ReactNode } from 'react';
+import { Fragment, useEffect, useReducer, useState, type ReactNode } from 'react';
+import { ToneDot } from './components/ToneFolder';
 import { BookOpen, Calculator, FileText, FolderOpen, Presentation, Settings, Trash2, X, type LucideIcon } from 'lucide-react';
 import { StudyArchive } from './components/StudyArchive';
 import { WorkLibrary } from './components/WorkLibrary';
@@ -40,6 +41,11 @@ export function AppShell({ desktop, dispatch }: { desktop: typeof initialDesktop
   const [workDirty, setWorkDirty] = useState(false);
   const open = (id: WindowId) => dispatch({ type: 'open', id });
   const selected = SECONDARY[active] ? 'controlPanel' : active;
+  // 가격표 폴더: 왼쪽 메뉴 '가격표' 아래에 이름을 펼쳐 바로 이동
+  const [priceFolders, setPriceFolders] = useState<{ id: string; name: string }[]>([]);
+  const [priceGoto, setPriceGoto] = useState<{ id: string; n: number }>();
+  const [priceAt, setPriceAt] = useState('root');
+  const openPriceFolder = (id: string) => { open('fileExplorer'); setPriceGoto(current => ({ id, n: (current?.n ?? 0) + 1 })); };
 
   // ‹ › 는 지나온 화면 순서대로 오간다(가격표 안에서는 폴더 단위로 따로 움직인다).
   const [history, setHistory] = useState<{ list: WindowId[]; at: number }>({ list: [active], at: 0 });
@@ -74,7 +80,7 @@ export function AppShell({ desktop, dispatch }: { desktop: typeof initialDesktop
     if (!desktop.running.includes(id)) return null;
     const label = SECONDARY[id]?.label ?? menuOf(id)!.label;
     return <section key={id} className={`app-pane app-pane-${id}`} aria-label={label} hidden={active !== id}>
-      {id === 'fileExplorer' ? <FileExplorer />
+      {id === 'fileExplorer' ? <FileExplorer onFolders={setPriceFolders} goto={priceGoto} onLocation={setPriceAt} />
         : <FinderMain title={label} onBack={back} onForward={forward} path={pathFor(id)}
           tools={SECONDARY[id] ? <button type="button" aria-label={`${label} 닫기`} title="닫기" onClick={() => dispatch({ type: 'close', id })}><X size={19} strokeWidth={1.6} /></button> : undefined}>
           {content}
@@ -88,9 +94,16 @@ export function AppShell({ desktop, dispatch }: { desktop: typeof initialDesktop
         <div className="finder-lights" aria-hidden="true"><i /><i /><i /></div>
         {SIDEBAR_GROUPS.map(group => <div key={group.title} className={`finder-group${group.title === '설정' ? ' finder-group-bottom' : ''}`}>
           <p>{group.title}</p>
-          {group.items.map(item => <button key={item.id} type="button" aria-pressed={selected === item.id} aria-current={selected === item.id ? 'page' : undefined} onClick={() => open(item.id)}>
-            <item.icon size={17} strokeWidth={1.7} /><span>{item.label}</span>
-          </button>)}
+          {group.items.map(item => <Fragment key={item.id}>
+            <button type="button" aria-pressed={selected === item.id && (item.id !== 'fileExplorer' || priceAt === 'root')} aria-current={selected === item.id ? 'page' : undefined} onClick={() => item.id === 'fileExplorer' ? openPriceFolder('root') : open(item.id)}>
+              <item.icon size={17} strokeWidth={1.7} /><span>{item.label}</span>
+            </button>
+            {item.id === 'fileExplorer' && priceFolders.length > 0 && <div className="finder-sub" role="group" aria-label="가격표 폴더">
+              {priceFolders.map(folder => <button key={folder.id} type="button" aria-pressed={selected === 'fileExplorer' && priceAt === folder.id} onClick={() => openPriceFolder(folder.id)}>
+                <ToneDot name={folder.name} /><span>{folder.name}</span>
+              </button>)}
+            </div>}
+          </Fragment>)}
         </div>)}
       </nav>
       <div className="app-content">

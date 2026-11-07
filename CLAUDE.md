@@ -1,6 +1,6 @@
 # personal-desktop
 
-Web desktop (React 18 + Vite, Cloudflare Worker in `worker/`). 앱 화면(`src/app/App.tsx`의 `AppShell`)은 macOS Finder 창 하나처럼 생겼다: 왼쪽 메뉴(회색 점 3개, 그룹 업무: 가격표·금액 계산·업무 자료 / 개인: 공부 보관함·메모장 / 설정: 환경설정, 선 아이콘, `SIDEBAR_GROUPS`), 오른쪽은 `FinderMain`(`components/FinderFrame.tsx`: ‹ › 제목 도구 막대, 내용, 경로 막대, 항목 수·크기 조절 상태 막대). 떠다니는 창·작업표시줄·바탕화면 아이콘은 쓰지 않는다. 한 번 연 화면은 숨겨 두기만 해서 메뉴를 오가도 입력이 남는다. 휴지통·파일은 환경설정에서 열고 제목 줄+닫기로 보인다. `Window`·`Taskbar`·`DesktopFinder`·작업 캡슐 코드는 남아 있지만 화면에 쓰지 않는다.
+Web desktop (React 18 + Vite, Cloudflare Worker in `worker/`). 앱 화면(`src/app/App.tsx`의 `AppShell`)은 macOS Finder 창 하나처럼 생겼다: 왼쪽 메뉴(회색 점 3개, 그룹 업무: 가격표·금액 계산·업무 자료 / 개인: 공부 보관함·메모장 / 설정: 환경설정, 선 아이콘, `SIDEBAR_GROUPS`), 오른쪽은 `FinderMain`(`components/FinderFrame.tsx`: ‹ › 제목 도구 막대, 내용, 경로 막대, 항목 수·크기 조절 상태 막대). 왼쪽 메뉴 '가격표' 바로 아래에 가격표 폴더 이름이 들여쓰기로 나오고(색 점 + 이름), 누르면 그 폴더로 바로 간다(`FileExplorer`의 `onFolders`·`goto`·`onLocation`, 2026-11-07). 떠다니는 창·작업표시줄·바탕화면 아이콘은 쓰지 않는다. 한 번 연 화면은 숨겨 두기만 해서 메뉴를 오가도 입력이 남는다. 휴지통·파일은 환경설정에서 열고 제목 줄+닫기로 보인다. `Window`·`Taskbar`·`DesktopFinder`·작업 캡슐 코드는 남아 있지만 화면에 쓰지 않는다.
 
 ## Commands
 - `npm test`: node test runner over `tests/*.test.mjs` (components are rendered with esbuild + `react-dom/server`)

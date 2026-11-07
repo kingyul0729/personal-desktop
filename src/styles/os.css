@@ -1350,3 +1350,8 @@ a:hover > .download-mark .download-arrow, a:focus-visible > .download-mark .down
 .receipt { position: relative; }
 
 .study-toolbar select.study-scope { max-width: 200px; font-size: 13px; color: #2d3136; }
+/* 왼쪽 메뉴: 가격표 아래 폴더 이름(한 단계 들여쓰기) */
+.finder-sub { display: grid; gap: 1px; margin: 1px 0 4px; }
+.finder-sidebar .finder-sub button { min-height: 32px; padding-left: 34px; font-size: 14px; color: #4d535b; }
+.finder-sidebar .finder-sub .tone-dot { margin: 0 2px 0 0; flex-shrink: 0; }
+@media (max-width: 760px) { .finder-sub { display: none; } }

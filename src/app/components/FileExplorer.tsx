@@ -11,7 +11,8 @@ import { initialPriceFiles, type PriceFiles, type PriceFolder, type PriceImage }
 type Editor = { type: 'folder'; folder?: PriceFolder } | { type: 'image'; image: PriceImage } | { type: 'upload'; file: File } | { type: 'delete'; image: PriceImage };
 
 // 가격표 보관함은 Finder처럼: 처음엔 카테고리 폴더들, 폴더를 열면 가격표 썸네일. ‹ › 는 폴더 단위로 오간다.
-export function FileExplorer() {
+// 왼쪽 메뉴의 가격표 아래에 폴더 이름을 보여 주고(onFolders), 거기서 고른 폴더로 바로 이동한다(goto: 누를 때마다 n이 바뀜).
+export function FileExplorer({ onFolders, goto, onLocation }: { onFolders?: (folders: { id: string; name: string }[]) => void; goto?: { id: string; n: number }; onLocation?: (id: string) => void } = {}) {
   const [files, setFiles] = useState<PriceFiles>(initialPriceFiles);
   const [history, setHistory] = useState<{ list: string[]; at: number }>({ list: ['root'], at: 0 });
   const location = history.list[history.at];
@@ -55,6 +56,9 @@ export function FileExplorer() {
     return () => URL.revokeObjectURL(src);
   }, [editor]);
 
+  useEffect(() => { onFolders?.(files.folders.map(folder => ({ id: folder.id, name: folder.name }))); }, [files.folders]);
+  useEffect(() => { onLocation?.(location); }, [location]);
+  useEffect(() => { if (goto) navigate(goto.id); }, [goto?.n]);
   const navigate = (next: string) => {
     setGallery(null); setQuery(''); setSearching(false);
     if (next !== location) setHistory(({ list, at }) => ({ list: [...list.slice(0, at + 1), next], at: at + 1 }));
