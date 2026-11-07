@@ -1477,3 +1477,48 @@ a:hover > .download-mark .download-arrow, a:focus-visible > .download-mark .down
   .tm-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .tm-after, .tm-care ul { grid-template-columns: 1fr; }
 }
+
+/* 브리핑 탭(구성·금액 | 치료 원리)과 치료 원리 화면 */
+.pg-tabs { display: flex; gap: 24px; margin-top: -6px; border-bottom: 1px solid #e6e8ec; }
+.pg-tabs button { padding: 0 0 10px; border: 0; border-bottom: 2px solid transparent; background: none; color: #7d838b; font: inherit; font-size: 15px; }
+.pg-tabs button[aria-selected="true"] { border-bottom-color: #2f6fd6; color: #1f56b3; font-weight: 600; }
+.pg-principle { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 26px; align-items: start; }
+.pg-principle-figure { display: grid; gap: 8px; }
+.pg-principle-text h3 { margin: 0 0 10px; font-size: 15px; font-weight: 700; }
+.pg-principle-text h3 + ul { margin-bottom: 20px; }
+.pg-targets, .pg-flows { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.pg-targets li { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border: 1px solid #eceef1; border-radius: 10px; }
+.pg-targets li i { flex: 0 0 12px; height: 12px; margin-top: 4px; border-radius: 3px; background: var(--tone); }
+.pg-targets li b { display: block; font-size: 15px; font-weight: 600; word-break: keep-all; }
+.pg-targets li span { display: block; margin-top: 2px; color: #7d838b; font-size: 13px; }
+.pg-flows li { display: grid; gap: 2px; padding: 10px 12px; border-radius: 10px; background: #f6f7f9; }
+.pg-flows li b { font-size: 14.5px; font-weight: 600; }
+.pg-flows li span { color: #4d535b; font-size: 14px; line-height: 1.55; word-break: keep-all; }
+.sk-tag { fill: #1f56b3; font-size: 13px; font-weight: 600; }
+@media (max-width: 900px) { .pg-principle { grid-template-columns: 1fr; } }
+/* 치료 원리: 한 화면에 들어가게 촘촘히 */
+.pg-principle { gap: 22px; }
+.pg-principle-figure { gap: 6px; }
+.pg-principle-figure .pg-muted { margin: 0 0 6px; font-size: 13px; }
+.pg-principle h3 { margin: 4px 0 8px; font-size: 15px; font-weight: 700; }
+.pg-targets { gap: 6px; }
+.pg-targets li { padding: 8px 12px; }
+.pg-targets li b { font-size: 14.5px; }
+.pg-flows { gap: 6px; }
+.pg-flows li { padding: 8px 12px; }
+.pg-flows li span { font-size: 13.5px; line-height: 1.45; }
+.pg-principle-figure .pg-muted { margin: 0; }
+.pg-targets li { padding: 7px 12px; }
+.pg-targets li b, .pg-targets li span { display: inline; margin: 0; }
+.pg-targets li span::before { content: '  '; white-space: pre; }
+.pg-flows li { display: block; padding: 7px 12px; }
+.pg-flows li b { margin-right: 6px; }
+.pg-targets li span { word-break: keep-all; }
+.pg-principle-figure h3 { margin-top: 10px; }
+.pg-principle-figure .sk-svg { width: 100%; max-height: 220px; }
+.pg-principle-flows { grid-column: 1 / -1; }
+.pg-principle-flows .pg-flows { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (max-width: 900px) { .pg-principle-flows .pg-flows { grid-template-columns: 1fr; } }
+.pg-brief .pg-principle { margin-top: -4px; }
+.pg-principle-flows h3 { margin-top: 0; }
+.pg-principle-flows .pg-flows li { padding: 6px 12px; }

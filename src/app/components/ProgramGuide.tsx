@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { Columns3, Expand, FolderOpen, LayoutGrid, Microscope, Shrink } from 'lucide-react';
-import { TreatmentMethod } from './TreatmentMethod';
+import { ProgramDiagram, TreatmentMethod, type Beam } from './TreatmentMethod';
 import { FinderMain, FinderPath } from './FinderFrame';
 import { ToneDot, ToneFolder } from './ToneFolder';
 import { findProgram, guideCategories, sessionCells, treatments, type GuideProgram } from '../programGuide';
@@ -19,7 +19,39 @@ function SessionStrip({ program }: { program: GuideProgram }) {
   </div>;
 }
 
+// 이 프로그램이 색소를 다루는 방식: 어떤 색소(대상) ← 어떤 시술, 그리고 시술 종류별로 옅어지는 모습.
+function Principle({ program }: { program: GuideProgram }) {
+  const ids = [...program.parts.map(part => part.treatment), ...(program.included ?? [])];
+  const used = ids.map(id => treatments[id]);
+  const show = [...new Set(used.flatMap(t => t.beams))] as Beam[];
+  const has = (...keys: string[]) => ids.some(id => keys.includes(id));
+  const flows = [
+    has('maxgAlex', 'maxgPico1064') && { title: '또렷한 잡티 · 깊은 색소', text: '잠시 진해 보이다가 얇은 딱지가 생기고, 떨어지며 옅어져요.' },
+    has('revlite', 'pico') && { title: '넓게 퍼진 색소', text: '큰 딱지 없이 회차마다 조금씩 옅어져요. 자외선에 다시 짙어질 수 있어 관리가 함께 필요해요.' },
+    has('starlux') && { title: '피부결 · 재생', text: '피부가 새로 차오르며 결과 톤이 서서히 정돈돼요.' },
+    has('co2') && { title: '점', text: '얇게 깎아낸 자리에 딱지가 앉았다가 떨어지며 아물어요.' },
+  ].filter(Boolean) as { title: string; text: string }[];
+  const count = (id: string) => program.parts.find(part => part.treatment === id)?.count;
+  return <div className="pg-principle">
+    <div className="pg-principle-figure">
+      <ProgramDiagram show={show} co2={has('co2')} label={`${program.name}에 들어간 시술이 닿는 깊이`} />
+      <p className="pg-muted">파란 빛줄기: 이 프로그램에 들어간 시술이 닿는 깊이</p>
+    </div>
+    <div className="pg-principle-text">
+      <h3>무엇을 무엇으로</h3>
+      <ul className="pg-targets">{used.map(t => <li key={t.id} data-tone={t.tone}>
+        <i /><div><b>{t.target}</b><span>{t.name}{count(t.id) ? ` · ${count(t.id)}회` : ' · 기본 포함'}</span></div>
+      </li>)}</ul>
+    </div>
+    <div className="pg-principle-flows">
+      <h3>이렇게 옅어져요</h3>
+      <ul className="pg-flows">{flows.map(flow => <li key={flow.title}><b>{flow.title}</b><span>{flow.text}</span></li>)}</ul>
+    </div>
+  </div>;
+}
+
 function Briefing({ program, category }: { program: GuideProgram; category: string }) {
+  const [tab, setTab] = useState<'plan' | 'principle'>('plan');
   const average = Math.round(program.price / program.sessions);
   return <article className="pg-brief">
     <header className="pg-brief-head">
@@ -34,6 +66,11 @@ function Briefing({ program, category }: { program: GuideProgram; category: stri
         <small>1회 평균 {formatWonAmount(average)}</small>
       </div>
     </header>
+    <div className="pg-tabs" role="tablist" aria-label="보기">
+      <button type="button" role="tab" aria-selected={tab === 'plan'} onClick={() => setTab('plan')}>구성 · 금액</button>
+      <button type="button" role="tab" aria-selected={tab === 'principle'} onClick={() => setTab('principle')}>치료 원리</button>
+    </div>
+    {tab === 'principle' ? <Principle program={program} /> : <>
     <section className="pg-block">
       <h3>구성 <small>{program.sessions}회 · 색은 시술 종류</small></h3>
       <SessionStrip program={program} />
@@ -55,6 +92,7 @@ function Briefing({ program, category }: { program: GuideProgram; category: stri
       <h3>추가 선택 <small>{program.extras.note}</small></h3>
       <div className="pg-extra-rows">{program.extras.options.map(option => <div key={option.label}><span>{option.label}</span><Money won={option.price} /></div>)}</div>
     </section>}
+    </>}
   </article>;
 }
 

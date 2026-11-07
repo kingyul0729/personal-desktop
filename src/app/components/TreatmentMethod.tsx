@@ -17,7 +17,7 @@ const spots: { id: Spot; name: string; place: string; note: string }[] = [
   { id: 'dermal', name: 'ABNOM · 오타모반', place: '진피(깊은 층)', note: '깊이 있어 회갈색·푸른빛으로 보이고, 깊이 닿는 파장이 필요해요.' },
 ];
 
-type Beam = 'ipl' | 'alex' | 'toning' | 'pico1064' | 'frac';
+export type Beam = 'ipl' | 'alex' | 'toning' | 'pico1064' | 'frac';
 const beams: { id: Beam; name: string; depth: string; role: string; x: number; to: number; width: number }[] = [
   { id: 'ipl', name: 'MaxG (빛 치료)', depth: '얕고 넓게', role: '표면의 옅은 잡티와 붉은기를 넓게 정리해요.', x: 90, to: 92, width: 70 },
   { id: 'alex', name: '노블린 755nm', depth: '표피', role: '주근깨·흑자처럼 또렷한 표피 색소를 겨냥해요.', x: 205, to: 112, width: 22 },
@@ -110,6 +110,23 @@ function AfterPanel() {
       <p>피부 반응에 따라 일시적으로 색이 짙어지는 경우가 있어, 그때는 간격과 강도를 조절해요.</p>
     </div>
   </div>;
+}
+
+// 프로그램 하나에 들어간 장비만 피부 단면 위에 빛줄기로 그린다(모두 같은 파랑, 아래에 짧은 이름표).
+const shortNames: Record<Beam, string> = { ipl: 'MaxG', alex: '노블린 755', toning: '토닝', pico1064: '피코 1064', frac: '스타룩스 1540' };
+export function ProgramDiagram({ show, co2 = false, label }: { show: Beam[]; co2?: boolean; label: string }) {
+  const color = '#2f6fd6';
+  return <svg viewBox="0 0 640 300" className="sk-svg" role="img" aria-label={label}>
+    <SkinBase />
+    {co2 && <g><path d="M22 36 Q40 64 58 36 Z" fill="#fff" stroke="#c98a7c" strokeWidth="1.5" /><text x="40" y="24" textAnchor="middle" className="sk-tag">점 CO2</text></g>}
+    {beams.filter(beam => show.includes(beam.id)).map(beam => <g key={beam.id}>
+      {beam.id === 'frac'
+        ? [-18, -6, 6, 18].map(dx => <rect key={dx} x={beam.x + dx - 2.5} y={36} width="5" height={beam.to - 36} rx="2.5" fill={color} opacity=".5" />)
+        : <><path d={`M${beam.x - beam.width / 2} 0 L${beam.x + beam.width / 2} 0 L${beam.x + beam.width / 2 * (beam.id === 'ipl' ? 1.1 : .55)} ${beam.to} L${beam.x - beam.width / 2 * (beam.id === 'ipl' ? 1.1 : .55)} ${beam.to} Z`} fill={color} opacity=".26" />
+          <path d={`M${beam.x - 8} ${beam.to} h16`} stroke={color} strokeWidth="3" strokeLinecap="round" /></>}
+      <text x={beam.x} y="282" textAnchor="middle" className="sk-tag">{shortNames[beam.id]}</text>
+    </g>)}
+  </svg>;
 }
 
 export function TreatmentMethod() {
