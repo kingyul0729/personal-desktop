@@ -27,6 +27,16 @@ const curve = (fn: (x: number) => number, from = 0, to = W, step = 4) => {
 // 오른쪽 → 왼쪽으로 이어 그리기(면을 닫을 때)
 const back = (fn: (x: number) => number, step = 4) => { let d = ''; for (let x = W; x >= 0; x -= step) d += ` L${x} ${fn(x).toFixed(1)}`; return d; };
 
+// 레이저 손잡이 끝(금속 몸체 + 빛 나오는 창)
+function Handpiece({ id, x, w }: { id: string; x: number; w: number }) {
+  return <g>
+    <rect x={x - w / 2} y="-6" width={w} height="24" rx="5" fill={`url(#${id}h)`} />
+    <rect x={x - w / 2 + 3} y="14" width={w - 6} height="7" rx="2" fill="#3c4249" />
+    <rect x={x - w / 2 + 6} y="18.5" width={w - 12} height="3" rx="1.5" fill="#cfe1ff" />
+    <rect x={x - w / 2 + 6} y="18.5" width={w - 12} height="3" rx="1.5" fill="#ffffff" opacity=".8" filter={`url(#${id}b1)`} />
+  </g>;
+}
+
 export function SkinSection({ focus, label }: { focus: SkinFocus; label: string }) {
   const id = useId().replace(/:/g, '');
   const r = rng(7);
@@ -71,6 +81,19 @@ export function SkinSection({ focus, label }: { focus: SkinFocus; label: string 
   return <svg viewBox={`0 0 ${W} ${H}`} className="skin-section" role="img" aria-label={label}>
     <defs>
       <clipPath id={`${id}c`}><rect x="0" y="0" width={W} height={H} rx="12" /></clipPath>
+      {/* 조직 질감: 아주 옅은 잡음 */}
+      <filter id={`${id}t`} x="0" y="0" width="100%" height="100%">
+        <feTurbulence type="fractalNoise" baseFrequency=".85" numOctaves="2" seed="3" result="n" />
+        <feColorMatrix in="n" type="matrix" values="0 0 0 0 .45  0 0 0 0 .28  0 0 0 0 .24  0 0 0 .09 0" />
+      </filter>
+      <filter id={`${id}s`}><feGaussianBlur stdDeviation=".35" /></filter>
+      <filter id={`${id}b1`} x="-50%" y="-20%" width="200%" height="140%"><feGaussianBlur stdDeviation="1.4" /></filter>
+      <filter id={`${id}b2`} x="-80%" y="-20%" width="260%" height="140%"><feGaussianBlur stdDeviation="4.5" /></filter>
+      <filter id={`${id}b3`} x="-100%" y="-100%" width="300%" height="300%"><feGaussianBlur stdDeviation="6" /></filter>
+      {/* 빛은 깊이 들어갈수록 약해진다 */}
+      <linearGradient id={`${id}f`} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#fff" /><stop offset=".55" stopColor="#fff" stopOpacity=".75" /><stop offset="1" stopColor="#fff" stopOpacity=".2" /></linearGradient>
+      <mask id={`${id}m`}><rect x="0" y="0" width={W} height={H} fill={`url(#${id}f)`} /></mask>
+      <linearGradient id={`${id}h`} x1="0" y1="0" x2="1" y2="0"><stop offset="0" stopColor="#4a5058" /><stop offset=".35" stopColor="#9aa2ab" /><stop offset=".55" stopColor="#d9dde2" /><stop offset="1" stopColor="#555c64" /></linearGradient>
     </defs>
     <g clipPath={`url(#${id}c)`}>
       <rect x="0" y="0" width={W} height={H} fill="#fbfbfc" />
@@ -96,6 +119,7 @@ export function SkinSection({ focus, label }: { focus: SkinFocus; label: string 
       </g>
       {/* 표피 */}
       <path d={`${curve(s)} ${back(junctionY)} Z`} fill="#f4dccd" />
+      <g filter={`url(#${id}s)`}>
       {cells.map((c, i) => <g key={i}>
         <ellipse cx={c.x} cy={c.y} rx={c.rx} ry={c.ry} fill={c.tone < .3 ? '#f6e5d9' : '#f0d2bf'} stroke="#e1b9a2" strokeWidth=".6" />
         {c.tone > .25 && <circle cx={c.x} cy={c.y} r={.9 + c.tone * .5} fill="#b9867a" opacity=".7" />}
@@ -104,6 +128,7 @@ export function SkinSection({ focus, label }: { focus: SkinFocus; label: string 
         <ellipse rx="3.2" ry="4.6" fill="#ebc2ab" stroke="#d6a28a" strokeWidth=".6" />
         <circle r="1.5" fill="#9c6b5e" />
       </g>)}
+      </g>
       {/* 각질층 */}
       <path d={curve(s)} fill="none" stroke="#e8cdbf" strokeWidth="7" />
       {[0, 2.6, 5.2].map(o => <path key={o} d={curve(x => s(x) - 2.6 + o)} fill="none" stroke="#dcb8a6" strokeWidth=".7" />)}
@@ -137,19 +162,33 @@ export function SkinSection({ focus, label }: { focus: SkinFocus; label: string 
         {Array.from({ length: 34 }, (_, i) => { const a = i * 2.4; const d = 3 + (i % 9) * 3.1; return <circle key={i} cx={200 + Math.cos(a) * d * 1.5} cy={junctionY(200) + 10 + Math.sin(a) * d * .9} r="3.4" fill="#8a5a46" stroke="#6b4434" strokeWidth=".6" />; })}
         {[176, 190, 210, 224].map(x => <ellipse key={x} cx={x} cy={junctionY(x) - 6} rx="5" ry="3.4" fill="#7b4e3d" />)}
       </g>}
+      {/* 조직 질감 */}
+      <rect x="0" y={SURFACE - 4} width={W} height={H} filter={`url(#${id}t)`} />
       {/* 스타룩스 1540 = 표면은 두고 피부 속에 아주 가는 열 기둥(미세 치료 구역) */}
       {focus === 'texture' && <g>
-        {[110, 160, 210, 260].map(x => <g key={x}>
-          <path d={`M${x - 3} ${s(x) + 6} Q${x - 6} 140 ${x} 182 Q${x + 6} 140 ${x + 3} ${s(x) + 6} Z`} fill="#2f6fd6" opacity=".2" />
-          <path d={`M${x} ${s(x) + 6} V176`} stroke="#2f6fd6" strokeWidth="1.2" opacity=".6" />
+        {[120, 160, 200, 240, 280].map(x => <g key={x}>
+          <ellipse cx={x} cy={128} rx="5" ry="54" fill="#f6efe9" opacity=".75" filter={`url(#${id}b1)`} />
+          <ellipse cx={x} cy={128} rx="2.4" ry="50" fill="#e7b9a4" opacity=".6" filter={`url(#${id}b1)`} />
         </g>)}
-        {[110, 160, 210, 260].map(x => <path key={x} d={`M${x} 6 V${s(x) - 4}`} stroke="#2f6fd6" strokeWidth="1.4" strokeDasharray="2 3" opacity=".7" />)}
+        <g mask={`url(#${id}m)`}>
+          {[120, 160, 200, 240, 280].map(x => <g key={x}>
+            <rect x={x - 4} y="22" width="8" height="160" fill="#8fbaff" opacity=".45" filter={`url(#${id}b2)`} />
+            <rect x={x - 1} y="22" width="2" height="156" fill="#ffffff" opacity=".9" filter={`url(#${id}b1)`} />
+          </g>)}
+        </g>
+        <Handpiece id={id} x={200} w={190} />
       </g>}
-      {/* 레이저 빛: 겨냥한 깊이까지 */}
+      {/* 레이저 빛: 손잡이 끝에서 나와 겨냥한 깊이에서 모인다 */}
       {beam && <g>
-        <path d={`M${beam.x - beam.w / 2} 0 H${beam.x + beam.w / 2} L${beam.x + beam.w * .32} ${beam.to} H${beam.x - beam.w * .32} Z`} fill="#2f6fd6" opacity=".14" />
-        <path d={`M${beam.x} 0 V${beam.to}`} stroke="#2f6fd6" strokeWidth="1.2" strokeDasharray="3 3" opacity=".65" />
-        <ellipse cx={beam.x} cy={beam.to} rx={beam.w * .42} ry="4" fill="none" stroke="#2f6fd6" strokeWidth="1.4" opacity=".8" />
+        <g mask={`url(#${id}m)`}>
+          <path d={`M${beam.x - beam.w / 2} 22 H${beam.x + beam.w / 2} L${beam.x + beam.w * .18} ${beam.to} H${beam.x - beam.w * .18} Z`} fill="#8fbaff" opacity=".5" filter={`url(#${id}b2)`} />
+          <path d={`M${beam.x - beam.w * .22} 22 H${beam.x + beam.w * .22} L${beam.x + 2} ${beam.to} H${beam.x - 2} Z`} fill="#dbe9ff" opacity=".8" filter={`url(#${id}b1)`} />
+        </g>
+        <ellipse cx={beam.x} cy={beam.to} rx={beam.w * .5} ry="9" fill="#bcd6ff" opacity=".85" filter={`url(#${id}b3)`} />
+        <ellipse cx={beam.x} cy={beam.to} rx={beam.w * .18} ry="3.5" fill="#ffffff" opacity=".95" filter={`url(#${id}b1)`} />
+        {/* 빛을 받은 색소가 잘게 부서진 모습 */}
+        {focus !== 'mole' && Array.from({ length: 18 }, (_, i) => { const a = i * 2.39; const d = 6 + (i % 6) * 2.6; return <circle key={i} cx={beam.x + Math.cos(a) * d * 1.4} cy={beam.to + Math.sin(a) * d * .55} r={.6 + (i % 3) * .3} fill={focus === 'deep' ? '#5f5a73' : '#6b4434'} opacity=".8" />; })}
+        <Handpiece id={id} x={beam.x} w={Math.max(34, beam.w + 14)} />
       </g>}
       {/* 층 이름 */}
       <g className="skin-layer-tags">
