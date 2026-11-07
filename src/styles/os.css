@@ -1541,3 +1541,10 @@ a:hover > .download-mark .download-arrow, a:focus-visible > .download-mark .down
 .pg-goal .skin-section { max-height: 250px; width: auto; max-width: 100%; margin-left: auto; margin-right: auto; }
 .skin-layer-tags text { stroke-width: 10px; }
 .skin-layer-tags-lg text { font-size: 40px; stroke-width: 10px; }
+/* 장비별 깊이 그림(전문 버전): 장비마다 고유 색 */
+.sk-pro .sk-beam-name { font-size: 10px; font-weight: 700; }
+.sk-pro .sk-beam-wave { font-size: 8.5px; fill: #7d838b; }
+.sk-pro .sk-layer { font-size: 10px; fill: #9a7f72; font-weight: 600; }
+.sk-svg.sk-pro { overflow: hidden; }
+.tm-chips button .tm-beam-dot { display: inline-block; width: 9px; height: 9px; margin-right: 7px; border-radius: 50%; background: var(--beam); vertical-align: 1px; }
+.tm-chips button[aria-pressed="true"] { border-color: var(--beam, #2f6fd6); color: #2d3136; background: color-mix(in srgb, var(--beam, #2f6fd6) 10%, #fff); }

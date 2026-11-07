@@ -19,22 +19,47 @@ const spots: { id: Spot; name: string; place: string; note: string }[] = [
 
 export type Beam = 'ipl' | 'alex' | 'toning' | 'pico1064' | 'frac';
 const beams: { id: Beam; name: string; depth: string; role: string; x: number; to: number; width: number }[] = [
-  { id: 'ipl', name: 'MaxG (빛 치료)', depth: '얕고 넓게', role: '표면의 옅은 잡티와 붉은기를 넓게 정리해요.', x: 90, to: 92, width: 70 },
-  { id: 'alex', name: '노블린 755nm', depth: '표피', role: '주근깨·흑자처럼 또렷한 표피 색소를 겨냥해요.', x: 205, to: 112, width: 22 },
-  { id: 'toning', name: '레블라이트 · 피코 토닝', depth: '표피 ~ 진피 윗부분', role: '낮은 에너지로 넓게, 여러 번 나눠 기미 같은 퍼진 색소를 조금씩 옅게 해요.', x: 320, to: 175, width: 64 },
-  { id: 'pico1064', name: '피코 1064nm', depth: '진피', role: '깊은 층에 있는 색소(ABNOM·오타모반)를 잘게 부숴요.', x: 445, to: 245, width: 22 },
-  { id: 'frac', name: '스타룩스 1540', depth: '가는 기둥 모양', role: '색소를 직접 부수기보다 작은 열 기둥으로 재생을 도와 피부결·톤을 다듬어요.', x: 555, to: 215, width: 46 },
+  { id: 'ipl', name: 'MaxG (빛 치료)', depth: '얕고 넓게', role: '표면의 옅은 잡티와 붉은기를 넓게 정리해요.', x: 70, to: 92, width: 70 },
+  { id: 'alex', name: '노블린 755nm', depth: '표피', role: '주근깨·흑자처럼 또렷한 표피 색소를 겨냥해요.', x: 180, to: 116, width: 24 },
+  { id: 'toning', name: '레블라이트 · 피코 토닝', depth: '표피 ~ 진피 윗부분', role: '낮은 에너지로 넓게, 여러 번 나눠 기미 같은 퍼진 색소를 조금씩 옅게 해요.', x: 290, to: 168, width: 64 },
+  { id: 'pico1064', name: '피코 1064nm', depth: '진피', role: '깊은 층에 있는 색소(ABNOM·오타모반)를 잘게 부숴요.', x: 395, to: 240, width: 24 },
+  { id: 'frac', name: '스타룩스 1540', depth: '가는 기둥 모양', role: '색소를 직접 부수기보다 작은 열 기둥으로 재생을 도와 피부결·톤을 다듬어요.', x: 492, to: 215, width: 46 },
 ];
 
-// 피부 단면 바탕: 표피(위) · 경계 물결선 · 진피(아래)
+// 장비별 색: 파장 계열로 구분(넓은 파장 빛 = 호박색, 755 = 빨강, 토닝 = 보라, 1064 = 남색, 1540 = 청록)
+export const BEAM_COLOR: Record<Beam, string> = { ipl: '#e39a2d', alex: '#d6453b', toning: '#7b5fd3', pico1064: '#3f4fb5', frac: '#16a093' };
+const beamLabel: Record<Beam, [string, string]> = { ipl: ['MaxG', 'IPL'], alex: ['노블린', '755nm'], toning: ['토닝', '레블라이트·피코'], pico1064: ['피코', '1064nm'], frac: ['스타룩스', '1540nm'] };
+const junction = (x: number) => 112 + 7 * Math.sin((x - 20) / 18) + 2.5 * Math.sin(x / 7.3);
+const jPath = (from = 0, to = 640) => { let d = ''; for (let x = from; x <= to; x += 6) d += `${d ? ' L' : 'M'}${x} ${junction(x).toFixed(1)}`; return d; };
+
+// 피부 단면 바탕: 각질층 · 표피 · 경계(물결) · 진피 윗부분 · 진피 아래 · 피하지방 + 오른쪽 깊이 눈금
 function SkinBase() {
   return <>
-    <rect x="0" y="40" width="640" height="250" fill="#f6ebe4" />
-    <path d="M0 40 H640 V112 C600 122 570 102 530 112 S460 124 420 112 S350 100 310 112 S240 124 200 112 S130 100 90 112 S30 122 0 112 Z" fill="#f2dccb" />
-    <path d="M0 112 C30 122 60 102 90 112 S160 124 200 112 S270 100 310 112 S380 124 420 112 S490 100 530 112 S600 122 640 112" fill="none" stroke="#e2c4ae" strokeWidth="1.5" />
-    <rect x="0" y="36" width="640" height="6" fill="#ecd3c0" />
-    <text x="628" y="70" textAnchor="end" className="sk-layer">표피</text>
-    <text x="628" y="200" textAnchor="end" className="sk-layer">진피</text>
+    <defs>
+      {(Object.keys(BEAM_COLOR) as Beam[]).map(id => <linearGradient key={id} id={`tm-g-${id}`} x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stopColor={BEAM_COLOR[id]} stopOpacity=".15" /><stop offset=".25" stopColor={BEAM_COLOR[id]} stopOpacity=".55" /><stop offset="1" stopColor={BEAM_COLOR[id]} stopOpacity=".2" />
+      </linearGradient>)}
+      {(Object.keys(BEAM_COLOR) as Beam[]).map(id => <radialGradient key={id} id={`tm-f-${id}`}><stop offset="0" stopColor="#fff" stopOpacity=".95" /><stop offset=".35" stopColor={BEAM_COLOR[id]} stopOpacity=".7" /><stop offset="1" stopColor={BEAM_COLOR[id]} stopOpacity="0" /></radialGradient>)}
+    </defs>
+    <rect x="0" y="40" width="640" height="260" fill="#f5e6df" />
+    <rect x="0" y="175" width="640" height="95" fill="#f1ddd5" />
+    <path d="M0 175 C120 168 240 182 360 174 S560 168 640 176 V270 H0 Z" fill="#efd8cf" />
+    <path d="M0 270 C90 264 180 276 300 268 S520 262 640 270 V300 H0 Z" fill="#f6ead0" />
+    {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map(i => <ellipse key={i} cx={28 + i * 55} cy={287} rx="24" ry="10" fill="none" stroke="#e6d3a8" strokeWidth="1" />)}
+    {[150, 196, 222, 248].map((y, i) => <path key={y} d={`M0 ${y} C110 ${y - 6} 210 ${y + 6} 330 ${y - 2} S540 ${y - 7} 640 ${y + 2}`} fill="none" stroke="#e7c9be" strokeWidth="1" opacity={.7 - i * .1} />)}
+    <path d={`${jPath()} L640 40 L0 40 Z`} fill="#f0d9c6" />
+    <path d={jPath()} fill="none" stroke="#c99d86" strokeWidth="1.4" />
+    <rect x="0" y="36" width="640" height="7" fill="#e6c7b2" />
+    <path d="M0 36 H640" stroke="#d3ad96" strokeWidth="1" />
+    {/* 깊이 눈금 */}
+    <g className="sk-ruler">
+      <path d="M624 40 V300" stroke="#b9a59c" strokeWidth="1" />
+      {[[40, ''], [112, ''], [175, ''], [270, '']].map(([y]) => <path key={y as number} d={`M618 ${y} H630`} stroke="#b9a59c" strokeWidth="1" />)}
+      <text x="612" y="80" textAnchor="end" className="sk-layer">표피</text>
+      <text x="612" y="148" textAnchor="end" className="sk-layer">진피 윗부분</text>
+      <text x="612" y="226" textAnchor="end" className="sk-layer">진피 깊은 곳</text>
+      <text x="612" y="292" textAnchor="end" className="sk-layer">피하지방</text>
+    </g>
   </>;
 }
 
@@ -46,9 +71,9 @@ function WhereDiagram({ active }: { active: Spot }) {
   });
   return <svg viewBox="0 0 640 300" className="sk-svg" role="img" aria-label="피부 단면: 표피의 주근깨·흑자, 표피와 진피 경계의 기미, 진피의 ABNOM·오타모반">
     <SkinBase />
-    <g className={`sk-group${active === 'epi' ? ' is-on' : ''}`}>{cluster(110, 100, 22, 34, 4, '#8a5a3c', 3)}<text x="110" y="28" textAnchor="middle" className="sk-label">주근깨·흑자</text><path d="M110 32 V78" className="sk-lead" /></g>
+    <g className={`sk-group${active === 'epi' ? ' is-on' : ''}`}>{cluster(110, 92, 22, 30, 4, '#8a5a3c', 3)}<text x="110" y="28" textAnchor="middle" className="sk-label">주근깨·흑자</text><path d="M110 32 V70" className="sk-lead" /></g>
     <g className={`sk-group${active === 'mixed' ? ' is-on' : ''}`}>{cluster(320, 104, 18, 70, 3.4, '#9a6a4a', 11)}{cluster(320, 138, 12, 60, 3, '#8d7066', 29)}<text x="320" y="28" textAnchor="middle" className="sk-label">기미</text><path d="M320 32 V80" className="sk-lead" /></g>
-    <g className={`sk-group${active === 'dermal' ? ' is-on' : ''}`}>{cluster(530, 220, 20, 46, 3.6, '#6b7389', 47)}<text x="530" y="28" textAnchor="middle" className="sk-label">ABNOM·오타모반</text><path d="M530 32 V190" className="sk-lead" /></g>
+    <g className={`sk-group${active === 'dermal' ? ' is-on' : ''}`}>{cluster(470, 220, 20, 46, 3.6, '#6b7389', 47)}<text x="470" y="28" textAnchor="middle" className="sk-label">ABNOM·오타모반</text><path d="M470 32 V190" className="sk-lead" /></g>
   </svg>;
 }
 
@@ -77,20 +102,32 @@ function HowDiagram() {
   </svg>;
 }
 
+function BeamShape({ beam, on }: { beam: typeof beams[number]; on: boolean }) {
+  const c = BEAM_COLOR[beam.id];
+  const op = on ? 1 : .42;
+  if (beam.id === 'frac') return <g opacity={op}>
+    {[-18, -6, 6, 18].map(dx => <g key={dx}>
+      <path d={`M${beam.x + dx - 3} 36 L${beam.x + dx + 3} 36 L${beam.x + dx + 1.5} ${beam.to} L${beam.x + dx - 1.5} ${beam.to} Z`} fill={`url(#tm-g-${beam.id})`} />
+      <ellipse cx={beam.x + dx} cy={(36 + beam.to) / 2 + 20} rx="4" ry={(beam.to - 36) / 2 - 10} fill={c} opacity=".18" />
+    </g>)}
+  </g>;
+  const k = beam.id === 'ipl' ? 1.1 : .5;
+  const l = beam.x - beam.width / 2, r = beam.x + beam.width / 2, bl = beam.x - beam.width / 2 * k, br = beam.x + beam.width / 2 * k;
+  return <g opacity={op}>
+    <path d={`M${l} 22 L${r} 22 L${br} ${beam.to} L${bl} ${beam.to} Z`} fill={`url(#tm-g-${beam.id})`} />
+    <path d={`M${l} 22 L${bl} ${beam.to} M${r} 22 L${br} ${beam.to}`} stroke={c} strokeWidth="1" opacity=".6" />
+    <ellipse cx={beam.x} cy={beam.to} rx={Math.max(14, beam.width * k * .7)} ry="9" fill={`url(#tm-f-${beam.id})`} />
+  </g>;
+}
+
 function DevicesDiagram({ active }: { active: Beam }) {
-  return <svg viewBox="0 0 640 300" className="sk-svg" role="img" aria-label="장비별로 닿는 깊이: MaxG 얕고 넓게, 노블린 755 표피, 토닝 표피에서 진피 윗부분, 피코 1064 진피, 스타룩스 1540 가는 기둥">
+  return <svg viewBox="0 0 640 300" className="sk-svg sk-pro" role="img" aria-label="장비별로 닿는 깊이: MaxG 얕고 넓게, 노블린 755 표피, 토닝 표피에서 진피 윗부분, 피코 1064 진피, 스타룩스 1540 가는 기둥">
     <SkinBase />
-    {beams.map(beam => {
-      const on = beam.id === active;
-      const color = on ? '#2f6fd6' : '#9aa6b5';
-      if (beam.id === 'frac') return <g key={beam.id} className={`sk-beam${on ? ' is-on' : ''}`}>
-        {[-18, -6, 6, 18].map(dx => <rect key={dx} x={beam.x + dx - 2.5} y={36} width="5" height={beam.to - 36} rx="2.5" fill={color} opacity={on ? .55 : .3} />)}
-      </g>;
-      return <g key={beam.id} className={`sk-beam${on ? ' is-on' : ''}`}>
-        <path d={`M${beam.x - beam.width / 2} 0 L${beam.x + beam.width / 2} 0 L${beam.x + beam.width / 2 * (beam.id === 'ipl' ? 1.1 : .55)} ${beam.to} L${beam.x - beam.width / 2 * (beam.id === 'ipl' ? 1.1 : .55)} ${beam.to} Z`} fill={color} opacity={on ? .32 : .16} />
-        <path d={`M${beam.x - 8} ${beam.to} h16`} stroke={color} strokeWidth="3" strokeLinecap="round" />
-      </g>;
-    })}
+    {beams.map(beam => <BeamShape key={beam.id} beam={beam} on={beam.id === active} />)}
+    {beams.map(beam => { const on = beam.id === active; const [n, w] = beamLabel[beam.id]; return <g key={beam.id} opacity={on ? 1 : .55}>
+      <text x={beam.x} y="10" textAnchor="middle" className="sk-beam-name" fill={BEAM_COLOR[beam.id]}>{n}</text>
+      <text x={beam.x} y="20" textAnchor="middle" className="sk-beam-wave">{w}</text>
+    </g>; })}
   </svg>;
 }
 
@@ -113,19 +150,14 @@ function AfterPanel() {
 }
 
 // 프로그램 하나에 들어간 장비만 피부 단면 위에 빛줄기로 그린다(모두 같은 파랑, 아래에 짧은 이름표).
-const shortNames: Record<Beam, string> = { ipl: 'MaxG', alex: '노블린 755', toning: '토닝', pico1064: '피코 1064', frac: '스타룩스 1540' };
-export function ProgramDiagram({ show, co2 = false, label }: { show: Beam[]; co2?: boolean; label: string }) {
-  const color = '#2f6fd6';
-  return <svg viewBox="0 0 640 300" className="sk-svg" role="img" aria-label={label}>
+export function ProgramDiagram({ show, label }: { show: Beam[]; co2?: boolean; label: string }) {
+  return <svg viewBox="0 0 640 300" className="sk-svg sk-pro" role="img" aria-label={label}>
     <SkinBase />
-    {co2 && <g><path d="M22 36 Q40 64 58 36 Z" fill="#fff" stroke="#c98a7c" strokeWidth="1.5" /><text x="40" y="24" textAnchor="middle" className="sk-tag">점 CO2</text></g>}
-    {beams.filter(beam => show.includes(beam.id)).map(beam => <g key={beam.id}>
-      {beam.id === 'frac'
-        ? [-18, -6, 6, 18].map(dx => <rect key={dx} x={beam.x + dx - 2.5} y={36} width="5" height={beam.to - 36} rx="2.5" fill={color} opacity=".5" />)
-        : <><path d={`M${beam.x - beam.width / 2} 0 L${beam.x + beam.width / 2} 0 L${beam.x + beam.width / 2 * (beam.id === 'ipl' ? 1.1 : .55)} ${beam.to} L${beam.x - beam.width / 2 * (beam.id === 'ipl' ? 1.1 : .55)} ${beam.to} Z`} fill={color} opacity=".26" />
-          <path d={`M${beam.x - 8} ${beam.to} h16`} stroke={color} strokeWidth="3" strokeLinecap="round" /></>}
-      <text x={beam.x} y="282" textAnchor="middle" className="sk-tag">{shortNames[beam.id]}</text>
-    </g>)}
+    {beams.filter(beam => show.includes(beam.id)).map(beam => <BeamShape key={beam.id} beam={beam} on />)}
+    {beams.filter(beam => show.includes(beam.id)).map(beam => { const [n, w] = beamLabel[beam.id]; return <g key={beam.id}>
+      <text x={beam.x} y="10" textAnchor="middle" className="sk-beam-name" fill={BEAM_COLOR[beam.id]}>{n}</text>
+      <text x={beam.x} y="20" textAnchor="middle" className="sk-beam-wave">{w}</text>
+    </g>; })}
   </svg>;
 }
 
@@ -148,7 +180,7 @@ export function TreatmentMethod() {
       {step === 'how' && <><HowDiagram /><p className="tm-note">부서진 색소는 피부가 새로 바뀌는 흐름과 몸의 정리 과정으로 천천히 빠져요. 그래서 한 번보다 <b>여러 번에 나눠</b> 옅게 하는 경우가 많아요.</p></>}
       {step === 'devices' && <>
         <DevicesDiagram active={beam} />
-        <div className="tm-chips">{beams.map(b => <button key={b.id} type="button" aria-pressed={beam === b.id} onClick={() => setBeam(b.id)}>{b.name}</button>)}</div>
+        <div className="tm-chips">{beams.map(b => <button key={b.id} type="button" aria-pressed={beam === b.id} onClick={() => setBeam(b.id)} style={{ ['--beam' as string]: BEAM_COLOR[b.id] }}><i className="tm-beam-dot" />{b.name}</button>)}</div>
         {(() => { const b = beams.find(x => x.id === beam)!; return <p className="tm-note"><b>{b.name}</b> · {b.depth} — {b.role}</p>; })()}
       </>}
       {step === 'after' && <AfterPanel />}
