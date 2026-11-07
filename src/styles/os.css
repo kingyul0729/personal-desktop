@@ -1539,3 +1539,5 @@ a:hover > .download-mark .download-arrow, a:focus-visible > .download-mark .down
 .pg-goal { padding: 14px 14px 18px; }
 .pg-goal { padding: 12px 12px 14px; gap: 4px; } .pg-goal .skin-section { margin-bottom: 6px; } .pg-goal small { margin-top: 4px; }
 .pg-goal .skin-section { max-height: 250px; width: auto; max-width: 100%; margin-left: auto; margin-right: auto; }
+.skin-layer-tags text { stroke-width: 10px; }
+.skin-layer-tags-lg text { font-size: 40px; stroke-width: 10px; }
