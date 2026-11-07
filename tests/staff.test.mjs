@@ -63,3 +63,36 @@ test('a broken inventory database reports the cause and its tables', async () =>
   assert.ok(r.data.tables.includes('staff') && !r.data.tables.includes('staff_leave_log'));
 });
 
+
+test('full consultation day: leader managed stays empty, designated is recorded but left out of every performance number', async () => {
+  const e = env(); await call(e, '/api/staff/list');
+  const post = body => call(e, '/api/staff/attendance', { method: 'POST', body });
+  // 팀장 풀상담, 관리인원 넣어도 저장 안 됨(0도 아님), 지정환자수는 기록
+  await post({ staff_id: 1, work_date: '2026-10-05', attendance: '상담', managed_count: 4, designated_count: 3 });
+  const lead = e.inv.prepare(`SELECT managed_count, designated_count FROM staff_attendance WHERE staff_id = 1 AND work_date = '2026-10-05'`).get();
+  assert.deepEqual([lead.managed_count, lead.designated_count], [null, 3]);
+  // 같은 날 직원 기록도 성과에서 빠짐
+  await post({ staff_id: 2, work_date: '2026-10-05', attendance: '정상근무', start_time: '10:00', end_time: '19:30', managed_count: 5, designated_count: 2 });
+  // 평소 날
+  await post({ staff_id: 1, work_date: '2026-10-06', attendance: '정상근무', start_time: '10:00', end_time: '19:30', managed_count: 6, designated_count: 1 });
+  await post({ staff_id: 2, work_date: '2026-10-06', attendance: '정상근무', start_time: '10:00', end_time: '19:30', managed_count: 4, designated_count: 1 });
+  const perf = (await call(e, '/api/staff/performance?month=2026-10')).data;
+  const kim = perf.find(r => r.id === 1), yoon = perf.find(r => r.id === 2);
+  assert.deepEqual([kim.total_managed, kim.total_designated, kim.consult_designated], [6, 1, 3]);
+  assert.deepEqual([yoon.total_managed, yoon.total_designated, yoon.consult_designated], [4, 1, 2]);
+  assert.equal(yoon.total_hours, 9.5); // 풀상담일 근무시간도 빠짐
+});
+
+test('changing status keeps the original numbers; clinic closed day does not use leave', async () => {
+  const e = env(); await call(e, '/api/staff/list');
+  const post = body => call(e, '/api/staff/attendance', { method: 'POST', body });
+  await post({ staff_id: 2, work_date: '2026-10-07', attendance: '정상근무', start_time: '10:00', end_time: '19:30', managed_count: 5, designated_count: 1 });
+  await post({ staff_id: 2, work_date: '2026-10-07', attendance: '휴무' });
+  const r = e.inv.prepare(`SELECT attendance, managed_count, designated_count, start_time FROM staff_attendance WHERE staff_id = 2 AND work_date = '2026-10-07'`).get();
+  assert.deepEqual([r.attendance, r.managed_count, r.designated_count, r.start_time], ['휴무', 5, 1, '10:00']);
+  const perf = (await call(e, '/api/staff/performance?month=2026-10')).data.find(x => x.id === 2);
+  assert.equal(perf.total_managed, null); // 휴무 날 보존값은 성과에 안 들어감
+  const before = e.inv.prepare('SELECT used_leave FROM staff WHERE id = 1').get().used_leave;
+  await post({ staff_id: 1, work_date: '2026-10-08', attendance: '병원휴무' });
+  assert.equal(e.inv.prepare('SELECT used_leave FROM staff WHERE id = 1').get().used_leave, before);
+});

@@ -275,12 +275,17 @@ staff.post("/attendance", async (c) => {
     manual_adjust: manualAdjust,
     work_minutes: b.work_minutes
   }, workDate);
+  // 원본 보존(사용자 지정 2026-11-08): 상태를 바꿔도 이미 적힌 출퇴근시간·관리인원·지정환자수를 지우거나 0으로 바꾸지 않는다.
+  // 입력할 수 없는 상태(휴무·연차·상담 등)에서는 새 값을 받지 않고 기존 값을 그대로 둔다. 성과 계산은 상태로 거른다.
+  const prior = await c.env.DB.prepare(`SELECT managed_count, designated_count, start_time, end_time FROM staff_attendance WHERE staff_id=? AND work_date=?`).bind(staffId, workDate).first();
+  const numOrNull = (v) => v !== "" && v != null ? Math.max(0, Number(v)) : null;
   const allowMg = allowManagedInput(att, etcType);
-  const managed = allowMg && b.managed_count !== "" && b.managed_count != null ? Math.max(0, Number(b.managed_count)) : null;
+  const managed = allowMg && b.managed_count !== undefined ? numOrNull(b.managed_count) : prior?.managed_count ?? null;
   const allowDg = allowDesignatedInput(att, etcType);
-  const designated = allowDg && b.designated_count !== "" && b.designated_count != null ? Math.max(0, Number(b.designated_count)) : null;
-  const startT = att === "\uC815\uC0C1\uADFC\uBB34" || isTimeEtc ? b.start_time || null : null;
-  const endT = att === "\uC815\uC0C1\uADFC\uBB34" || isTimeEtc ? b.end_time || null : null;
+  const designated = allowDg && b.designated_count !== undefined ? numOrNull(b.designated_count) : prior?.designated_count ?? null;
+  const workTime = att === "\uC815\uC0C1\uADFC\uBB34" || isTimeEtc;
+  const startT = workTime ? b.start_time || null : prior?.start_time ?? null;
+  const endT = workTime ? b.end_time || null : prior?.end_time ?? null;
   const partialStart = b.partial_start || null;
   const partialEnd = b.partial_end || null;
   const prev = await c.env.DB.prepare(
@@ -609,6 +614,7 @@ staff.get("/performance", async (c) => {
     `SELECT work_date FROM staff_day_status WHERE status='clinic_off' AND work_date BETWEEN ? AND ?`
   ).bind(from, to).all()).results;
   const clinicOff = new Set(clinicOffRows.map((r) => r.work_date));
+  const isFullConsultDay = (date) => leaderAtt[date]?.attendance === "\uC0C1\uB2F4";
   const ctxCache = {};
   const ctxOf = (date) => {
     if (!ctxCache[date]) ctxCache[date] = leaderWorkContext(leaderAtt[date] || null, date, clinicOff.has(date));
@@ -634,7 +640,7 @@ staff.get("/performance", async (c) => {
     const att = attByStaff[s.id] || [];
     const isLeaderSelf = s.is_leader === 1;
     let workDays = 0, totalMin = 0, totalMgSum = 0, totalMgCnt = 0, dgSum = 0, dgCnt = 0, leaveUsed = 0;
-    let consultCount = 0;
+    let consultCount = 0, consultDgSum = 0, consultDgCnt = 0;
     const exclusions = [];
     let satOffCount = 0;
     let earlyLeaveCount = 0;
@@ -686,13 +692,22 @@ staff.get("/performance", async (c) => {
           totalMin += creditedMin;
         }
       }
-      if (eligible) {
+      const ownWork = r.attendance === "\uC815\uC0C1\uADFC\uBB34" || r.attendance === "\uAE30\uD0C0" && r.etc_type === "time";
+      if (eligible && ownWork && !isFullConsultDay(r.work_date)) {
         if (r.managed_count != null) {
           totalMgSum += r.managed_count;
           totalMgCnt++;
         }
       }
-      if (r.designated_count != null) {
+      // 풀상담일(팀장 '상담') 원칙(사용자 지정 2026-11-08): 그날은 관리인원·지정환자수 모두 성과값으로 쓰지 않는다.
+      // 지정환자수는 따로 모아 보여 주기만 한다(consult_designated).
+      if (isFullConsultDay(r.work_date)) {
+        if (r.designated_count != null) { consultDgSum += r.designated_count; consultDgCnt++; }
+        continue;
+      }
+      // 휴무·연차·휴일·병원휴무·미기록·무급 날의 보존된 값은 성과에 넣지 않는다
+      const dgCounts = ownWork || r.attendance === "\uC0C1\uB2F4";
+      if (dgCounts && r.designated_count != null) {
         dgSum += r.designated_count;
         dgCnt++;
       }
@@ -715,6 +730,8 @@ staff.get("/performance", async (c) => {
       // 지정 환자 수(별도 컬럼)
       total_designated: dgCnt > 0 ? dgSum : null,
       avg_designated: dgCnt > 0 ? Math.round(dgSum / dgCnt * 10) / 10 : null,
+      // 풀상담일 지정 환자 수(기록·조회용, 성과 계산 제외)
+      consult_designated: consultDgCnt > 0 ? consultDgSum : null,
       leave_used: leaveUsed,
       remain_leave: remainLeave(s.total_leave, s.used_leave),
       // 총 발생 연차(카드 '총 연차' 표시용)

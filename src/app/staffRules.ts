@@ -14,10 +14,10 @@ export type AttendanceRecord = {
 export type MonthData = { attendance?: AttendanceRecord[]; day_status?: { work_date: string; status: string }[]; leader_excluded_dates?: string[] };
 
 export const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
-export const ST_LEADER = ['정상근무', '출퇴근 기타', '상담', '휴무', '연차', '휴일', '미기록'];
+export const ST_LEADER = ['정상근무', '출퇴근 기타', '상담', '휴무', '연차', '휴일', '병원휴무', '미기록'];
 export const ST_STAFF = ['정상근무', '출퇴근 기타', '휴무', '연차'];
 export const WORK_STATES = ['정상근무', '출퇴근 기타', '2출'];
-export const SHORT: Record<string, string> = { '정상근무': '근무', '출퇴근 기타': '기타', '2출': '2출', '상담': '상담', '휴무': '휴무', '연차': '연차', '휴일': '휴일', '미기록': '미기록', '무급 기타': '무급' };
+export const SHORT: Record<string, string> = { '정상근무': '근무', '출퇴근 기타': '기타', '2출': '2출', '상담': '상담', '휴무': '휴무', '연차': '연차', '휴일': '휴일', '병원휴무': '병원휴무', '미기록': '미기록', '무급 기타': '무급' };
 const STD = { weekday: { s: '10:00', e: '19:30' }, saturday: { s: '09:30', e: '15:30' } };
 const TWO_PM = { s: '14:00', e: '19:30' };
 
@@ -39,7 +39,7 @@ export function stateOf(r?: AttendanceRecord | null): string | null {
   if (!r) return null;
   if (isTimeEtc(r)) return r.etc_detail === '2시 출근' ? '2출' : '출퇴근 기타';
   if (r.attendance === '기타') return '무급 기타';
-  if (r.attendance === '공휴일' || r.attendance === '병원휴무') return '휴일';
+  if (r.attendance === '공휴일') return '휴일';
   return r.attendance;
 }
 export const optionsFor = (s: StaffMember) => (s.is_leader ? ST_LEADER : ST_STAFF).flatMap(x => (x === '출퇴근 기타' ? [x, '2출'] : [x]));
@@ -81,12 +81,13 @@ export function statePatch(st: string, s: StaffMember, date: string, rec: Attend
     return { attendance: '기타', etc_type: 'time', etc_detail: null, record_mode: null, start_time: t.s, end_time: t.e, manual_adjust: 0, work_minutes: null, adjust_reason: null };
   }
   if (st === '휴일') return { attendance: '공휴일', etc_type: null, etc_detail: null, record_mode: null, ...noTime };
+  if (st === '병원휴무') return { attendance: '병원휴무', etc_type: null, etc_detail: null, record_mode: null, ...noTime }; // 개인 연차에서 차감하지 않음
   if (st === '미기록') return { attendance: '미기록', etc_type: null, etc_detail: null, record_mode: (prev === '미기록' && rec?.record_mode) || (s.is_leader ? 'stock' : null), ...noTime };
   return { attendance: st, etc_type: null, etc_detail: null, record_mode: null, ...noTime };
 }
 // 관리 인원이 서버 규칙(정상근무·출퇴근 기타만 저장)으로 비워지는지
-export const losesManaged = (rec: AttendanceRecord | null, patch: Partial<AttendanceRecord>) =>
-  !!rec && rec.managed_count != null && !(patch.attendance === '정상근무' || (patch.attendance === '기타' && patch.etc_type === 'time'));
+// 서버가 원본(관리 인원·지정 환자 수·시간)을 지우지 않으므로 바꿀 때 비워질 값이 없다(2026-11-08 원본 보존 규칙)
+export const losesManaged = (_rec: AttendanceRecord | null, _patch: Partial<AttendanceRecord>) => false;
 
 // 그 해 연차 날짜 → 날마다 누적 순번 (달력 '연차 3/15' 표기)
 export function leaveCumulative(byStaff: Record<string, string[]>) {
@@ -125,7 +126,7 @@ export function calendarLines(date: string, staff: StaffMember[], recOf: (sid: n
     let label = SHORT[st] || st;
     const shown = /표기 (\d+\/\d+)/.exec(rec?.memo || '');
     if (st === '연차') label = shown ? `연차 ${shown[1]}` : `연차 ${leaveSeq(s, cum[s.id], date)}/${s.total_leave ?? '-'}`;
-    const kind = st === '휴일' || st === '무급 기타' ? 'hol' : WORK_STATES.includes(st) ? 'work' : st === '연차' ? 'leave' : 'off';
+    const kind = st === '휴일' || st === '병원휴무' || st === '무급 기타' ? 'hol' : WORK_STATES.includes(st) ? 'work' : st === '연차' ? 'leave' : 'off';
     lines.push({ sid: s.id, name: s.name, label, kind });
   }
   return { all: '', lines, none };
