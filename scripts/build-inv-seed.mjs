@@ -167,7 +167,7 @@ const INBOUND = [
   ['2026-10-07', 'in', '시카 비건썬', 10, 0, 0, 0, '받기 목록 · 0원 · 명세서 없음'],
   ['2026-10-22', 'prepaid_in', '보관용 모델링팩', 15, 0, 0, 1, '받기 목록'],
   ['2026-10-22', 'in', '절단솜4x6', 0, 0, 67500, 1, '받기 목록: 절단솜 4×6 외 3건(4개 품목) · 품목별 수량 확인 필요'],
-  ['2026-11-06', 'prepaid_buy', '보관용 3종 시트팩', 300, 0, 360000, 1, '받기 목록: 3종 시트팩 외 1건 ₩360,000 · 선결제 300장으로 기록 · 확인 필요'],
+  ['2026-11-06', 'prepaid_buy', '보관용 3종 시트팩', 300, 0, 450000, 1, '하라셀 선결제 300장 ₩450,000 (사용자 확인 2026-11-08)'],
 ];
 for (const [date, kind, name, qty, bonus, amount, invoice, memo] of INBOUND) {
   const id = itemId(name), recv = qty + bonus;
@@ -175,7 +175,6 @@ for (const [date, kind, name, qty, bonus, amount, invoice, memo] of INBOUND) {
   insT.run(date, kind, id, qty, bonus, amount, hd, vd, null, null, null, invoice, memo, 'old-app', '예전 앱', now);
 }
 notes.push('입고 10/22 피부미소 4개 품목 ₩67,500: 품목별 수량을 몰라 금액만 기록(수량 0)');
-notes.push('입고 11/6 하라셀 ₩360,000: "3종 시트팩 외 1건"을 선결제 300장 구매로 기록, 반입 수량은 모름');
 notes.push('7월 지출: 원장님 보고 ₩918,000 / 7월 월 정리 ₩947,000 — 서로 다름, 기록은 명세서 기준(₩947,000)');
 
 /* ── 현재 재고: 품목마다 마지막으로 보인 수량 + 그 뒤 입고 ── */
