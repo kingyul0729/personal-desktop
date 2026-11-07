@@ -14,7 +14,7 @@ export function useStaffMonth(month: string) {
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [all, setAll] = useState<Record<number, MonthData>>({});
   const [cum, setCum] = useState<Record<string, Record<string, number>>>({});
-  const [state, setState] = useState<{ loading: boolean; error: string; unavailable: boolean }>({ loading: true, error: '', unavailable: false });
+  const [state, setState] = useState<{ loading: boolean; error: string; unavailable: boolean; detail?: string }>({ loading: true, error: '', unavailable: false });
   const seq = useRef(0);
   const load = useCallback(async (quiet = false) => {
     const n = ++seq.current;
@@ -29,16 +29,17 @@ export function useStaffMonth(month: string) {
       setStaff(list); setAll(months); setCum(c); setState({ loading: false, error: '', unavailable: false });
     } catch (e) {
       if (n !== seq.current) return;
-      setState({ loading: false, error: e instanceof Error ? e.message : '불러오지 못했어요.', unavailable: e instanceof StaffApiError && e.unavailable });
+      setState({ loading: false, error: e instanceof Error ? e.message : '불러오지 못했어요.', unavailable: e instanceof StaffApiError && e.unavailable, detail: e instanceof StaffApiError ? e.detail : '' });
     }
   }, [month]);
   useEffect(() => { void load(); }, [load]);
   return { staff, setStaff, all, cum, ...state, reload: load };
 }
 
-export function StaffUnavailable({ message, unavailable }: { message: string; unavailable: boolean }) {
+export function StaffUnavailable({ message, unavailable, detail }: { message: string; unavailable: boolean; detail?: string }) {
   return <div className="pending-screen"><strong>{unavailable ? '직원 자료 연결 전' : '불러오지 못했어요'}</strong><p>{message}</p>
-    {unavailable && <small>예전 재고관리 앱의 데이터베이스(webapp-production)를 이 사이트에 연결하면 바로 보여요.</small>}</div>;
+    {unavailable && <small>예전 재고관리 앱의 데이터베이스(webapp-production)를 이 사이트에 연결하면 바로 보여요.</small>}
+    {detail && <pre className="sf-detail">{detail}</pre>}</div>;
 }
 
 export default function StaffSchedule() {
@@ -60,7 +61,7 @@ export default function StaffSchedule() {
         <button type="button" role="tab" aria-selected={tab === 'perf'} onClick={() => setTab('perf')}>성과</button>
       </div>
     </div>
-    {data.loading && !data.staff.length ? <LoadingBox /> : data.error ? <StaffUnavailable message={data.error} unavailable={data.unavailable} />
+    {data.loading && !data.staff.length ? <LoadingBox /> : data.error ? <StaffUnavailable message={data.error} unavailable={data.unavailable} detail={data.detail} />
       : tab === 'schedule' ? <Schedule month={month} data={data} notify={setToast} /> : <Performance month={month} data={data} notify={setToast} />}
     {toast && <div className="sf-toast" role="status">{toast}</div>}
   </div>;

@@ -1,9 +1,12 @@
 // 직원 자료 API(/api/staff/*) — 예전 재고관리 앱 DB를 읽고 쓴다.
-export class StaffApiError extends Error { unavailable = false; }
+export class StaffApiError extends Error { unavailable = false; detail = ''; }
 
 async function parse(res: Response) {
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) { const e = new StaffApiError(data?.error || '직원 자료를 불러오지 못했어요.'); e.unavailable = !!data?.unavailable; throw e; }
+  if (!res.ok) { const e = new StaffApiError(data?.error || '직원 자료를 불러오지 못했어요.'); e.unavailable = !!data?.unavailable;
+    e.detail = [data?.detail, Array.isArray(data?.tables) ? `예전 DB 표: ${data.tables.join(', ') || '(없음)'}` : ''].filter(Boolean).join('\n');
+    if (!data?.error) e.detail = `HTTP ${res.status}`;
+    throw e; }
   return data;
 }
 export const staffGet = async (path: string, params: Record<string, string | number> = {}) => {

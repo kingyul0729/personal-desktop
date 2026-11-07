@@ -16,19 +16,19 @@ export default function StaffLeave() {
   const [dates, setDates] = useState<Record<string, string[]>>({});
   const [sid, setSid] = useState<number | null>(null);
   const [logs, setLogs] = useState<LeaveLog[] | null>(null);
-  const [state, setState] = useState({ loading: true, error: '', unavailable: false });
+  const [state, setState] = useState({ loading: true, error: '', unavailable: false, detail: '' });
   const [editing, setEditing] = useState(false);
   const load = useCallback(async () => {
     try {
       const [list, ld] = await Promise.all([staffGet('/list', { include_retired: 0 }), staffGet('/leave-dates', { year })]);
-      setStaff(list); setDates(ld.leave_dates || {}); setState({ loading: false, error: '', unavailable: false });
+      setStaff(list); setDates(ld.leave_dates || {}); setState({ loading: false, error: '', unavailable: false, detail: '' });
       setSid(cur => (cur && list.some((s: StaffMember) => s.id === cur) ? cur : list[0]?.id ?? null));
-    } catch (e) { setState({ loading: false, error: e instanceof Error ? e.message : '불러오지 못했어요.', unavailable: e instanceof StaffApiError && e.unavailable }); }
+    } catch (e) { setState({ loading: false, error: e instanceof Error ? e.message : '불러오지 못했어요.', unavailable: e instanceof StaffApiError && e.unavailable, detail: e instanceof StaffApiError ? e.detail : '' }); }
   }, [year]);
   useEffect(() => { void load(); }, [load]);
   useEffect(() => { if (sid == null) return; setLogs(null); staffGet(`/leave-log/${sid}`).then(setLogs, () => setLogs([])); }, [sid, staff]);
   if (state.loading) return <LoadingBox />;
-  if (state.error) return <StaffUnavailable message={state.error} unavailable={state.unavailable} />;
+  if (state.error) return <StaffUnavailable message={state.error} unavailable={state.unavailable} detail={state.detail} />;
   const s = staff.find(x => x.id === sid);
   const mine = new Set(dates[String(sid)] || []);
   const today = todayLocal();

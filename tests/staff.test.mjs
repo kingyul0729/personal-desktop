@@ -53,3 +53,11 @@ test('staff api says when the inventory database is not connected', async () => 
   const r = await call(e, '/api/staff/list');
   assert.equal(r.status, 503); assert.equal(r.data.unavailable, true);
 });
+
+test('a broken inventory database reports the cause and its tables', async () => {
+  const e = env(); e.inv.exec('DROP TABLE staff_leave_log');
+  const r = await call(e, '/api/staff/list');
+  assert.equal(r.status, 500);
+  assert.match(r.data.detail, /staff_leave_log/);
+  assert.ok(r.data.tables.includes('staff') && !r.data.tables.includes('staff_leave_log'));
+});
