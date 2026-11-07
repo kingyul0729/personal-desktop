@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { Columns3, Expand, FolderOpen, LayoutGrid, Microscope, Shrink } from 'lucide-react';
-import { ProgramDiagram, TreatmentMethod, type Beam } from './TreatmentMethod';
+import { TreatmentMethod } from './TreatmentMethod';
 import { FinderMain, FinderPath } from './FinderFrame';
 import { ToneDot, ToneFolder } from './ToneFolder';
 import { findProgram, guideCategories, sessionCells, treatments, type GuideProgram } from '../programGuide';
@@ -19,34 +19,44 @@ function SessionStrip({ program }: { program: GuideProgram }) {
   </div>;
 }
 
-// 이 프로그램이 색소를 다루는 방식: 어떤 색소(대상) ← 어떤 시술, 그리고 시술 종류별로 옅어지는 모습.
+// 치료 원리: 이 프로그램이 다루는 고민을 카드 몇 장으로. 그림 한 장 + 큰 이름 + 한 줄. 순서(회차)는 확정 자료가 없어 번호·화살표를 쓰지 않는다.
+type Depth = 'top' | 'mid' | 'deep' | 'texture' | 'mole';
+const goals: { ids: string[]; title: string; line: string; depth: Depth }[] = [
+  { ids: ['maxgAlex'], title: '또렷한 잡티', line: '겉에 있는 잡티를 겨냥해요', depth: 'top' },
+  { ids: ['maxgPico1064'], title: '깊은 색소', line: '피부 깊은 층까지 닿아요', depth: 'deep' },
+  { ids: ['revlite', 'pico'], title: '기미 · 톤', line: '여러 번 나눠 조금씩 옅게', depth: 'mid' },
+  { ids: ['starlux'], title: '피부결', line: '피부 재생을 도와요', depth: 'texture' },
+  { ids: ['co2'], title: '점', line: '점을 얇게 깎아 없애요', depth: 'mole' },
+];
+
+function MiniSkin({ depth }: { depth: Depth }) {
+  const beamTo = { top: 34, mid: 50, deep: 82, texture: 70, mole: 22 }[depth];
+  return <svg viewBox="0 0 160 100" className="pg-mini" aria-hidden="true">
+    <rect x="0" y="16" width="160" height="30" fill="#eef1f5" />
+    <rect x="0" y="46" width="160" height="54" fill="#f7f8fa" />
+    <line x1="0" y1="16" x2="160" y2="16" stroke="#c9d0d9" />
+    {depth === 'top' && [58, 72, 90, 104].map(x => <circle key={x} cx={x} cy={30} r="3.2" fill="#a07f68" />)}
+    {depth === 'mid' && [40, 60, 80, 100, 120].map((x, k) => <ellipse key={x} cx={x} cy={k % 2 ? 46 : 42} rx="7" ry="2.6" fill="#a07f68" opacity=".55" />)}
+    {depth === 'deep' && [62, 80, 98].map(x => <circle key={x} cx={x} cy={78} r="3.4" fill="#7c7f97" />)}
+    {depth === 'mole' && <ellipse cx="80" cy="18" rx="9" ry="5" fill="#8a6d5c" />}
+    {depth === 'texture'
+      ? [56, 68, 80, 92, 104].map(x => <line key={x} x1={x} y1="16" x2={x} y2={beamTo} stroke="#2f6fd6" strokeWidth="2.4" strokeLinecap="round" opacity=".55" />)
+      : <path d={`M70 0 H90 L${depth === 'mid' ? 100 : 84} ${beamTo} H${depth === 'mid' ? 60 : 76} Z`} fill="#2f6fd6" opacity=".18" />}
+  </svg>;
+}
+
 function Principle({ program }: { program: GuideProgram }) {
   const ids = [...program.parts.map(part => part.treatment), ...(program.included ?? [])];
-  const used = ids.map(id => treatments[id]);
-  const show = [...new Set(used.flatMap(t => t.beams))] as Beam[];
-  const has = (...keys: string[]) => ids.some(id => keys.includes(id));
-  const flows = [
-    has('maxgAlex', 'maxgPico1064') && { title: '또렷한 잡티 · 깊은 색소', text: '잠시 진해 보이다가 얇은 딱지가 생기고, 떨어지며 옅어져요.' },
-    has('revlite', 'pico') && { title: '넓게 퍼진 색소', text: '큰 딱지 없이 회차마다 조금씩 옅어져요. 자외선에 다시 짙어질 수 있어 관리가 함께 필요해요.' },
-    has('starlux') && { title: '피부결 · 재생', text: '피부가 새로 차오르며 결과 톤이 서서히 정돈돼요.' },
-    has('co2') && { title: '점', text: '얇게 깎아낸 자리에 딱지가 앉았다가 떨어지며 아물어요.' },
-  ].filter(Boolean) as { title: string; text: string }[];
-  const count = (id: string) => program.parts.find(part => part.treatment === id)?.count;
-  return <div className="pg-principle">
-    <div className="pg-principle-figure">
-      <ProgramDiagram show={show} co2={has('co2')} label={`${program.name}에 들어간 시술이 닿는 깊이`} />
-      <p className="pg-muted">파란 빛줄기: 이 프로그램에 들어간 시술이 닿는 깊이</p>
-    </div>
-    <div className="pg-principle-text">
-      <h3>무엇을 무엇으로</h3>
-      <ul className="pg-targets">{used.map(t => <li key={t.id} data-tone={t.tone}>
-        <i /><div><b>{t.target}</b><span>{t.name}{count(t.id) ? ` · ${count(t.id)}회` : ' · 기본 포함'}</span></div>
-      </li>)}</ul>
-    </div>
-    <div className="pg-principle-flows">
-      <h3>이렇게 옅어져요</h3>
-      <ul className="pg-flows">{flows.map(flow => <li key={flow.title}><b>{flow.title}</b><span>{flow.text}</span></li>)}</ul>
-    </div>
+  const count = (goalIds: string[]) => program.parts.filter(part => goalIds.includes(part.treatment)).reduce((sum, part) => sum + part.count, 0);
+  const cards = goals.filter(goal => goal.ids.some(id => ids.includes(id)));
+  return <div className="pg-goals" style={{ ['--n' as string]: cards.length }}>
+    {cards.map(goal => { const n = count(goal.ids); const names = goal.ids.filter(id => ids.includes(id)).map(id => treatments[id].name.replace(/ \+ 비타민$/, '')).join(' · ');
+      return <section key={goal.title} className="pg-goal">
+        <MiniSkin depth={goal.depth} />
+        <h3>{goal.title}</h3>
+        <p>{goal.line}</p>
+        <small>{names} <b>{n ? `${n}회` : '포함'}</b></small>
+      </section>; })}
   </div>;
 }
 
