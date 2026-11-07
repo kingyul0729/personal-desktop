@@ -12,6 +12,7 @@ type LeaveLog = { id: number; log_type: string; log_date?: string | null; reason
 
 export default function StaffLeave() {
   const [month, setMonth] = useState(() => todayLocal().slice(0, 7));
+  const year = month.slice(0, 4);
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [dates, setDates] = useState<Record<string, string[]>>({});
   const [memos, setMemos] = useState<Record<string, string>>({});
@@ -19,16 +20,14 @@ export default function StaffLeave() {
   const [state, setState] = useState({ loading: true, error: '', unavailable: false, detail: '' });
   const load = useCallback(async () => {
     try {
-      const [list, ld] = await Promise.all([staffGet('/list', { include_retired: 0 }), staffGet('/leave-dates', { year: month.slice(0, 4) })]);
+      const [list, ld] = await Promise.all([staffGet('/list', { include_retired: 0 }), staffGet('/leave-dates', { year })]);
       // 예전 앱 표기(예: 7/17)는 그 날 기록의 메모에 있다
       const m: Record<string, string> = {};
-      for (const x of list as StaffMember[]) {
-        const d = await staffGet('/month', { staff_id: x.id, month });
-        for (const r of d.attendance || []) { const hit = /표기 (\d+\/\d+)/.exec(r.memo || ''); if (r.attendance === '연차' && hit) m[`${x.id}|${r.work_date}`] = hit[1]; }
-      }
+      for (const [sid, list2] of Object.entries((ld.leave_marks || {}) as Record<string, { date: string; memo: string | null }[]>))
+        for (const r of list2) { const hit = /표기 (\d+\/\d+)/.exec(r.memo || ''); if (hit) m[`${sid}|${r.date}`] = hit[1]; }
       setStaff(list); setDates(ld.leave_dates || {}); setMemos(m); setState({ loading: false, error: '', unavailable: false, detail: '' });
     } catch (e) { setState({ loading: false, error: e instanceof Error ? e.message : '불러오지 못했어요.', unavailable: e instanceof StaffApiError && e.unavailable, detail: e instanceof StaffApiError ? e.detail : '' }); }
-  }, [month]);
+  }, [year]);
   useEffect(() => { void load(); const on = () => void load(); window.addEventListener('staff-data-changed', on); return () => window.removeEventListener('staff-data-changed', on); }, [load]);
   if (state.loading && !staff.length) return <LoadingBox />;
   if (state.error) return <StaffUnavailable message={state.error} unavailable={state.unavailable} detail={state.detail} />;
@@ -59,6 +58,9 @@ export default function StaffLeave() {
             return <span key={date} className={`${on ? 'is-leave' : ''}${date === today ? ' is-today' : ''}${weekdayOf(date) === 0 ? ' is-sun' : ''}`} title={on ? `${date} 연차 ${seq}` : undefined}>{d + 1}{on && <em>{seq}</em>}</span>;
           })}
         </div>
+        <div className="sf-lv-list"><small>{month.slice(0, 4)}년 연차 {all.length}일</small>
+          {all.length ? all.map(d => <button key={d} type="button" className={d.slice(0, 7) === month ? 'is-here' : ''} onClick={() => setMonth(d.slice(0, 7))} title="이 달 달력 보기">
+            {Number(d.slice(5, 7))}/{Number(d.slice(8))}<em>{memos[`${x.id}|${d}`] || `${leaveSeq(x, idx, d)}/${x.total_leave ?? '-'}`}</em></button>) : <small>없음</small>}</div>
       </section>;
     })}</div>
     {open && <LeaveDetail staff={open} onClose={() => setOpen(null)} onSaved={async () => { setOpen(null); await load(); }} />}

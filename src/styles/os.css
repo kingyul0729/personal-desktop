@@ -1564,3 +1564,8 @@ a:hover > .download-mark .download-arrow, a:focus-visible > .download-mark .down
 .sf-lv-nums .is-warn dd { color: #c0564b; }
 .sf-lv-cal span { display: flex; flex-direction: column; align-items: center; line-height: 1.2; min-height: 30px; justify-content: flex-start; padding-top: 3px; }
 .sf-lv-cal em { font-style: normal; font-size: 10px; font-weight: 500; opacity: .9; }
+.sf-lv-list { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; border-top: 1px solid var(--app-line); padding-top: 8px; }
+.sf-lv-list > small:first-child { width: 100%; color: var(--app-muted); font-size: 12px; }
+.sf-lv-list button { border: 1px solid var(--app-line); background: #fff; border-radius: 999px; padding: 2px 8px; font: inherit; font-size: 12px; cursor: pointer; color: var(--app-ink); }
+.sf-lv-list button em { font-style: normal; color: var(--app-muted); margin-left: 4px; }
+.sf-lv-list button.is-here { border-color: var(--app-accent); background: #eef2f6; }

@@ -187,13 +187,15 @@ staff.get("/leave-dates", async (c) => {
   const year = String(c.req.query("year") || "").match(/^\d{4}$/) ? c.req.query("year") : String((/* @__PURE__ */ new Date()).getFullYear());
   const from = `${year}-01-01`, to = `${year}-12-31`;
   const rows = (await c.env.DB.prepare(
-    `SELECT staff_id, work_date FROM staff_attendance WHERE attendance='\uC5F0\uCC28' AND work_date BETWEEN ? AND ? ORDER BY staff_id, work_date`
+    `SELECT staff_id, work_date, memo FROM staff_attendance WHERE attendance='\uC5F0\uCC28' AND work_date BETWEEN ? AND ? ORDER BY staff_id, work_date`
   ).bind(from, to).all()).results;
-  const byStaff = {};
+  const byStaff = {}, marks = {};
   for (const r of rows) {
     (byStaff[r.staff_id] = byStaff[r.staff_id] || []).push(r.work_date);
+    // 직원연차 화면용: 예전 앱 순번 표기(memo '예전 앱 표기 7/17')를 함께 준다
+    (marks[r.staff_id] = marks[r.staff_id] || []).push({ date: r.work_date, memo: r.memo || null });
   }
-  return c.json({ year, leave_dates: byStaff });
+  return c.json({ year, leave_dates: byStaff, leave_marks: marks });
 });
 staff.get("/month", async (c) => {
   const staffId = Number(c.req.query("staff_id"));
