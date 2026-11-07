@@ -51,7 +51,7 @@ function SlideFace({ doc }: { doc: WorkDoc }) {
   </div>;
 }
 
-export function WorkLibrary({ onDirtyChange }: { onDirtyChange?: (dirty: boolean) => void }) {
+export function WorkLibrary({ onDirtyChange, onSubs, goto, onLocation }: { onDirtyChange?: (dirty: boolean) => void; onSubs?: (list: { id: string; name: string; count?: number }[]) => void; goto?: { id: string; n: number }; onLocation?: (id: string) => void }) {
   const [docs, setDocs] = useState<WorkDoc[]>([]);
   const [ready, setReady] = useState(false), [authenticated, setAuthenticated] = useState(false);
   const [filter, setFilter] = useState<Filter>('all'), [query, setQuery] = useState('');
@@ -80,6 +80,9 @@ export function WorkLibrary({ onDirtyChange }: { onDirtyChange?: (dirty: boolean
 
   const active = docs.filter(doc => !doc.trashedAt);
   const counts = { all: active.length, manual: active.filter(doc => doc.kind === 'manual').length, consult: active.filter(doc => doc.kind === 'consult').length, trash: docs.length - active.length };
+  // 왼쪽 메뉴 아코디언: 업무 매뉴얼 · 상담자료
+  useEffect(() => { onSubs?.([{ id: 'manual', name: '업무 매뉴얼', count: counts.manual }, { id: 'consult', name: '상담자료', count: counts.consult }]); }, [counts.manual, counts.consult]);
+  useEffect(() => { onLocation?.(filter); }, [filter]);
   const visible = useMemo(() => docs.filter(doc => (filter === 'trash' ? !!doc.trashedAt : !doc.trashedAt && (filter === 'all' || doc.kind === filter)) && matchesWorkDoc(doc, query))
     .sort((a, b) => b.updatedAt - a.updatedAt), [docs, filter, query]);
   const current = visible[Math.min(selected, Math.max(0, visible.length - 1))];
@@ -91,6 +94,7 @@ export function WorkLibrary({ onDirtyChange }: { onDirtyChange?: (dirty: boolean
     if (busyRef.current) return;
     if (!dirty || window.confirm('저장하지 않은 변경 사항이 있습니다. 저장하지 않고 이동할까요?')) { setEditor(null); setFiles([]); setError(''); next(); }
   };
+  useEffect(() => { if (goto) leave(() => { setReadingId(null); setFilter(goto.id as Filter); }); }, [goto?.n]);
   const openDoc = (doc: WorkDoc) => { if (doc.trashedAt) return; setReadingId(doc.id); setNotice(''); setError(''); };
   const edit = (doc?: WorkDoc) => leave(() => {
     const value: Editor = doc ? { id: doc.id, kind: doc.kind, title: doc.title, summary: doc.summary, content: doc.content, version: doc.updatedAt, attachments: doc.attachments }

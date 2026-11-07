@@ -1355,3 +1355,11 @@ a:hover > .download-mark .download-arrow, a:focus-visible > .download-mark .down
 .finder-sidebar .finder-sub button { min-height: 32px; padding-left: 34px; font-size: 14px; color: #4d535b; }
 .finder-sidebar .finder-sub .tone-dot { margin: 0 2px 0 0; flex-shrink: 0; }
 @media (max-width: 760px) { .finder-sub { display: none; } }
+/* 왼쪽 메뉴 아코디언 */
+.finder-item { position: relative; display: flex; align-items: center; }
+.finder-item > button:first-child { flex: 1; min-width: 0; }
+.finder-sidebar .finder-item .finder-toggle { position: absolute; right: 4px; width: 28px; min-height: 28px; padding: 0; justify-content: center; border-radius: 6px; color: #8a9097; }
+.finder-sidebar .finder-item .finder-toggle svg { transition: transform .18s ease; transform: rotate(-90deg); color: inherit; }
+.finder-sidebar .finder-item .finder-toggle[aria-expanded="true"] svg { transform: rotate(0deg); }
+.finder-sidebar .finder-sub button small { margin-left: auto; color: #9aa0a6; font-size: 12px; }
+@media (prefers-reduced-motion: reduce) { .finder-sidebar .finder-item .finder-toggle svg { transition: none; } }

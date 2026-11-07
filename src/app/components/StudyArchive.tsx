@@ -7,7 +7,7 @@ import { StudyNoteText } from './StudyNoteText';
 type Attachment = { id: string; name: string; mime: string; size: number; url: string };
 type RecordItem = { id: string; title: string; category: string; studiedOn: string; content: string; tags: string; keywords: string; summary: string; favorite: number; createdAt: number; updatedAt: number; trashedAt: number | null; attachments: Attachment[] };
 type Editor = { id: string; title: string; category: string; studiedOn: string; content: string; tags: string; keywords: string; summary: string; version: number; attachments: Attachment[] };
-const categories = ['피부 기초', '색소·레이저', '홍조·혈관', '여드름·흉터', '리프팅', '스킨부스터', '상담·기타'];
+export const STUDY_CATEGORIES = ['피부 기초', '색소·레이저', '홍조·혈관', '여드름·흉터', '리프팅', '스킨부스터', '상담·기타'];
 const newRecordId = () => crypto.randomUUID?.() || Array.from(crypto.getRandomValues(new Uint8Array(16)), value => value.toString(16).padStart(2, '0')).join('');
 const today = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
 const dateLabel = (date: string) => date.replaceAll('-', '.');
@@ -67,7 +67,7 @@ function StudyStack({ items, selected, onSelect, onOpen, onEdit, onRemove, onFav
 
 const toEditor = (item: RecordItem): Editor => ({ id: item.id, title: item.title, category: item.category, studiedOn: item.studiedOn, content: item.content, tags: item.tags, keywords: item.keywords || '', summary: item.summary || '', version: item.updatedAt, attachments: item.attachments });
 
-export function StudyArchive({ onDirtyChange }: { onDirtyChange?: (dirty: boolean) => void }) {
+export function StudyArchive({ onDirtyChange, onSubs, goto, onLocation }: { onDirtyChange?: (dirty: boolean) => void; onSubs?: (list: { id: string; name: string; count?: number }[]) => void; goto?: { id: string; n: number }; onLocation?: (id: string) => void }) {
   const [readingId, setReadingId] = useState<string | null>(null);
   const [records, setRecords] = useState<RecordItem[]>([]);
   const [ready, setReady] = useState(false), [authenticated, setAuthenticated] = useState(false);
@@ -99,8 +99,12 @@ export function StudyArchive({ onDirtyChange }: { onDirtyChange?: (dirty: boolea
   };
   useEffect(() => { const controller = new AbortController(); void load(controller.signal); return () => controller.abort(); }, []);
   const active = records.filter(item => !item.trashedAt);
-  const folders = [...new Set([...categories, ...records.map(item => item.category)])];
+  const folders = [...new Set([...STUDY_CATEGORIES, ...records.map(item => item.category)])];
   const counts = new Map(folders.map(name => [name, active.filter(item => item.category === name).length]));
+  // 왼쪽 메뉴 아코디언: 주제 목록을 알리고, 메뉴에서 고른 주제로 이동
+  const subKey = folders.map(name => `${name}:${counts.get(name)}`).join('|');
+  useEffect(() => { onSubs?.(folders.map(name => ({ id: `cat:${name}`, name, count: counts.get(name) }))); }, [subKey]);
+  useEffect(() => { onLocation?.(filter === 'all' ? (category ? `cat:${category}` : 'all') : filter); }, [filter, category]);
   const filtered = useMemo(() => records.filter(item => {
     if (filter === 'trash' ? !item.trashedAt : !!item.trashedAt) return false;
     if (filter === 'favorite' && !item.favorite) return false;
@@ -112,10 +116,11 @@ export function StudyArchive({ onDirtyChange }: { onDirtyChange?: (dirty: boolea
   const leave = (next: () => void) => { if (busyRef.current) return; if (!dirty || window.confirm('저장하지 않은 변경 사항이 있습니다. 저장하지 않고 이동할까요?')) { setEditor(null); setFiles([]); setError(''); next(); } };
   const open = (record?: RecordItem) => leave(() => {
     setReadingId(record?.id || null);
-    const value: Editor = record ? toEditor(record) : { id: newRecordId(), title: '', category: category || categories[0], studiedOn: today(), content: '', tags: '', keywords: '', summary: '', version: 0, attachments: [] };
+    const value: Editor = record ? toEditor(record) : { id: newRecordId(), title: '', category: category || STUDY_CATEGORIES[0], studiedOn: today(), content: '', tags: '', keywords: '', summary: '', version: 0, attachments: [] };
     setEditor(value); setBaseline(JSON.stringify(value)); setFiles([]); setNotice('');
   });
   const navigate = (next: typeof filter, folder = '') => leave(() => { setReadingId(null); setFilter(next); setCategory(folder); setNotice(''); });
+  useEffect(() => { if (!goto) return; if (goto.id.startsWith('cat:')) navigate('all', goto.id.slice(4)); else navigate(goto.id as typeof filter); }, [goto?.n]);
   const field = (key: keyof Editor, value: string) => setEditor(current => current ? { ...current, [key]: value } : current);
   const updateRecord = (record: RecordItem) => setRecords(items => [record, ...items.filter(item => item.id !== record.id)]);
   const mutate = async (record: RecordItem, action: 'trash' | 'restore' | 'favorite') => {
