@@ -116,7 +116,7 @@ export function AppShell({ desktop, dispatch }: { desktop: typeof initialDesktop
       <nav className="finder-sidebar" aria-label="메뉴">
         <div className="finder-lights" aria-hidden="true"><i /><i /><i /></div>
         {SIDEBAR_GROUPS.map(group => { const fixed = group.title === '설정'; const groupOpen = fixed || !!openGroups[group.title]; return <div key={group.title} className={`finder-group${fixed ? ' finder-group-bottom' : ''}${groupOpen ? '' : ' is-closed'}`}>
-          {fixed ? <p>{group.title}</p> : <button type="button" className="finder-group-head" aria-expanded={groupOpen} onClick={() => setOpenGroups(current => ({ ...current, [group.title]: !groupOpen }))}><ChevronDown size={13} strokeWidth={2} aria-hidden="true" />{group.title}</button>}
+          {fixed ? <p>{group.title}</p> : <button type="button" className="finder-group-head" aria-expanded={groupOpen} onClick={() => setOpenGroups(groupOpen ? {} : { [group.title]: true })}><ChevronDown size={13} strokeWidth={2} aria-hidden="true" />{group.title}</button>}
           {groupOpen && <>
           {group.items.map(item => { const children = subs[item.id] ?? []; const root = ROOT[item.id]; const at = ats[item.id] ?? root; const isOpen = !!expanded[item.id] && children.length > 0;
             return <Fragment key={item.id}>
