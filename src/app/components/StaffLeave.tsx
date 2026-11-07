@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { LoadingBox, SavingMark } from './Feedback';
+import { OldDataBanner } from './Inventory';
 import { StaffUnavailable } from './StaffSchedule';
 import { staffGet, staffPost, StaffApiError } from '../staffApi';
 import { type StaffMember, WEEKDAYS, dateIn, daysInMonth, leaveSeq, monthLabel, shiftMonth, todayLocal, weekdayOf } from '../staffRules';
@@ -33,6 +34,7 @@ export default function StaffLeave() {
   if (state.error) return <StaffUnavailable message={state.error} unavailable={state.unavailable} detail={state.detail} />;
   const today = todayLocal(), n = daysInMonth(month), lead = weekdayOf(`${month}-01`);
   return <div className="sf-wrap sf-leave">
+    <OldDataBanner />
     <div className="sf-bar">
       <div className="sf-month">
         <button type="button" aria-label="이전 달" onClick={() => setMonth(m => shiftMonth(m, -1))}>‹</button>

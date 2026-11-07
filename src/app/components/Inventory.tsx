@@ -143,8 +143,24 @@ export function OldDataImport({ onDone, merge = false }: { onDone: () => void; m
       setFile({ name: f.name, tables: data.tables }); setState({ running: false, text: '', error: '' });
     } catch (e) { setFile(null); setState({ running: false, text: '', error: errText(e) }); }
   };
-  const run = async () => {
-    if (!file) return;
+  const [code, setCode] = useState('');
+  // 코드로 넣기: 사이트에 암호화해 둔 예전 자료(/old-data.enc)를 받은 코드로 브라우저에서 풀어 넣는다(저장소 공개라 원본은 올리지 않음)
+  const fromCode = async () => {
+    setState({ running: true, text: '자료를 여는 중…', error: '' });
+    try {
+      const enc = await (await fetch('/old-data.enc', { cache: 'no-store' })).json();
+      const b = (x: string) => Uint8Array.from(atob(x), c => c.charCodeAt(0));
+      const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(code.trim().toUpperCase()), 'PBKDF2', false, ['deriveKey']);
+      const key = await crypto.subtle.deriveKey({ name: 'PBKDF2', salt: b(enc.salt), iterations: enc.iter, hash: 'SHA-256' }, base, { name: 'AES-GCM', length: 256 }, false, ['decrypt']);
+      let plain: ArrayBuffer;
+      try { plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b(enc.iv) }, key, b(enc.data)); } catch { throw new Error('코드가 맞지 않아요.'); }
+      const data = JSON.parse(new TextDecoder().decode(plain));
+      await run({ name: '예전 앱 자료(코드)', tables: data.tables });
+    } catch (e) { setState({ running: false, text: '', error: errText(e) }); }
+  };
+  const run = async (src = file) => {
+    if (!src) return;
+    const file = src;
     const entries = Object.entries(file.tables);
     const total = entries.reduce((n, [, rows]) => n + rows.length, 0);
     let sent = 0;
@@ -178,9 +194,20 @@ export function OldDataImport({ onDone, merge = false }: { onDone: () => void; m
       <label className="sf-btn"><input type="file" accept="application/json,.json" hidden onChange={e => void pick(e.target.files?.[0])} />{file ? file.name : '파일 고르기'}</label>
       <button type="button" className="sf-btn is-primary" disabled={!file || state.running} onClick={() => void run()}>{state.running && <SavingMark />}{merge ? '더 넣기' : '넣기'}</button>
     </div>
+    {!merge && <div className="iv-inline iv-code"><span className="sf-hint">또는 받은 코드로</span>
+      <input type="text" value={code} onChange={e => setCode(e.target.value)} placeholder="XXXX-XXXX-XXXX-XXXX" autoCapitalize="characters" autoComplete="off" spellCheck={false} aria-label="예전 자료 코드" />
+      <button type="button" className="sf-btn is-primary" disabled={code.trim().length < 16 || state.running} onClick={() => void fromCode()}>{state.running && <SavingMark />}코드로 넣기</button></div>}
     {state.text && <p className="sf-hint">{state.text}</p>}
     {state.error && <p className="sf-hint is-warn">{state.error}</p>}
   </section>;
+}
+
+// 아직 예전 자료를 안 넣었으면 직원 화면 위에도 넣기 칸을 보여 준다
+export function OldDataBanner() {
+  const [imported, setImported] = useState<string | null | undefined>(undefined);
+  useEffect(() => { invGet('/import').then(d => setImported(d.imported), () => setImported('?')); }, []);
+  if (imported !== null) return null;
+  return <OldDataImport onDone={() => { setImported('done'); announceInventory(); }} />;
 }
 
 /* ───────────── 재고주문 ───────────── */

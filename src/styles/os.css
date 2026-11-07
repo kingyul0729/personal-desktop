@@ -1569,3 +1569,4 @@ a:hover > .download-mark .download-arrow, a:focus-visible > .download-mark .down
 .sf-lv-list button { border: 1px solid var(--app-line); background: #fff; border-radius: 999px; padding: 2px 8px; font: inherit; font-size: 12px; cursor: pointer; color: var(--app-ink); }
 .sf-lv-list button em { font-style: normal; color: var(--app-muted); margin-left: 4px; }
 .sf-lv-list button.is-here { border-color: var(--app-accent); background: #eef2f6; }
+.iv-code { width: 100%; justify-content: flex-end; align-items: center; } .iv-code input { height: 32px; padding: 0 10px; border: 1px solid var(--app-line); border-radius: 8px; font: inherit; font-size: 14px; letter-spacing: .04em; width: 220px; }
