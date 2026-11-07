@@ -76,3 +76,16 @@ test('another account cannot read, change or adopt a work document', async () =>
   assert.equal((await call(env, path, { method: 'PATCH', body: { action: 'trash', version: created.data.updatedAt }, owner: 'owner-two' })).status, 404);
   assert.equal((await handleApi(request(fileUrl), env)).status, 200);
 });
+
+test('a work document can be purged from the trash with its attachments, only once it is in the trash', async () => {
+  const env = environment();
+  const created = await call(env, path, { method: 'PUT', body: form({}, [png()]) });
+  assert.equal(env.objects.size, 1);
+  assert.equal((await call(env, path, { method: 'DELETE' })).status, 409);
+  const trashed = await call(env, path, { method: 'PATCH', body: { action: 'trash', version: created.data.updatedAt } });
+  assert.ok(trashed.data.trashedAt);
+  assert.equal((await call(env, path, { method: 'DELETE', owner: 'owner-two' })).status, 404);
+  assert.equal((await call(env, path, { method: 'DELETE' })).status, 200);
+  assert.equal(env.objects.size, 0);
+  assert.deepEqual((await call(env, '/api/work')).data.docs, []);
+});

@@ -140,3 +140,14 @@ test('Cornell migration preserves existing notes and attachment rows', () => {
   assert.equal(row.content,'기존 본문'); assert.equal(row.keywords,''); assert.equal(row.summary,'');
   assert.equal(db.prepare('SELECT object_key FROM study_attachments').get().object_key,'original-key');
 });
+
+test('a study record can be purged from the trash with its attachments', async () => {
+  const env = environment();
+  const created = await call(env, path, { method: 'PUT', body: form({}, [png()]) });
+  assert.equal((await call(env, path, { method: 'DELETE' })).status, 409);
+  const trashed = await call(env, path, { method: 'PATCH', body: { action: 'trash', version: created.data.updatedAt } });
+  assert.ok(trashed.data.trashedAt);
+  assert.equal((await call(env, path, { method: 'DELETE' })).status, 200);
+  assert.equal(env.objects.size, 0);
+  assert.deepEqual((await call(env, '/api/study')).data.records, []);
+});

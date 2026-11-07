@@ -1,6 +1,6 @@
 # personal-desktop
 
-Web desktop (React 18 + Vite, Cloudflare Worker in `worker/`). 앱 화면(`src/app/App.tsx`의 `AppShell`)은 macOS Finder 창 하나처럼 생겼다: 왼쪽 메뉴(회색 점 3개, 그룹 업무: 가격표·금액 계산·업무 자료 / 개인: 공부 보관함·메모장 / 설정: 환경설정, 선 아이콘, `SIDEBAR_GROUPS`), 오른쪽은 `FinderMain`(`components/FinderFrame.tsx`: ‹ › 제목 도구 막대, 내용, 경로 막대, 항목 수·크기 조절 상태 막대). 왼쪽 메뉴는 아코디언(2026-11-07): 메뉴 이름 자체를 누르면 그 화면이 열리면서 하위 목록이 펼쳐지고 다시 누르면 접힌다(오른쪽 ˅ 는 표시만). 첫 화면에서는 모두 접혀 있고 펼침 상태를 기억하지 않는다. 가격표 → 가격표 폴더, 업무 자료 → 업무 매뉴얼·상담자료(개수), 공부 보관함 → 주제(개수). 누르면 그 화면의 해당 폴더·분류로 바로 간다(각 화면의 `onSubs`/`onFolders`·`goto`·`onLocation`, App의 `subs`·`gotos`·`ats`). 떠다니는 창·작업표시줄·바탕화면 아이콘은 쓰지 않는다. 한 번 연 화면은 숨겨 두기만 해서 메뉴를 오가도 입력이 남는다. 휴지통·파일은 환경설정에서 열고 제목 줄+닫기로 보인다. `Window`·`Taskbar`·`DesktopFinder`·작업 캡슐 코드는 남아 있지만 화면에 쓰지 않는다.
+Web desktop (React 18 + Vite, Cloudflare Worker in `worker/`). 앱 화면(`src/app/App.tsx`의 `AppShell`)은 macOS Finder 창 하나처럼 생겼다: 왼쪽 메뉴(회색 점 3개, 그룹 업무: 가격표·금액 계산·업무 자료 / 개인: 공부 보관함·메모장 / 설정: 환경설정, 선 아이콘, `SIDEBAR_GROUPS`), 오른쪽은 `FinderMain`(`components/FinderFrame.tsx`: ‹ › 제목 도구 막대, 내용, 경로 막대, 항목 수·크기 조절 상태 막대). 왼쪽 메뉴는 아코디언(2026-11-07): 메뉴 이름 자체를 누르면 그 화면이 열리면서 하위 목록이 펼쳐지고 다시 누르면 접힌다(오른쪽 ˅ 는 표시만). 첫 화면에서는 모두 접혀 있고 펼침 상태를 기억하지 않는다. 가격표 → 가격표 폴더, 업무 자료 → 업무 매뉴얼·상담자료(개수), 공부 보관함 → 주제(개수). 누르면 그 화면의 해당 폴더·분류로 바로 간다(각 화면의 `onSubs`/`onFolders`·`goto`·`onLocation`, App의 `subs`·`gotos`·`ats`). 떠다니는 창·작업표시줄·바탕화면 아이콘은 쓰지 않는다. 한 번 연 화면은 숨겨 두기만 해서 메뉴를 오가도 입력이 남는다. 휴지통은 왼쪽 메뉴 '설정' 그룹의 독립 메뉴로, 모든 메뉴에서 지운 항목(가격표·파일·메모·업무 자료·공부 기록)을 한곳에서 복원·완전 삭제한다(업무 자료·공부 기록은 `/api/work`·`/api/study`에서 불러오고 완전 삭제는 휴지통에 있는 것만 DELETE). 각 화면의 '삭제한 자료/기록' 탭은 없앴다(2026-11-07). 파일은 환경설정에서 열고 제목 줄+닫기로 보인다. `Window`·`Taskbar`·`DesktopFinder`·작업 캡슐 코드는 남아 있지만 화면에 쓰지 않는다.
 
 ## Commands
 - `npm test`: node test runner over `tests/*.test.mjs` (components are rendered with esbuild + `react-dom/server`)
@@ -10,7 +10,7 @@ Web desktop (React 18 + Vite, Cloudflare Worker in `worker/`). 앱 화면(`src/a
 ## 공간 구분 (A / B / 공통)
 - `src/app/programs.ts`의 `space`로 시작 메뉴를 나눈다. A 개인 공간: 공부 보관함, 메모장. B 다채움피부과 업무 공간: 업무 자료실, 가격표 보관함. 공통: 금액 계산, 작업 캡슐, 환경설정, 휴지통.
 - 저장 위치를 섞지 않는다. 공부 기록 `/api/study`(study_records, R2 `study/`), 업무 매뉴얼·상담자료 `/api/work`(work_docs, R2 `work/`), 가격표 `/api/price-files`(price_folders, price_images). 각 화면의 검색은 자기 저장소만 찾는다.
-- 화면 형식: 업무 자료실은 중앙 슬라이드(`WorkLibrary.tsx`), 공부 보관함은 겹친 카드(`StudyArchive.tsx`의 `StudyStack`; 안쪽 왼쪽 목록은 2026-11-07 '좌측 탭이 너무 많다'로 없애고 검색 옆 '보관함' 드롭다운(전체·즐겨찾기·주제·삭제한 기록)으로 옮김), 가격표는 Finder형 폴더 → 썸네일(`FileExplorer.tsx`).
+- 화면 형식: 업무 자료는 가격표와 같은 Finder 모양(`WorkLibrary.tsx`가 스스로 `FinderMain`을 그림: 분류 폴더 업무 매뉴얼·상담자료 → 자료 썸네일, 도구 막대 + 추가·검색, 2026-11-07 슬라이드·목록 보기 대체), 공부 보관함은 겹친 카드(`StudyArchive.tsx`의 `StudyStack`; 안쪽 왼쪽 목록은 2026-11-07 '좌측 탭이 너무 많다'로 없애고 검색 옆 '보관함' 드롭다운(전체·즐겨찾기·주제·삭제한 기록)으로 옮김), 가격표는 Finder형 폴더 → 썸네일(`FileExplorer.tsx`).
 - 가격표는 이미지로 저장되어 있다. 프로그램명·구성·횟수·가격을 표 데이터로 만들려면 확정 가격 원본이 필요하므로 임의로 입력하지 않는다.
 - 디자인 기준(2026-11-06 사용자 지정): 배경 #FAFAFA, 메뉴 #EFF0F2, 글자 #2D3136, 보조 #7D838B, 선 #E1E4E8, 포인트 #829BB2 하나. 메뉴 22%·내용 78%, 제목 20px, 위 30px·옆 40px 여백, 그림자·그라데이션·캐릭터 없음. 가격표는 Finder처럼 처음엔 카테고리 폴더 아이콘, 폴더를 열면 같은 크기 썸네일(얇은 테두리, 가운데 이름). ‹ › 는 가격표 안에서는 폴더 단위, 다른 화면은 지나온 메뉴 순서.
 - 상담용 '프로그램 안내'(프로그램 브리핑·치료 원리·색소 치료 방법 그림/표)는 2026-11-07 사용자가 '상담에 도움이 안 되고 난잡하다'고 해서 통째로 삭제했다. 되살리려면 커밋 ed976fe 이전 기록을 본다. 비슷한 상담 그림 화면을 다시 만들기 전에 먼저 사용자와 형식을 정한다.

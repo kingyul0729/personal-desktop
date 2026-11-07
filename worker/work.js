@@ -56,6 +56,16 @@ export async function handleWork(request, env, owner, url) {
       body.action === 'trash' ? now : null, now, id, owner, current.updatedAt).run();
     return result.meta.changes ? json(await detail(env, owner, id)) : conflict();
   }
+  if (request.method === 'DELETE') {
+    // 휴지통에서 완전 삭제: 휴지통에 있는 것만, 첨부 파일까지 지운다.
+    if (!current) return missing();
+    if (!current.trashedAt) return json({ error: '휴지통에 있는 자료만 완전히 삭제할 수 있습니다.' }, 409);
+    const files = await attachments(env, owner, id);
+    await stmt(env, 'DELETE FROM work_doc_attachments WHERE owner = ? AND doc_id = ?', owner, id).run();
+    await stmt(env, 'DELETE FROM work_docs WHERE owner = ? AND id = ? AND trashed_at IS NOT NULL', owner, id).run();
+    for (const file of files) await env.BUCKET.delete(file.objectKey).catch(error => console.error('Attachment cleanup failed', error));
+    return json({ purged: id });
+  }
   if (request.method !== 'PUT') return json({ error: '지원하지 않는 작업입니다.' }, 405);
   if (Number(request.headers.get('Content-Length') || 0) > 27 * 1024 * 1024) return json({ error: '한 번에 첨부하는 파일은 총 25MB 이하로 선택해 주세요.' }, 413);
   const form = await request.formData().catch(() => null);

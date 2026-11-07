@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, BookOpen, CalendarDays, Check, ChevronLeft, ChevronRight, FileText, FolderOpen, ImagePlus, LayoutGrid, Layers, Pencil, Plus, Search, Star, Trash2, Upload, X } from 'lucide-react';
 import '../../styles/study.css';
 import { StudyNoteText } from './StudyNoteText';
+import { announceTrash, useTrashChange } from '../trash';
 
 type Attachment = { id: string; name: string; mime: string; size: number; url: string };
 type RecordItem = { id: string; title: string; category: string; studiedOn: string; content: string; tags: string; keywords: string; summary: string; favorite: number; createdAt: number; updatedAt: number; trashedAt: number | null; attachments: Attachment[] };
@@ -98,6 +99,7 @@ export function StudyArchive({ onDirtyChange, onSubs, goto, onLocation }: { onDi
     } catch (e) { if ((e as Error).name !== 'AbortError') setError((e as Error).message); }
   };
   useEffect(() => { const controller = new AbortController(); void load(controller.signal); return () => controller.abort(); }, []);
+  useTrashChange('study', () => void load());
   const active = records.filter(item => !item.trashedAt);
   const folders = [...new Set([...STUDY_CATEGORIES, ...records.map(item => item.category)])];
   const counts = new Map(folders.map(name => [name, active.filter(item => item.category === name).length]));
@@ -129,7 +131,8 @@ export function StudyArchive({ onDirtyChange, onSubs, goto, onLocation }: { onDi
     try {
       const data = await parse(await fetch(`/api/study/records/${record.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action, version: record.updatedAt }) }));
       updateRecord(data); setRemoving(null);
-      setNotice(action === 'trash' ? '삭제한 기록으로 이동했습니다. 언제든 복원할 수 있어요.' : action === 'restore' ? '공부 기록을 복원했습니다.' : data.favorite ? '즐겨찾기에 추가했습니다.' : '즐겨찾기에서 해제했습니다.');
+      if (action !== 'favorite') announceTrash('study');
+      setNotice(action === 'trash' ? '휴지통으로 옮겼습니다. 휴지통에서 복원할 수 있어요.' : action === 'restore' ? '공부 기록을 복원했습니다.' : data.favorite ? '즐겨찾기에 추가했습니다.' : '즐겨찾기에서 해제했습니다.');
     } catch (e) { setError((e as Error).message); }
     finally { busyRef.current = false; setBusy(false); }
   };
@@ -245,7 +248,6 @@ export function StudyArchive({ onDirtyChange, onSubs, goto, onLocation }: { onDi
           <option value="all">전체 기록 ({active.length})</option>
           <option value="favorite">즐겨찾기 ({active.filter(item => item.favorite).length})</option>
           {folders.map(name => <option key={name} value={`cat:${name}`}>{name} ({counts.get(name) ?? 0})</option>)}
-          <option value="trash">삭제한 기록 ({records.filter(item => item.trashedAt).length})</option>
         </select><select aria-label="정렬" value={sort} onChange={event => setSort(event.target.value)}><option value="date">공부 날짜순</option><option value="updated">최근 수정순</option><option value="title">제목순</option></select><div className="study-view-toggle" role="group" aria-label="보기 방식"><button type="button" aria-pressed={view === 'card'} onClick={() => setView('card')}><Layers size={15} />카드</button><button type="button" aria-pressed={view === 'list'} onClick={() => setView('list')}><LayoutGrid size={15} />목록</button></div></div>
         <div className="study-results-line"><span>{filtered.length}개의 기록</span>{filter === 'trash' && <span>삭제한 기록은 여기에서 복원할 수 있어요.</span>}</div>
         <div className="study-results">
@@ -266,7 +268,7 @@ export function StudyArchive({ onDirtyChange, onSubs, goto, onLocation }: { onDi
       </>}
       <footer className="study-footer"><span>조금씩 쌓이는 나의 공부 기록</span><span>{authenticated ? '계정에 저장' : '로그인 후 이용'}</span></footer>
     </main>
-    {removing && <div className="study-modal-backdrop"><div className="study-modal" role="dialog" aria-modal="true" aria-labelledby="study-delete-title"><h2 id="study-delete-title">기록을 삭제할까요?</h2><p>‘{removing.title}’ 기록과 첨부 자료를<br />삭제한 기록으로 옮깁니다. 다시 복원할 수 있어요.</p>{error && <p role="alert">{error}</p>}<div><button onClick={() => setRemoving(null)} disabled={busy}>취소</button><button className="study-primary" onClick={() => void mutate(removing, 'trash')} disabled={busy}>{busy ? <><SavingMark />이동 중…</> : '삭제한 기록으로 이동'}</button></div></div></div>}
+    {removing && <div className="study-modal-backdrop"><div className="study-modal" role="dialog" aria-modal="true" aria-labelledby="study-delete-title"><h2 id="study-delete-title">기록을 삭제할까요?</h2><p>‘{removing.title}’ 기록과 첨부 자료를<br />휴지통으로 옮깁니다. 휴지통에서 복원할 수 있어요.</p>{error && <p role="alert">{error}</p>}<div><button onClick={() => setRemoving(null)} disabled={busy}>취소</button><button className="study-primary" onClick={() => void mutate(removing, 'trash')} disabled={busy}>{busy ? <><SavingMark />이동 중…</> : '휴지통으로 이동'}</button></div></div></div>}
     {preview && <div className="study-preview" role="dialog" aria-modal="true" aria-label={preview.name} onKeyDown={event => { if (event.key === 'Escape') setPreview(null); }}><header><strong>{preview.name}</strong><a href={`${preview.url}?download=1`} target="_blank" rel="noopener noreferrer"><DownloadMark />다운로드</a><button onClick={() => setPreview(null)} aria-label="미리보기 닫기"><X size={22} /></button></header>{preview.mime.startsWith('image/') ? <img src={preview.url} alt={preview.name} /> : <div className="study-pdf"><a href={preview.url} target="_blank" rel="noopener noreferrer">PDF가 보이지 않으면 새 창에서 열기</a><iframe src={preview.url} title={preview.name} /></div>}</div>}
   </div>;
 }

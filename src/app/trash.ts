@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 
 // Windows that move items to the trash, and the trash window that restores them, tell each other
 // so an open list does not keep showing an item that has moved.
-export type TrashType = 'file' | 'memo' | 'price' | 'capsule';
+export type TrashType = 'file' | 'memo' | 'price' | 'capsule' | 'work' | 'study';
 const EVENT = 'desktop-trash-changed';
 
 export const announceTrash = (type: TrashType) => window.dispatchEvent(new CustomEvent<TrashType>(EVENT, { detail: type }));

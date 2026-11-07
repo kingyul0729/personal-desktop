@@ -20,11 +20,11 @@ type MenuItem = { id: WindowId; label: string; icon: LucideIcon };
 export const SIDEBAR_GROUPS: { title: string; items: MenuItem[] }[] = [
   { title: '업무', items: [{ id: 'fileExplorer', label: '가격표', icon: FolderOpen }, { id: 'priceCalculator', label: '금액 계산', icon: Calculator }, { id: 'workLibrary', label: '업무 자료', icon: Presentation }] },
   { title: '개인', items: [{ id: 'terminal', label: '공부 보관함', icon: BookOpen }, { id: 'notepad', label: '메모장', icon: FileText }] },
-  { title: '설정', items: [{ id: 'controlPanel', label: '환경설정', icon: Settings }] },
+  { title: '설정', items: [{ id: 'trash', label: '휴지통', icon: Trash2 }, { id: 'controlPanel', label: '환경설정', icon: Settings }] },
 ];
 const HOME: WindowId = 'fileExplorer';
 // 메뉴에 없는 화면(환경설정에서 여는 휴지통·파일)은 환경설정 아래에 있는 것으로 보이고 닫기 버튼이 붙는다.
-const SECONDARY: Partial<Record<WindowId, { label: string; icon: LucideIcon }>> = { trash: { label: '휴지통', icon: Trash2 }, files: { label: '파일', icon: FolderOpen } };
+const SECONDARY: Partial<Record<WindowId, { label: string; icon: LucideIcon }>> = { files: { label: '파일', icon: FolderOpen } };
 const menuOf = (id: WindowId) => SIDEBAR_GROUPS.flatMap(group => group.items.map(item => ({ ...item, group: group.title }))).find(item => item.id === id);
 
 export default function App() {
@@ -94,7 +94,7 @@ export function AppShell({ desktop, dispatch }: { desktop: typeof initialDesktop
     if (!desktop.running.includes(id)) return null;
     const label = SECONDARY[id]?.label ?? menuOf(id)!.label;
     return <section key={id} className={`app-pane app-pane-${id}`} aria-label={label} hidden={active !== id}>
-      {id === 'fileExplorer' ? <FileExplorer onFolders={sub('fileExplorer').onSubs} goto={gotos.fileExplorer} onLocation={sub('fileExplorer').onLocation} />
+      {id === 'workLibrary' ? content : id === 'fileExplorer' ? <FileExplorer onFolders={sub('fileExplorer').onSubs} goto={gotos.fileExplorer} onLocation={sub('fileExplorer').onLocation} />
         : <FinderMain title={label} onBack={back} onForward={forward} path={pathFor(id)}
           tools={SECONDARY[id] ? <button type="button" aria-label={`${label} 닫기`} title="닫기" onClick={() => dispatch({ type: 'close', id })}><X size={19} strokeWidth={1.6} /></button> : undefined}>
           {content}
