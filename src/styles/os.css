@@ -1548,3 +1548,17 @@ a:hover > .download-mark .download-arrow, a:focus-visible > .download-mark .down
 .sk-svg.sk-pro { overflow: hidden; }
 .tm-chips button .tm-beam-dot { display: inline-block; width: 9px; height: 9px; margin-right: 7px; border-radius: 50%; background: var(--beam); vertical-align: 1px; }
 .tm-chips button[aria-pressed="true"] { border-color: var(--beam, #2f6fd6); color: #2d3136; background: color-mix(in srgb, var(--beam, #2f6fd6) 10%, #fff); }
+/* 장비 비교 표 */
+.tm-table-wrap { display: grid; gap: 10px; }
+.tm-table { width: 100%; border-collapse: collapse; font-size: 15px; color: #2d3136; }
+.tm-table th, .tm-table td { padding: 14px 12px; border-bottom: 1px solid #e6e8ec; text-align: left; vertical-align: middle; word-break: keep-all; }
+.tm-table thead th { padding-top: 6px; padding-bottom: 10px; border-bottom: 1.5px solid #c9ced6; color: #7d838b; font-size: 13px; font-weight: 600; }
+.tm-table tbody th { font-weight: 700; white-space: nowrap; }
+.tm-table tbody td:nth-child(2) { color: #4d535b; }
+.tm-table .tm-beam-dot { display: inline-block; width: 10px; height: 10px; margin-right: 9px; border-radius: 50%; background: var(--beam); vertical-align: 0; }
+.tm-depth { display: flex; gap: 3px; width: 108px; margin-bottom: 5px; }
+.tm-depth span { flex: 1; height: 8px; border-radius: 2px; background: #eceef1; }
+.tm-depth span.is-on { background: var(--beam); }
+.tm-table td small { color: #7d838b; font-size: 13px; }
+.tm-table-key { margin: 0; color: #7d838b; font-size: 12.5px; }
+.tm-table-key span { margin-right: 6px; font-weight: 600; }

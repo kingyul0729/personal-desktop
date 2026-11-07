@@ -120,15 +120,28 @@ function BeamShape({ beam, on }: { beam: typeof beams[number]; on: boolean }) {
   </g>;
 }
 
-function DevicesDiagram({ active }: { active: Beam }) {
-  return <svg viewBox="0 0 640 300" className="sk-svg sk-pro" role="img" aria-label="장비별로 닿는 깊이: MaxG 얕고 넓게, 노블린 755 표피, 토닝 표피에서 진피 윗부분, 피코 1064 진피, 스타룩스 1540 가는 기둥">
-    <SkinBase />
-    {beams.map(beam => <BeamShape key={beam.id} beam={beam} on={beam.id === active} />)}
-    {beams.map(beam => { const on = beam.id === active; const [n, w] = beamLabel[beam.id]; return <g key={beam.id} opacity={on ? 1 : .55}>
-      <text x={beam.x} y="10" textAnchor="middle" className="sk-beam-name" fill={BEAM_COLOR[beam.id]}>{n}</text>
-      <text x={beam.x} y="20" textAnchor="middle" className="sk-beam-wave">{w}</text>
-    </g>; })}
-  </svg>;
+// 장비별 비교 표(2026-11-07: 그림이 전문적이지 않아 표로). 깊이 칸은 표피 · 진피 윗부분 · 진피 깊은 곳 세 칸 중 닿는 곳만 채운다.
+const deviceRows: { id: Beam; name: string; kind: string; reach: [boolean, boolean, boolean]; depth: string; target: string }[] = [
+  { id: 'ipl', name: 'MaxG', kind: 'IPL (넓은 파장 빛)', reach: [true, false, false], depth: '표피 · 얕고 넓게', target: '옅은 잡티, 붉은기' },
+  { id: 'alex', name: '노블린', kind: '755nm 레이저', reach: [true, false, false], depth: '표피', target: '주근깨 · 흑자처럼 또렷한 색소' },
+  { id: 'toning', name: '레블라이트 · 피코 토닝', kind: '1064nm 저출력 토닝', reach: [true, true, false], depth: '표피 ~ 진피 윗부분', target: '기미처럼 넓게 퍼진 색소' },
+  { id: 'pico1064', name: '피코', kind: '1064nm 피코초 레이저', reach: [false, true, true], depth: '진피', target: 'ABNOM · 오타모반 같은 깊은 색소' },
+  { id: 'frac', name: '스타룩스', kind: '1540nm 비박리 프락셔널', reach: [false, true, true], depth: '진피 · 가는 기둥', target: '피부결 · 톤 재생' },
+];
+
+function DevicesTable() {
+  return <div className="tm-table-wrap">
+    <table className="tm-table">
+      <thead><tr><th>장비</th><th>방식</th><th>닿는 깊이</th><th>주로 다루는 것</th></tr></thead>
+      <tbody>{deviceRows.map(row => <tr key={row.id}>
+        <th scope="row"><i className="tm-beam-dot" style={{ ['--beam' as string]: BEAM_COLOR[row.id] }} />{row.name}</th>
+        <td>{row.kind}</td>
+        <td><div className="tm-depth" aria-label={row.depth}>{row.reach.map((on, i) => <span key={i} className={on ? 'is-on' : ''} style={{ ['--beam' as string]: BEAM_COLOR[row.id] }} />)}</div><small>{row.depth}</small></td>
+        <td>{row.target}</td>
+      </tr>)}</tbody>
+    </table>
+    <p className="tm-table-key"><span>깊이 칸</span> 표피 · 진피 윗부분 · 진피 깊은 곳</p>
+  </div>;
 }
 
 function AfterPanel() {
@@ -164,7 +177,6 @@ export function ProgramDiagram({ show, label }: { show: Beam[]; co2?: boolean; l
 export function TreatmentMethod() {
   const [step, setStep] = useState<StepId>('where');
   const [spot, setSpot] = useState<Spot>('mixed');
-  const [beam, setBeam] = useState<Beam>('toning');
   const current = steps.find(s => s.id === step)!;
   return <article className="tm">
     <nav className="tm-steps" aria-label="설명 단계">
@@ -178,11 +190,7 @@ export function TreatmentMethod() {
         {(() => { const s = spots.find(x => x.id === spot)!; return <p className="tm-note"><b>{s.name}</b> · {s.place} — {s.note}</p>; })()}
       </>}
       {step === 'how' && <><HowDiagram /><p className="tm-note">부서진 색소는 피부가 새로 바뀌는 흐름과 몸의 정리 과정으로 천천히 빠져요. 그래서 한 번보다 <b>여러 번에 나눠</b> 옅게 하는 경우가 많아요.</p></>}
-      {step === 'devices' && <>
-        <DevicesDiagram active={beam} />
-        <div className="tm-chips">{beams.map(b => <button key={b.id} type="button" aria-pressed={beam === b.id} onClick={() => setBeam(b.id)} style={{ ['--beam' as string]: BEAM_COLOR[b.id] }}><i className="tm-beam-dot" />{b.name}</button>)}</div>
-        {(() => { const b = beams.find(x => x.id === beam)!; return <p className="tm-note"><b>{b.name}</b> · {b.depth} — {b.role}</p>; })()}
-      </>}
+      {step === 'devices' && <DevicesTable />}
       {step === 'after' && <AfterPanel />}
     </div>
   </article>;
