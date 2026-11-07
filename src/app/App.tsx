@@ -52,8 +52,8 @@ export function AppShell({ desktop, dispatch }: { desktop: typeof initialDesktop
   });
   const [gotos, setGotos] = useState<Partial<Record<WindowId, { id: string; n: number }>>>({});
   const [ats, setAts] = useState<Partial<Record<WindowId, string>>>({});
-  const [expanded, setExpanded] = useState<Partial<Record<WindowId, boolean>>>(() => { try { return JSON.parse(localStorage.getItem('side-open') ?? '') ?? {}; } catch { return { fileExplorer: true }; } });
-  useEffect(() => { try { localStorage.setItem('side-open', JSON.stringify(expanded)); } catch { /* 저장 못 해도 동작 */ } }, [expanded]);
+  // 처음엔 모두 접힌 상태. 메뉴 이름을 누르면 그 화면이 열리면서 하위 목록이 펼쳐지고, 다시 누르면 접힌다.
+  const [expanded, setExpanded] = useState<Partial<Record<WindowId, boolean>>>({});
   const goSub = (id: WindowId, sub: string) => { open(id); setGotos(current => ({ ...current, [id]: { id: sub, n: (current[id]?.n ?? 0) + 1 } })); };
   const sub = (id: WindowId) => ({
     onSubs: (list: Sub[]) => setSubs(current => ({ ...current, [id]: list })),
@@ -111,10 +111,11 @@ export function AppShell({ desktop, dispatch }: { desktop: typeof initialDesktop
           {group.items.map(item => { const children = subs[item.id] ?? []; const root = ROOT[item.id]; const at = ats[item.id] ?? root; const isOpen = !!expanded[item.id] && children.length > 0;
             return <Fragment key={item.id}>
             <div className="finder-item">
-              <button type="button" aria-pressed={selected === item.id && (!root || at === root || !children.some(child => child.id === at))} aria-current={selected === item.id ? 'page' : undefined} onClick={() => root ? goSub(item.id, root) : open(item.id)}>
+              <button type="button" aria-pressed={selected === item.id && (!root || at === root || !children.some(child => child.id === at))} aria-current={selected === item.id ? 'page' : undefined} aria-expanded={children.length ? isOpen : undefined}
+                onClick={() => { if (root) goSub(item.id, root); else open(item.id); if (children.length) setExpanded(current => ({ ...current, [item.id]: !isOpen })); }}>
                 <item.icon size={17} strokeWidth={1.7} /><span>{item.label}</span>
+                {children.length > 0 && <ChevronDown className="finder-chevron" size={15} strokeWidth={1.8} aria-hidden="true" />}
               </button>
-              {children.length > 0 && <button type="button" className="finder-toggle" aria-expanded={isOpen} aria-label={`${item.label} 하위 목록 ${isOpen ? '접기' : '펼치기'}`} onClick={() => setExpanded(current => ({ ...current, [item.id]: !isOpen }))}><ChevronDown size={15} strokeWidth={1.8} /></button>}
             </div>
             {isOpen && <div className="finder-sub" role="group" aria-label={`${item.label} 하위 목록`}>
               {children.map(child => <button key={child.id} type="button" aria-pressed={selected === item.id && at === child.id} onClick={() => goSub(item.id, child.id)}>
