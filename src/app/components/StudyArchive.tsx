@@ -1,7 +1,6 @@
 import { DownloadMark, SavingMark } from './Feedback';
-import { ToneDot } from './ToneFolder';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, BookOpen, CalendarDays, Check, ChevronLeft, ChevronRight, FileText, FolderOpen, ImagePlus, LayoutGrid, Layers, LockKeyhole, Pencil, Plus, Search, Star, Trash2, Upload, X } from 'lucide-react';
+import { ArrowLeft, BookOpen, CalendarDays, Check, ChevronLeft, ChevronRight, FileText, FolderOpen, ImagePlus, LayoutGrid, Layers, Pencil, Plus, Search, Star, Trash2, Upload, X } from 'lucide-react';
 import '../../styles/study.css';
 import { StudyNoteText } from './StudyNoteText';
 
@@ -177,17 +176,6 @@ export function StudyArchive({ onDirtyChange }: { onDirtyChange?: (dirty: boolea
   const heading = category || (filter === 'favorite' ? '즐겨찾기' : filter === 'trash' ? '삭제한 기록' : '전체 공부 기록');
 
   return <div className={`study-archive${reading && !editor ? ' study-reading' : ''}`} onKeyDown={event => { if (editor && (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') { event.preventDefault(); void save(); } }}>
-    <aside className="study-sidebar">
-      <div className="study-brand"><img src="/icons/pink-folder-ribbon.png" alt="" /><div><strong>나의 공부 보관함</strong><span>배운 것을 차곡차곡</span></div></div>
-      <nav aria-label="공부 보관함 분류">
-        <button className={!category && filter === 'all' ? 'selected' : ''} onClick={() => navigate('all')}><BookOpen size={17} />전체 기록<span>{active.length}</span></button>
-        <button className={filter === 'favorite' ? 'selected' : ''} onClick={() => navigate('favorite')}><Star size={17} />즐겨찾기<span>{active.filter(item => item.favorite).length}</span></button>
-        <p className="study-nav-label">주제별 보관함</p>
-        {folders.map(name => <button key={name} className={category === name ? 'selected' : ''} onClick={() => navigate('all', name)}><ToneDot name={name} />{name}<span>{counts.get(name)}</span></button>)}
-        <button className={`study-trash-nav ${filter === 'trash' ? 'selected' : ''}`} onClick={() => navigate('trash')}><Trash2 size={16} />삭제한 기록<span>{records.filter(item => item.trashedAt).length}</span></button>
-      </nav>
-      <div className="study-private"><LockKeyhole size={14} /><span>로그인한 나만 보는<br />개인 공부 기록</span></div>
-    </aside>
     <main className="study-main">
       {(!reading || editor) && <header className="study-heading">
         <div><h1>{editor ? editor.version ? '공부 기록 수정' : '새 공부 기록' : heading}</h1><span>{editor ? '자료와 함께 배운 내용을 남겨 보세요.' : '이미지와 PDF, 나의 메모를 한곳에 모아두세요.'}</span></div>
@@ -248,7 +236,12 @@ export function StudyArchive({ onDirtyChange }: { onDirtyChange?: (dirty: boolea
           </article>
         </div>
       </> : <>
-        <div className="study-toolbar"><label className="study-search"><Search size={17} /><input aria-label="공부 기록 검색" value={query} onChange={event => setQuery(event.target.value)} placeholder="제목, 메모, 태그 검색" />{query && <button onClick={() => setQuery('')} aria-label="검색어 지우기"><X size={16} /></button>}</label><select aria-label="정렬" value={sort} onChange={event => setSort(event.target.value)}><option value="date">공부 날짜순</option><option value="updated">최근 수정순</option><option value="title">제목순</option></select><div className="study-view-toggle" role="group" aria-label="보기 방식"><button type="button" aria-pressed={view === 'card'} onClick={() => setView('card')}><Layers size={15} />카드</button><button type="button" aria-pressed={view === 'list'} onClick={() => setView('list')}><LayoutGrid size={15} />목록</button></div></div>
+        <div className="study-toolbar"><label className="study-search"><Search size={17} /><input aria-label="공부 기록 검색" value={query} onChange={event => setQuery(event.target.value)} placeholder="제목, 메모, 태그 검색" />{query && <button onClick={() => setQuery('')} aria-label="검색어 지우기"><X size={16} /></button>}</label><select aria-label="보관함" className="study-scope" value={filter === 'all' ? (category ? `cat:${category}` : 'all') : filter} onChange={event => { const v = event.target.value; if (v.startsWith('cat:')) navigate('all', v.slice(4)); else navigate(v as typeof filter); }}>
+          <option value="all">전체 기록 ({active.length})</option>
+          <option value="favorite">즐겨찾기 ({active.filter(item => item.favorite).length})</option>
+          {folders.map(name => <option key={name} value={`cat:${name}`}>{name} ({counts.get(name) ?? 0})</option>)}
+          <option value="trash">삭제한 기록 ({records.filter(item => item.trashedAt).length})</option>
+        </select><select aria-label="정렬" value={sort} onChange={event => setSort(event.target.value)}><option value="date">공부 날짜순</option><option value="updated">최근 수정순</option><option value="title">제목순</option></select><div className="study-view-toggle" role="group" aria-label="보기 방식"><button type="button" aria-pressed={view === 'card'} onClick={() => setView('card')}><Layers size={15} />카드</button><button type="button" aria-pressed={view === 'list'} onClick={() => setView('list')}><LayoutGrid size={15} />목록</button></div></div>
         <div className="study-results-line"><span>{filtered.length}개의 기록</span>{filter === 'trash' && <span>삭제한 기록은 여기에서 복원할 수 있어요.</span>}</div>
         <div className="study-results">
           {filtered.length && view === 'card' && filter !== 'trash' ? <StudyStack items={filtered} selected={stackSelected} onSelect={setStackIndex} busy={busy}

@@ -1349,3 +1349,4 @@ a:hover > .download-mark .download-arrow, a:focus-visible > .download-mark .down
 .rc-head::before { content: "다채움피부과"; position: absolute; left: 0; right: 0; top: 14px; text-align: center; color: #b3b8bf; font-size: 11px; letter-spacing: .3em; }
 .receipt { position: relative; }
 
+.study-toolbar select.study-scope { max-width: 200px; font-size: 13px; color: #2d3136; }
