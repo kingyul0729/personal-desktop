@@ -132,7 +132,7 @@ function DailyClose({ today, notify, onSaved }: { items: InvItem[]; today: strin
 }
 
 // 예전 앱 자료(사진에서 옮긴 직원 근태·성과·재고 기록) 파일을 처음 한 번 넣는다.
-function OldDataImport({ onDone }: { onDone: () => void }) {
+export function OldDataImport({ onDone, merge = false }: { onDone: () => void; merge?: boolean }) {
   const [file, setFile] = useState<{ name: string; tables: Record<string, Record<string, unknown>[]> } | null>(null);
   const [state, setState] = useState({ running: false, text: '', error: '' });
   const pick = async (f: File | undefined) => {
@@ -149,6 +149,19 @@ function OldDataImport({ onDone }: { onDone: () => void }) {
     const total = entries.reduce((n, [, rows]) => n + rows.length, 0);
     let sent = 0;
     setState({ running: true, text: '준비 중…', error: '' });
+    if (merge) {
+      const rows = file.tables.staff_attendance || [];
+      let added = 0, filled = 0;
+      try {
+        for (let i = 0; i < rows.length; i += 15) {
+          const r = await invSend('POST', '/import-merge', { rows: rows.slice(i, i + 15) });
+          added += r.added; filled += r.filled; setState(s => ({ ...s, text: `확인 중 ${Math.min(i + 15, rows.length)} / ${rows.length}` }));
+        }
+        setState({ running: false, text: `근태 ${added}일을 더하고, 비어 있던 성과 숫자 ${filled}칸을 채웠어요. 이미 입력한 값은 그대로예요.`, error: '' });
+        window.dispatchEvent(new Event('staff-data-changed')); onDone();
+      } catch (e) { setState({ running: false, text: '', error: `${errText(e)} — 다시 눌러도 같은 값은 두 번 들어가지 않아요.` }); }
+      return;
+    }
     try {
       await invSend('POST', '/import', { step: 'start' });
       for (const [table, rows] of entries) for (let i = 0; i < rows.length; i += 40) {
@@ -159,11 +172,11 @@ function OldDataImport({ onDone }: { onDone: () => void }) {
       setState({ running: false, text: `예전 자료 ${total}건을 넣었어요.`, error: '' }); window.dispatchEvent(new Event('staff-data-changed')); onDone();
     } catch (e) { setState({ running: false, text: '', error: `${errText(e)} — 다시 누르면 처음부터 다시 넣어요.` }); }
   };
-  return <section className="iv-import">
-    <div><b>예전 앱 자료 넣기</b><p className="sf-hint">직원 근태·성과와 재고 기록(사진에서 옮긴 숫자) 파일을 한 번 넣으면 직원·재고 화면에 바로 보여요. 넣은 뒤에는 이 칸이 사라져요.</p></div>
+  return <section className={`iv-import${merge ? ' is-merge' : ''}`}>
+    <div><b>{merge ? '예전 근태·성과 더 넣기' : '예전 앱 자료 넣기'}</b><p className="sf-hint">{merge ? '새로 받은 예전 자료 파일에서 근태·성과 숫자만 더해요. 비어 있는 칸만 채우고 이미 입력한 값은 바꾸지 않아요.' : '직원 근태·성과와 재고 기록(사진에서 옮긴 숫자) 파일을 한 번 넣으면 직원·재고 화면에 바로 보여요.'}</p></div>
     <div className="iv-inline">
       <label className="sf-btn"><input type="file" accept="application/json,.json" hidden onChange={e => void pick(e.target.files?.[0])} />{file ? file.name : '파일 고르기'}</label>
-      <button type="button" className="sf-btn is-primary" disabled={!file || state.running} onClick={() => void run()}>{state.running && <SavingMark />}넣기</button>
+      <button type="button" className="sf-btn is-primary" disabled={!file || state.running} onClick={() => void run()}>{state.running && <SavingMark />}{merge ? '더 넣기' : '넣기'}</button>
     </div>
     {state.text && <p className="sf-hint">{state.text}</p>}
     {state.error && <p className="sf-hint is-warn">{state.error}</p>}

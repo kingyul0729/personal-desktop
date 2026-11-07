@@ -125,3 +125,20 @@ test('inventory needs login', async () => {
   const r = await handleApi(new Request('https://site.test/api/inventory/state'), e);
   assert.equal(r.status, 401);
 });
+
+test('more old attendance numbers fill only empty cells and add missing days', async () => {
+  const e = env(); await call(e, '/state');
+  const sq = e.inv;
+  sq.prepare(`INSERT INTO staff_attendance (staff_id, work_date, attendance, start_time, end_time, managed_count, designated_count) VALUES (1, '2026-06-01', '정상근무', '10:00', '19:30', NULL, 2)`).run();
+  const r = await call(e, '/import-merge', 'POST', { rows: [
+    { id: 99, staff_id: 1, work_date: '2026-06-01', attendance: '정상근무', managed_count: 3, designated_count: 5 },
+    { id: 98, staff_id: 2, work_date: '2026-06-02', attendance: '정상근무', start_time: '10:00', end_time: '19:30', work_minutes: 570, managed_count: 4 },
+    { staff_id: 3, work_date: '2026-06-02', attendance: '연차' },
+  ] });
+  assert.deepEqual([r.data.added, r.data.filled, r.data.skipped], [1, 1, 1]);
+  const a = sq.prepare(`SELECT managed_count, designated_count FROM staff_attendance WHERE staff_id = 1 AND work_date = '2026-06-01'`).get();
+  assert.deepEqual([a.managed_count, a.designated_count], [3, 2]); // 비어 있던 관리 인원만 채움, 지정 2는 그대로
+  assert.equal(sq.prepare(`SELECT managed_count FROM staff_attendance WHERE staff_id = 2 AND work_date = '2026-06-02'`).get().managed_count, 4);
+  const again = await call(e, '/import-merge', 'POST', { rows: [{ staff_id: 2, work_date: '2026-06-02', attendance: '정상근무', managed_count: 9 }] });
+  assert.deepEqual([again.data.added, again.data.filled], [0, 0]); // 두 번 넣어도 그대로
+});

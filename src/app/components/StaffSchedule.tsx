@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { LoadingBox, SavingMark } from './Feedback';
+import { OldDataImport } from './Inventory';
 import { staffGet, staffPost, StaffApiError } from '../staffApi';
 import {
   type AttendanceRecord, type MonthData, type StaffMember, WEEKDAYS, WORK_STATES, ST_LEADER, ST_STAFF, calendarLines, dateIn, dayLabelKo, daysInMonth, diffMin,
@@ -293,6 +294,7 @@ function Performance({ month, data, notify }: { month: string; data: Data; notif
           <td className="num">{dash(r.avg_managed, '명')}</td><td className="num">{dash(r.total_designated, '명')}</td>
           <td className={`num${(r.remain_leave ?? 0) < 0 ? ' is-warn' : ''}`}>{dash(r.remain_leave, '개')}</td></tr>)}</tbody>
       </table>}
+    <OldDataImport merge onDone={() => { void data.reload(true); void loadPerf(); }} />
     {detail && <div className="sf-modal" role="dialog" aria-modal="true" aria-label={`${detail.name} 세부 근태`}>
       <div className="sf-modal-back" onClick={() => setDetail(null)} />
       <div className="sf-modal-panel">

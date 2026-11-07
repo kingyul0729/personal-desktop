@@ -32,7 +32,7 @@ async function staffCall(method, path, body) {
 /* ── 직원 ── */
 const STAFF = Object.fromEntries(sqlite.prepare('SELECT id, name FROM staff').all().map(r => [r.name, r.id]));
 const sched = load('schedule');
-const perf = [...load('perf1').daily, ...load('perf2').daily];
+const perf = ['perf1', 'perf2', 'perf3', 'perf4'].filter(n => { try { load(n); return true; } catch { return false; } }).flatMap(n => load(n).daily);
 const months = [...new Set(sched.months.map(m => m.month))].sort();
 const entries = new Map(); // `${date}|${name}` → {label, seq}
 const holidays = new Set(), unentered = new Set();
@@ -73,6 +73,7 @@ for (const date of dates) {
       const pl = p.status === '출퇴근 기타' ? '기타' : p.status;
       if (pl !== e.label && !(pl === '정상근무' && !e.label)) notes.push(`근태 ${date} ${name}: 달력 '${e.label}' / 성과 화면 '${p.status}' → 달력 기준`);
     }
+    if (!label && p && p.status === '정상근무') label = '정상근무'; // 성과 화면에 정상근무로 보인 날
     if (!label) {
       if (date > TODAY || unentered.has(date)) continue; // 미래 날·미입력 날은 정상근무를 지어내지 않음
       if (p && p.status === '스케줄 없음') continue;

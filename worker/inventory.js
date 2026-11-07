@@ -58,6 +58,30 @@ export async function handleInventory(request, env, url, user) {
   try {
     // ── 예전 자료 넣기: 사진에서 옮긴 직원·재고 숫자 파일(old-app-data.json)을 처음 한 번만 넣는다 ──
     // 화면이 표마다 조각으로 나눠 보낸다(요청 하나의 D1 호출 수를 작게). 넣은 뒤에는 막힘(쓰던 자료를 덮지 않게).
+    // 예전 자료를 넣은 뒤 더 받은 근태·성과 숫자: 없는 날만 추가하고, 비어 있는 관리 인원·지정 환자 수만 채운다(이미 입력한 값은 안 덮음).
+    // 연차는 사용 수 계산이 얽혀 있어 추가하지 않는다.
+    if (m === 'POST' && path === '/import-merge') {
+      const rows = Array.isArray(body.rows) ? body.rows : [];
+      if (rows.length > 15) return bad('자료 형식이 맞지 않아요.');
+      const cols = (await all(db, 'PRAGMA table_info(staff_attendance)')).map(r => r.name).filter(c => c !== 'id');
+      let added = 0, filled = 0, skipped = 0;
+      for (const r of rows) {
+        if (!r || !r.staff_id || !/^\d{4}-\d{2}-\d{2}$/.test(r.work_date || '')) { skipped++; continue; }
+        const cur = await one(db, 'SELECT id, attendance, etc_type, managed_count, designated_count FROM staff_attendance WHERE staff_id = ? AND work_date = ?', r.staff_id, r.work_date);
+        if (cur) {
+          const mg = (cur.attendance === '정상근무' || (cur.attendance === '기타' && cur.etc_type === 'time')) && cur.managed_count == null && r.managed_count != null ? r.managed_count : null;
+          const dg = cur.designated_count == null && r.designated_count != null ? r.designated_count : null;
+          if (mg != null || dg != null) { await db.prepare('UPDATE staff_attendance SET managed_count = coalesce(managed_count, ?), designated_count = coalesce(designated_count, ?) WHERE id = ?').bind(mg, dg, cur.id).run(); filled++; }
+          continue;
+        }
+        if (r.attendance === '연차') { skipped++; continue; }
+        const keys = Object.keys(r).filter(k => cols.includes(k));
+        await db.prepare(`INSERT OR IGNORE INTO staff_attendance (${keys.join(',')}) VALUES (${keys.map(() => '?').join(',')})`).bind(...keys.map(k => r[k] ?? null)).run();
+        added++;
+      }
+      return json({ ok: true, added, filled, skipped });
+    }
+
     if (path === '/import') {
       const done = await one(db, `SELECT value FROM inv_meta WHERE key = 'import'`);
       if (m === 'GET') return json({ imported: done?.value || null });
