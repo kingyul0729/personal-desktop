@@ -17,7 +17,7 @@ export const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
 export const ST_LEADER = ['정상근무', '출퇴근 기타', '상담', '휴무', '연차', '휴일', '병원휴무', '미기록'];
 export const ST_STAFF = ['정상근무', '출퇴근 기타', '휴무', '연차'];
 export const WORK_STATES = ['정상근무', '출퇴근 기타', '2출'];
-export const SHORT: Record<string, string> = { '정상근무': '근무', '출퇴근 기타': '기타', '2출': '2출', '상담': '상담', '휴무': '휴무', '연차': '연차', '휴일': '휴일', '병원휴무': '병원휴무', '미기록': '미기록', '무급 기타': '무급' };
+const SHORT: Record<string, string> = { '정상근무': '근무', '출퇴근 기타': '기타', '2출': '2출', '상담': '상담', '휴무': '휴무', '연차': '연차', '휴일': '휴일', '병원휴무': '병원휴무', '미기록': '미기록', '무급 기타': '무급' };
 const STD = { weekday: { s: '10:00', e: '19:30' }, saturday: { s: '09:30', e: '15:30' } };
 const TWO_PM = { s: '14:00', e: '19:30' };
 
@@ -86,8 +86,6 @@ export function statePatch(st: string, s: StaffMember, date: string, rec: Attend
   return { attendance: st, etc_type: null, etc_detail: null, record_mode: null, ...noTime };
 }
 // 관리 인원이 서버 규칙(정상근무·출퇴근 기타만 저장)으로 비워지는지
-// 서버가 원본(관리 인원·지정 환자 수·시간)을 지우지 않으므로 바꿀 때 비워질 값이 없다(2026-11-08 원본 보존 규칙)
-export const losesManaged = (_rec: AttendanceRecord | null, _patch: Partial<AttendanceRecord>) => false;
 
 // 그 해 연차 날짜 → 날마다 누적 순번 (달력 '연차 3/15' 표기)
 export function leaveCumulative(byStaff: Record<string, string[]>) {

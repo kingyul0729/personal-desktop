@@ -4,14 +4,14 @@ import { OldDataImport } from './Inventory';
 import { staffGet, staffPost, StaffApiError } from '../staffApi';
 import {
   type AttendanceRecord, type MonthData, type StaffMember, WEEKDAYS, WORK_STATES, ST_LEADER, ST_STAFF, calendarLines, dateIn, dayLabelKo, daysInMonth, diffMin,
-  isReadonly, isTimeEtc, leaveCumulative, losesManaged, monthLabel, optionsFor, payloadFor, shiftMonth, stateOf, statePatch, stdTime, todayLocal, weekdayOf,
+  isReadonly, isTimeEtc, leaveCumulative, monthLabel, optionsFor, payloadFor, shiftMonth, stateOf, statePatch, stdTime, todayLocal, weekdayOf,
 } from '../staffRules';
 
 // 직원스케줄/성과표 — 예전 재고관리 앱의 직원 달력(스케줄)과 성과 입력을 그대로 옮긴 화면.
 // 상태를 고르면 바로 저장한다(예전 앱과 같은 저장값, 서버 계산 그대로).
 type PerfRow = { id: number; name: string; status?: string; total_hours: number | null; total_managed: number | null; avg_managed: number | null; total_designated: number | null; remain_leave: number | null; consult_designated?: number | null; work_days?: number; leave_used?: number; exclusions?: { date: string; reason: string }[] };
 
-export function useStaffMonth(month: string) {
+function useStaffMonth(month: string) {
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [all, setAll] = useState<Record<number, MonthData>>({});
   const [cum, setCum] = useState<Record<string, Record<string, number>>>({});
@@ -75,7 +75,6 @@ function Schedule({ month, data, notify }: { month: string; data: Data; notify: 
   const today = todayLocal();
   const [sel, setSel] = useState(() => (today.slice(0, 7) === month ? today : `${month}-01`));
   useEffect(() => { setSel(s => (s.slice(0, 7) === month ? s : today.slice(0, 7) === month ? today : `${month}-01`)); }, [month, today]);
-  const [pending, setPending] = useState<{ sid: number; patch: Partial<AttendanceRecord> } | null>(null);
   const [busy, setBusy] = useState<number | null>(null);
   const [bulk, setBulk] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
@@ -88,7 +87,7 @@ function Schedule({ month, data, notify }: { month: string; data: Data; notify: 
 
   const save = async (s: StaffMember, date: string, patch: Partial<AttendanceRecord>, msg = '저장되었습니다') => {
     setBusy(s.id);
-    try { await staffPost('/attendance', payloadFor(s, date, recOf(s.id, date), patch)); notify(msg); setPending(null); await data.reload(true); }
+    try { await staffPost('/attendance', payloadFor(s, date, recOf(s.id, date), patch)); notify(msg); await data.reload(true); }
     catch (e) { notify(e instanceof Error ? e.message : '저장 실패'); }
     finally { setBusy(null); }
   };
@@ -96,7 +95,6 @@ function Schedule({ month, data, notify }: { month: string; data: Data; notify: 
     const rec = recOf(s.id, sel);
     if (stateOf(rec) === st) return;
     const patch = statePatch(st, s, sel, rec);
-    if (losesManaged(rec, patch)) { setPending({ sid: s.id, patch }); return; }
     void save(s, sel, patch, st === '연차' ? '연차로 저장되었습니다' : '저장되었습니다');
   };
 
@@ -111,7 +109,7 @@ function Schedule({ month, data, notify }: { month: string; data: Data; notify: 
         {Array.from({ length: lead }, (_, i) => <span key={`a${i}`} className="sf-day is-blank" />)}
         {Array.from({ length: n }, (_, i) => {
           const date = dateIn(month, i + 1), cell = calendarLines(date, staff, recOf, isHoliday(date), cum, today);
-          return <button key={date} type="button" className={`sf-day${date === sel ? ' is-sel' : ''}${date === today ? ' is-today' : ''}${weekdayOf(date) === 0 ? ' is-sun' : ''}`} aria-pressed={date === sel} onClick={() => { setSel(date); setPending(null); setConfirmClear(false); }}>
+          return <button key={date} type="button" className={`sf-day${date === sel ? ' is-sel' : ''}${date === today ? ' is-today' : ''}${weekdayOf(date) === 0 ? ' is-sun' : ''}`} aria-pressed={date === sel} onClick={() => { setSel(date); setConfirmClear(false); }}>
             <span className="sf-dn">{i + 1}</span>
             {cell.all ? <span className="sf-ev is-hol">휴일</span> : cell.lines.map(l => <span key={l.sid} className={`sf-ev is-${l.kind}`}><b>{l.name}</b> {l.label}</span>)}
             {cell.none > 0 && <span className="sf-ev is-none">미입력 {cell.none}</span>}
@@ -140,8 +138,6 @@ function Schedule({ month, data, notify }: { month: string; data: Data; notify: 
               {cur && !opts.includes(cur) && <option value={cur} disabled>{cur}</option>}
               {opts.map(x => <option key={x} value={x}>{x}</option>)}
             </select></div>
-          {pending?.sid === s.id && <div className="sf-confirm">관리 인원({rec?.managed_count}명)이 비워집니다. 바꿀까요?
-            <span><button type="button" className="sf-btn" onClick={() => setPending(null)}>취소</button><button type="button" className="sf-btn is-primary" onClick={() => void save(s, sel, pending.patch)}>변경</button></span></div>}
           {st === '출퇴근 기타' && !locked && rec && <EtcTimes key={`${sel}-${rec.start_time}-${rec.end_time}-${rec.memo}`} rec={rec} date={sel} onSave={(patch, msg) => void save(s, sel, patch, msg)} />}
           {st === '2출' && <p className="sf-hint">14:00 – 19:30</p>}
         </div>;
@@ -202,8 +198,8 @@ function BulkDialog({ month, staff, all, onClose, onDone }: { month: string; sta
     }
     const targets = dates.filter(d => !offs.has(d));
     if (!targets.length) return setError('고른 날짜가 모두 휴일입니다');
-    const over = targets.filter(d => recs[d]).length, lose = targets.filter(d => losesManaged(recs[d] || null, statePatch(finalSt, s, d, recs[d] || null, times))).length;
-    setAsk(`${targets.length}일에 '${finalSt === '2출' ? '출퇴근 기타 · 2출' : finalSt}' 적용${over ? ` · 기존 기록 ${over}건 바뀜` : ''}${lose ? ` · 관리 인원 ${lose}건 비워짐` : ''}${dates.length > targets.length ? ` · 휴일 ${dates.length - targets.length}일 제외` : ''}`);
+    const over = targets.filter(d => recs[d]).length;
+    setAsk(`${targets.length}일에 '${finalSt === '2출' ? '출퇴근 기타 · 2출' : finalSt}' 적용${over ? ` · 기존 기록 ${over}건 바뀜` : ''}${dates.length > targets.length ? ` · 휴일 ${dates.length - targets.length}일 제외` : ''}`);
     return { targets, recs };
   };
   const apply = async () => {

@@ -1416,7 +1416,7 @@ a:hover > .download-mark .download-arrow, a:focus-visible > .download-mark .down
 .sf-day.is-sel { background: #eef2f6; box-shadow: inset 0 0 0 2px var(--app-accent); }
 .sf-dn { font-size: 13px; font-weight: 600; }
 .sf-day.is-today .sf-dn { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--app-accent); color: #fff; }
-.sf-ev { font-size: 11.5px; line-height: 1.35; padding: 1px 5px; border-radius: 4px; background: #f1f2f4; color: #4a5059; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sf-ev { font-size: 11.5px; line-height: 1.35; padding: 1px 5px; border-radius: 4px; background: #f1f2f4; color: #4a5059; }
 .sf-ev b { font-weight: 600; }
 .sf-ev.is-leave { background: #e7eef6; color: #3c5a7a; }
 .sf-ev.is-work { background: #eef3ec; color: #4b6648; }
@@ -1549,7 +1549,6 @@ a:hover > .download-mark .download-arrow, a:focus-visible > .download-mark .down
   .iv-noprint { display: none !important; }
   * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
-.sf-ev { white-space: normal; overflow: visible; }
 .iv-import { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; border: 1px solid var(--app-accent); border-radius: 10px; background: #f3f6f9; }
 .iv-import p { margin: 4px 0 0; }
 .iv-import.is-merge { border-color: var(--app-line); background: #fff; margin-top: 12px; }

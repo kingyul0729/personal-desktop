@@ -18,7 +18,7 @@ const bad = (error, status = 400) => json({ error }, status);
 const num = v => (v === '' || v == null ? null : Number(v));
 const isNum = v => typeof v === 'number' && Number.isFinite(v);
 const round = v => Math.round(v * 1000) / 1000;
-export const kstToday = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
+const kstToday = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
 const okDate = d => /^\d{4}-\d{2}-\d{2}$/.test(d || '');
 
 async function all(db, sql, ...args) { return (await db.prepare(sql).bind(...args).all()).results || []; }
@@ -46,12 +46,12 @@ function txStatements(db, item, t) {
 }
 
 // 일반 품목 구매금액 = 등록 구매단가(주문단위 1개 가격) × 주문단위 수(재고단위 수량 ÷ 구성수량). 단가 미확인이면 null.
-export function priceFor(item, stockQty) {
+function priceFor(item, stockQty) {
   if (item.price == null) return null;
   return Math.round(item.price * (stockQty / (item.pack_qty || 1)));
 }
 // 선결제 개당원가 = 실제 구매금액 ÷ 증정 포함 총수량(가장 최근 선결제 구매 기준)
-export const unitCostOf = tx => (tx && tx.amount != null && tx.qty + tx.bonus_qty > 0 ? Math.round((tx.amount / (tx.qty + tx.bonus_qty)) * 100) / 100 : null);
+const unitCostOf = tx => (tx && tx.amount != null && tx.qty + tx.bonus_qty > 0 ? Math.round((tx.amount / (tx.qty + tx.bonus_qty)) * 100) / 100 : null);
 
 async function loadItem(db, id) {
   const it = await one(db, 'SELECT * FROM inv_items WHERE id = ?', Number(id));
@@ -360,7 +360,7 @@ export async function handleInventory(request, env, url, user) {
   }
 }
 
-export async function monthReport(db, month, brief = false) {
+async function monthReport(db, month, brief = false) {
   const from = `${month}-01`, to = `${month}-31`;
   const spend = await one(db, `SELECT
       coalesce(sum(CASE WHEN kind = 'in' THEN amount END), 0) AS general,

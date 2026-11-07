@@ -1,6 +1,7 @@
+import { ensureInvSchema } from './invSchema.js';
 // 직원 스케줄·성과·연차 — 예전 재고관리 앱(webapp, src/staff.ts)의 서버 계산을 그대로 옮김.
-// 데이터는 예전 앱 D1(webapp-production, 바인딩 INV_DB)에 있다. 주문·결제 표는 건드리지 않는다.
-// 아래 계산식(근무시간·연차 차감·성과 집계)은 원본과 같다. 바꾸지 말 것.
+// 데이터는 팀 공용 D1(바인딩 INV_DB, 표는 invSchema.js가 만든다). 주문·결제 표는 없다.
+// 근무시간·연차 차감은 원본과 같다. 성과 집계는 사용자 규칙(2026-11-08: 풀상담일 제외·원본 보존)만 반영했다.
 function kstCurrentMonth() {
   const now = new Date(Date.now() + 9 * 60 * 60 * 1000);
   return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
@@ -754,7 +755,6 @@ staff.get("/performance", async (c) => {
   return c.json(sortStaff(result));
 });
 
-import { ensureInvSchema } from './invSchema.js';
 
 export async function handleStaff(request, env, url) {
   if (!env.INV_DB) return Response.json({ error: '직원 자료(예전 재고관리 DB)가 아직 연결되지 않았어요.', unavailable: true }, { status: 503 });

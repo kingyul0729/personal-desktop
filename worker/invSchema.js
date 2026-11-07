@@ -1,6 +1,7 @@
+import { VENDOR_BASE, ITEMS, EXTRA_ITEMS } from './invMaster.js';
 // 예전 재고관리 앱의 직원 표 구조(마이그레이션 0009·0010·0014·0022) — tests/fixtures/inv-staff.sql 에서 만든 것.
 // 빈 데이터베이스에 직원 표가 없을 때 한 번만 실행한다.
-export const INV_STAFF_SCHEMA = [
+const INV_STAFF_SCHEMA = [
  "CREATE TABLE IF NOT EXISTS staff (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  name TEXT NOT NULL,\n  position TEXT DEFAULT '직원',         \n  is_leader INTEGER DEFAULT 0,          \n  hire_date TEXT,                       \n  retire_date TEXT,                     \n  status TEXT DEFAULT 'active',         \n  total_leave INTEGER DEFAULT 0,        \n  used_leave INTEGER DEFAULT 0,         \n  second_shift_count INTEGER DEFAULT 0, \n  memo TEXT,                            \n  sort_order INTEGER DEFAULT 0,         \n  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,\n  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP\n)",
  "CREATE TABLE IF NOT EXISTS staff_attendance (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  staff_id INTEGER NOT NULL,\n  work_date TEXT NOT NULL,              \n  attendance TEXT NOT NULL,             \n  etc_type TEXT,                        \n  etc_detail TEXT,                      \n  start_time TEXT,                      \n  end_time TEXT,                        \n  work_minutes INTEGER,                 \n  manual_adjust INTEGER DEFAULT 0,      \n  adjust_reason TEXT,                   \n  managed_count INTEGER,                \n  designated_count INTEGER,             \n  memo TEXT,                            \n  editor TEXT DEFAULT '관리자',         \n  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,\n  UNIQUE(staff_id, work_date),\n  FOREIGN KEY (staff_id) REFERENCES staff(id)\n)",
  "CREATE TABLE IF NOT EXISTS staff_day_status (\n  work_date TEXT PRIMARY KEY,           \n  status TEXT NOT NULL,                 \n  memo TEXT,\n  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP\n)",
@@ -32,7 +33,7 @@ export const INV_STAFF_SCHEMA = [
 ];
 
 // 재고 표(2026-11-08 새로 설계). 기록(inv_tx)마다 병원재고·업체재고 증감을 저장해 삭제 때 정확히 되돌린다.
-export const INV_STOCK_SCHEMA = [
+const INV_STOCK_SCHEMA = [
   `CREATE TABLE IF NOT EXISTS inv_vendors (id INTEGER PRIMARY KEY, name TEXT NOT NULL, company TEXT, category TEXT, manager TEXT, payment_method TEXT, contact TEXT, bank TEXT, account TEXT, holder TEXT, memo TEXT, sort INTEGER DEFAULT 0, active INTEGER NOT NULL DEFAULT 1)`,
   `CREATE TABLE IF NOT EXISTS inv_items (id INTEGER PRIMARY KEY, name TEXT NOT NULL, vendor_id INTEGER, category TEXT, stock_unit TEXT NOT NULL DEFAULT 'ea', order_unit TEXT, pack_qty REAL, price REAL, min_stock REAL DEFAULT 0,
      hospital_stock REAL NOT NULL DEFAULT 0, vendor_stock REAL NOT NULL DEFAULT 0, daily_mode TEXT, prepaid INTEGER NOT NULL DEFAULT 0, is_pack INTEGER NOT NULL DEFAULT 0, memo TEXT, sort INTEGER DEFAULT 0, active INTEGER NOT NULL DEFAULT 1, created_at INTEGER, updated_at INTEGER)`,
@@ -46,7 +47,6 @@ export const INV_STOCK_SCHEMA = [
   `CREATE TABLE IF NOT EXISTS inv_meta (key TEXT PRIMARY KEY, value TEXT)`,
 ];
 
-import { VENDOR_BASE, ITEMS, EXTRA_ITEMS } from './invMaster.js';
 
 export const INV_TABLES = ['staff', 'staff_attendance', 'staff_day_status', 'staff_leave_log', 'staff_info_log', 'inv_vendors', 'inv_items', 'inv_options', 'inv_orders', 'inv_tx', 'inv_daily'];
 const one = sql => sql.replace(/\s*--[^\n]*/g, '').replace(/\s+/g, ' ').trim().replace(/;?$/, ';');

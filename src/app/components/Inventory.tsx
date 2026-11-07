@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { LoadingBox, SavingMark } from './Feedback';
 import { readWon } from '../koreanAmount';
 import {
@@ -530,4 +530,3 @@ function YearReport({ year, months }: { year: string; months: MonthRep[] }) {
   </article>;
 }
 
-export const _test = { lowOf, useMemo };
