@@ -406,6 +406,21 @@ test('trash-uploads moves every price image and only work/study entries with fil
   assert.equal((await act(env, { action: 'trash-uploads' }, { owner: '' })).status, 401);
 });
 
+test('trash-price-images moves only this owner\'s price images to the trash', async () => {
+  const env = environment();
+  const now = Date.now();
+  await call(env, '/api/price-files'); // 기본 가격표가 먼저 들어간 상태에서
+  env.sqlite.exec(`INSERT INTO price_images (id, owner, name, folder_id, object_key, mime, created_at) VALUES ('p1','me','a','f','k1','image/png',${now}), ('px','other','c','f','k3','image/png',${now})`);
+  env.sqlite.exec(`INSERT INTO work_docs (id, owner, kind, title, created_at, updated_at) VALUES ('w1','me','manual','파일 있음',${now},${now})`);
+  const result = await act(env, { action: 'trash-price-images' });
+  assert.equal(result.status, 200);
+  assert.ok(result.data.trashedPriceImages >= 1);
+  assert.equal(env.sqlite.prepare("SELECT trashed_at FROM price_images WHERE id = 'px'").get().trashed_at, null);
+  assert.ok(env.sqlite.prepare("SELECT trashed_at FROM price_images WHERE id = 'p1'").get().trashed_at);
+  assert.equal(env.sqlite.prepare('SELECT COUNT(*) AS n FROM work_docs WHERE trashed_at IS NOT NULL').get().n, 0);
+  assert.equal((await call(env, '/api/price-files')).data.images.length, 0);
+});
+
 test('bundled price sheets stay gone after trash-uploads and emptying the trash', async () => {
   const env = environment();
   const before = (await call(env, '/api/price-files')).data;

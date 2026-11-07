@@ -1,3 +1,4 @@
+import { announceTrash } from '../trash';
 import { useRef, useState, type FormEvent } from 'react';
 import { ArrowDown, ArrowUp, ChevronRight, FilePlus, FolderPlus, ImagePlus, Lock, Pencil, Plus, RotateCcw, Trash2 } from 'lucide-react';
 import { useDesktop, type SettingsTab } from '../useDesktop';
@@ -211,8 +212,35 @@ function FileSettings() {
       {!children.length && <li className="settings-empty">비어 있습니다.</li>}
     </ul>
     {feedback.view}
+    <TrashPriceImages />
     <TrashUploads />
   </>;
+}
+
+// 가격표를 다시 올리기 전에 가격표 이미지만 한 번에 지운다(폴더는 남는다).
+function TrashPriceImages() {
+  const { act } = useDesktop();
+  const feedback = useFeedback();
+  const [confirming, setConfirming] = useState(false);
+  const [done, setDone] = useState('');
+  const run = () => feedback.run(async () => {
+    const result = await act({ action: 'trash-price-images' });
+    if (result.ok) announceTrash('price');
+    if (result.ok) setDone(`가격표 이미지 ${(result.data as { trashedPriceImages?: number }).trashedPriceImages ?? 0}개를 지웠습니다.`);
+    setConfirming(false);
+    return result;
+  });
+  return <section className="settings-danger" aria-label="가격표 이미지 모두 삭제">
+    <div>
+      <strong>가격표 이미지 모두 삭제</strong>
+      <p>올린 가격표 이미지를 전부 지웁니다. 폴더는 그대로 남아서 바로 다시 올릴 수 있습니다. 지운 이미지는 휴지통에서 되돌릴 수 있습니다.</p>
+    </div>
+    {confirming
+      ? <div className="settings-row"><button type="button" className="is-danger" disabled={feedback.busy} onClick={() => void run()}><Trash2 size={16} />모두 삭제</button><button type="button" disabled={feedback.busy} onClick={() => setConfirming(false)}>취소</button></div>
+      : <div className="settings-row"><button type="button" onClick={() => { setDone(''); setConfirming(true); }}><Trash2 size={16} />모두 삭제…</button></div>}
+    {done && <p className="settings-message" role="status">{done}</p>}
+    {feedback.view}
+  </section>;
 }
 
 // 다시 올리기 전에 업로드한 자료를 한 번에 지운다. 확인을 한 번 더 받고, 휴지통으로만 보낸다.
@@ -224,6 +252,7 @@ function TrashUploads() {
   const run = () => feedback.run(async () => {
     const result = await act({ action: 'trash-uploads' });
     if (result.ok) {
+      announceTrash('price');
       const n = (result.data as { trashedUploads?: { price: number; work: number; study: number } }).trashedUploads ?? { price: 0, work: 0, study: 0 };
       setDone(`가격표 이미지 ${n.price}개, 업무 자료 ${n.work}개, 공부 기록 ${n.study}개를 지웠습니다.`);
     }
