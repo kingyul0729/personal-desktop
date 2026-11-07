@@ -1,262 +1,228 @@
-// 의학 교과서식 피부 단면 그림(직접 그린 SVG, 외부 이미지 없음).
-// 각질층 → 표피 세포층(각질형성세포) → 기저층(기저세포·멜라닌세포) → 진피유두(모세혈관 고리) → 망상진피(콜라겐 다발·혈관·모낭·피지샘) → 피하지방.
-// 색소 위치는 일반적으로 확립된 내용만: 주근깨·흑자 = 기저층 멜라닌 증가, 기미 = 표피 멜라닌 + 진피 위쪽 멜라닌 포식세포,
-// ABNOM = 진피 속 가지 달린 멜라닌세포, 점(모반) = 경계부·진피의 모반세포 둥지(깊을수록 색이 옅고 작아짐).
-// 도형처럼 보이지 않게(2026-11-07 사용자 지적): 같은 크기·같은 간격·같은 굵기를 피하고, 조직 전체에 아주 약한 일렁임(feDisplacementMap)을 준다.
+// 피부 단면 그림(직접 그린 SVG, 외부 이미지 없음). 2026-11-07 사용자가 보낸 참고 그림 스타일:
+// 입체 블록(윗면 + 앞 단면 + 오른쪽 옆면), 크게 확대한 세포, 부드러운 파스텔 층 구분
+// — 각질층(분홍 얇은 판) · 표피 세포(노랑, 둥근 사각 세포 + 핵) · 기저층(연보라 세포 + 보라 기저막) · 진피(살구색, 물결 콜라겐 + 가는 혈관) · 피하지방(노란 띠).
+// 멜라닌세포는 기저층 사이의 가지 달린 갈색 세포. 색소 위치는 일반적으로 확립된 내용만:
+// 주근깨·흑자 = 기저층 멜라닌 증가, 기미 = 표피 멜라닌 + 진피 위쪽 멜라닌 포식세포, ABNOM = 진피 속 멜라닌세포, 점 = 경계부·진피의 모반세포 둥지.
 import { useId } from 'react';
 
 export type SkinFocus = 'top' | 'mid' | 'deep' | 'texture' | 'mole';
 
-const W = 400;
-const H = 286;
-const SURFACE = 44;
-const PAPILLARY = 150;
-const SUBCUTIS = 250;
-const surfaceY = (x: number, mole: boolean) => SURFACE + 1.2 * Math.sin(x / 17) + .6 * Math.sin(x / 5.3) - (mole ? Math.max(0, 9 - Math.abs(x - 200) / 3.2) : 0);
-const junctionY = (x: number) => 102 + 9 * Math.sin((x - 10) / 13) + 2.5 * Math.sin(x / 7.1);
-const papBottom = (x: number) => PAPILLARY + 4 * Math.sin(x / 30) + 2 * Math.sin(x / 11);
-const subY = (x: number) => SUBCUTIS + 5 * Math.sin(x / 37) + 3 * Math.sin(x / 13);
+const FW = 352;            // 앞면 너비
+const DX = 36, DY = 28;    // 윗면·옆면 깊이(오른쪽 위로)
+const TOP = 40;            // 앞면 맨 위(피부 표면)
+const SC = 16;             // 각질층 두께
+const ROW = 27;            // 표피 세포 한 줄 높이
+const SP1 = TOP + SC, SP2 = SP1 + ROW, BAS = SP2 + ROW, BM = BAS + ROW + 1; // 표피 세포 2줄 + 기저층 1줄, BM = 기저막
+const FAT = 262, BOTTOM = 276;
+const VB_TOP = -34;
 
-// 같은 그림이 매번 같게 나오도록 고정된 난수
 function rng(seed: number) { let s = seed; return () => { s = (s * 16807) % 2147483647; return (s - 1) / 2147483646; }; }
 
-const curve = (fn: (x: number) => number, from = 0, to = W, step = 4) => {
-  let d = `M${from} ${fn(from).toFixed(1)}`;
-  for (let x = from + step; x <= to; x += step) d += ` L${x} ${fn(x).toFixed(1)}`;
-  return d;
+// 가로로 한 줄 세포(너비 조금씩 다르게)
+function rowCells(y: number, h: number, rand: () => number, offset: number) {
+  const cells: { x: number; w: number; y: number; h: number }[] = [];
+  let x = -offset;
+  while (x < FW) { const w = 36 + rand() * 9; cells.push({ x, w, y, h }); x += w; }
+  return cells;
+}
+const cellPath = (c: { x: number; w: number; y: number; h: number }, inset = 1.4, round = 9) => {
+  const x = Math.max(c.x + inset, inset), r = Math.min(c.x + c.w - inset, FW - inset);
+  const w = r - x; if (w < 6) return '';
+  return `M${x + round} ${c.y + inset} H${r - round} Q${r} ${c.y + inset} ${r} ${c.y + inset + round} V${c.y + c.h - inset - round} Q${r} ${c.y + c.h - inset} ${r - round} ${c.y + c.h - inset} H${x + round} Q${x} ${c.y + c.h - inset} ${x} ${c.y + c.h - inset - round} V${c.y + inset + round} Q${x} ${c.y + inset} ${x + round} ${c.y + inset} Z`;
 };
-// 오른쪽 → 왼쪽으로 이어 그리기(면을 닫을 때)
-const back = (fn: (x: number) => number, step = 4) => { let d = ''; for (let x = W; x >= 0; x -= step) d += ` L${x} ${fn(x).toFixed(1)}`; return d; };
-// 울퉁불퉁한 덩어리(세포·지방소엽·샘): 둘레를 조금씩 다르게
-const blob = (cx: number, cy: number, rx: number, ry: number, rand: () => number, n = 9, jag = .18) => {
-  const p = Array.from({ length: n }, (_, i) => { const a = (i / n) * Math.PI * 2; const k = 1 + (rand() - .5) * jag * 2; return [cx + Math.cos(a) * rx * k, cy + Math.sin(a) * ry * k]; });
-  const mid = (i: number) => { const a = p[i % n], c = p[(i + 1) % n]; return [(a[0] + c[0]) / 2, (a[1] + c[1]) / 2]; };
-  let d = `M${mid(0)[0].toFixed(1)} ${mid(0)[1].toFixed(1)}`;
-  for (let i = 1; i <= n; i++) { const c = p[i % n], m = mid(i); d += ` Q${c[0].toFixed(1)} ${c[1].toFixed(1)} ${m[0].toFixed(1)} ${m[1].toFixed(1)}`; }
-  return d + ' Z';
-};
-// 굵기가 변하는 관(혈관): 두 가장자리를 따로 그려 면으로 닫는다
-const tube = (fn: (x: number) => number, width: (x: number) => number, from = -10, to = W + 10, step = 5) => {
-  let top = '', bottom = '';
-  for (let x = from; x <= to; x += step) top += `${top ? ' L' : 'M'}${x} ${(fn(x) - width(x) / 2).toFixed(1)}`;
-  for (let x = to; x >= from; x -= step) bottom += ` L${x} ${(fn(x) + width(x) / 2).toFixed(1)}`;
-  return top + bottom + ' Z';
-};
+const centerOf = (c: { x: number; w: number; y: number; h: number }) => ({ cx: (Math.max(c.x, 0) + Math.min(c.x + c.w, FW)) / 2, cy: c.y + c.h / 2 });
+
+// 가지 달린 멜라닌세포(참고 그림처럼 아래가 넓게 붙고 위로 가지가 갈라짐)
+function Melanocyte({ x, base, color = '#9c6235', dark = '#5e3418', scale = 1 }: { x: number; base: number; color?: string; dark?: string; scale?: number }) {
+  return <g transform={`translate(${x} ${base}) scale(${scale})`}>
+    <path d="M-22 0 C-13 -2 -10 -7 -10 -14 C-14 -20 -22 -28 -30 -32 C-21 -30 -14 -25 -9 -21 C-10 -30 -8 -38 -3 -47 C-3 -37 -4 -29 -3 -23 C1 -30 7 -36 14 -40 C9 -33 5 -27 4 -22 C10 -26 18 -28 28 -27 C19 -24 12 -20 9 -14 C9 -7 13 -2 22 0 Z" fill={color} stroke={dark} strokeWidth=".7" strokeOpacity=".5" />
+    <path d="M-6 -12 C-3 -19 3 -19 5 -12" fill="none" stroke="#fff" strokeOpacity=".25" strokeWidth="1.2" />
+    <ellipse cx="0" cy="-8" rx="4.6" ry="4.2" fill={dark} />
+    <ellipse cx="-1.2" cy="-9.4" rx="1.4" ry="1.1" fill="#fff" opacity=".3" />
+  </g>;
+}
+
+// 진피 속 가지 달린 색소세포(ABNOM): 길쭉한 몸 + 양끝 가지
+function DermalMelanocyte({ x, y, a, s }: { x: number; y: number; a: number; s: number }) {
+  return <g transform={`translate(${x} ${y}) rotate(${a}) scale(${s})`}>
+    <path d="M-17 1 C-12 -1 -9 -4 -6 -4 C-2 -6 4 -5 7 -3 C10 -2 13 -3 18 -6 C14 -2 12 0 11 1 C14 2 16 4 19 7 C13 5 10 3 7 3 C3 5 -3 6 -7 3 C-10 2 -13 3 -18 6 C-15 3 -15 2 -17 1 Z" fill="#7a6a80" stroke="#4f4258" strokeWidth=".5" strokeOpacity=".5" />
+    <ellipse cx="0" cy="0" rx="3.4" ry="2.6" fill="#4a3d55" />
+  </g>;
+}
 
 // 레이저 손잡이 끝(금속 몸체 + 빛 나오는 창)
 function Handpiece({ id, x, w }: { id: string; x: number; w: number }) {
   return <g>
-    <rect x={x - w / 2} y="-6" width={w} height="24" rx="5" fill={`url(#${id}h)`} />
-    <rect x={x - w / 2 + 3} y="14" width={w - 6} height="7" rx="2" fill="#3c4249" />
-    <rect x={x - w / 2 + 6} y="18.5" width={w - 12} height="3" rx="1.5" fill="#cfe1ff" />
-    <rect x={x - w / 2 + 6} y="18.5" width={w - 12} height="3" rx="1.5" fill="#ffffff" opacity=".8" filter={`url(#${id}b1)`} />
-  </g>;
-}
-
-// 가지 달린 멜라닌세포(ABNOM·기저층)
-function Dendritic({ x, y, a, size, color, rand, spindle = false }: { x: number; y: number; a: number; size: number; color: string; rand: () => number; spindle?: boolean }) {
-  const arms = Array.from({ length: spindle ? 3 : 4 + Math.floor(rand() * 2) }, (_, i) => {
-    const ang = spindle ? a + (i === 0 ? 0 : i === 1 ? Math.PI : Math.PI * (rand() > .5 ? .35 : 1.35)) + (rand() - .5) * .3 : a + (i / 5) * Math.PI * 2 + (rand() - .5) * .8; const len = size * (spindle ? 1.6 + rand() : 1.4 + rand() * 1.3);
-    const ex = Math.cos(ang) * len, ey = Math.sin(ang) * len * .7;
-    const bx = ex * .55 + (rand() - .5) * size, by = ey * .55 + (rand() - .5) * size;
-    return <g key={i}><path d={`M0 0 Q${bx.toFixed(1)} ${by.toFixed(1)} ${ex.toFixed(1)} ${ey.toFixed(1)}`} stroke={color} strokeWidth={.9 + rand() * .5} fill="none" strokeLinecap="round" />
-      <path d={`M${(ex * .7).toFixed(1)} ${(ey * .7).toFixed(1)} l${((rand() - .5) * size).toFixed(1)} ${((rand() - .5) * size).toFixed(1)}`} stroke={color} strokeWidth=".6" strokeLinecap="round" opacity=".8" /></g>;
-  });
-  return <g transform={`translate(${x.toFixed(1)} ${y.toFixed(1)})`}>{arms}
-    <path d={blob(0, 0, size * (spindle ? 1.3 : .8), size * (spindle ? .45 : .55), rand, 8, .2)} fill={color} transform={`rotate(${(a * 57.3).toFixed(0)})`} />
-    <ellipse rx={size * .3} ry={size * .2} fill="#3e3a4d" opacity=".6" transform={`rotate(${(a * 57.3).toFixed(0)})`} />
+    <rect x={x - w / 2} y={VB_TOP - 6} width={w} height="22" rx="5" fill={`url(#${id}h)`} />
+    <rect x={x - w / 2 + 3} y={VB_TOP + 13} width={w - 6} height="6" rx="2" fill="#3c4249" />
+    <rect x={x - w / 2 + 6} y={VB_TOP + 16.5} width={w - 12} height="3" rx="1.5" fill="#cfe1ff" />
+    <rect x={x - w / 2 + 6} y={VB_TOP + 16.5} width={w - 12} height="3" rx="1.5" fill="#fff" opacity=".8" filter={`url(#${id}b1)`} />
   </g>;
 }
 
 export function SkinSection({ focus, label }: { focus: SkinFocus; label: string }) {
   const id = useId().replace(/:/g, '');
-  const r = rng(7);
-  const mole = focus === 'mole';
-  const s = (x: number) => surfaceY(x, mole);
-  const u = (id2: string) => `url(#${id}${id2})`;
-
-  // 표피 세포: 위로 갈수록 납작하고 옅다(크기·간격 조금씩 다르게)
-  const cells: { x: number; y: number; rx: number; ry: number; tone: number; rot: number }[] = [];
-  for (let y = SURFACE + 12; y < 132; y += 8 + r() * 1.2) {
-    for (let x = r() * 6; x < W + 6; x += 10.5 + r() * 3) {
-      const yy = y + (r() - .5) * 3;
-      if (yy > junctionY(x) - 9 || yy < s(x) + 9) continue;
-      const depth = (yy - SURFACE) / (junctionY(x) - SURFACE);
-      cells.push({ x, y: yy, rx: 4.6 + r() * 1.6, ry: 2.1 + depth * 2 + r() * .6, tone: depth, rot: (r() - .5) * 18 });
-    }
-  }
-  // 기저층 세포: 경계선을 따라 한 줄(세로로 긴 세포)
-  const basal: { x: number; y: number; a: number; s: number }[] = [];
-  for (let x = 2; x < W; x += 5.6 + r() * 1.6) {
-    const a = Math.atan2(junctionY(x + 1) - junctionY(x - 1), 2) * 180 / Math.PI;
-    basal.push({ x, y: junctionY(x) - 4.4, a, s: .85 + r() * .3 });
-  }
-  // 콜라겐 다발: 굵기·길이·밝기 제각각
-  const fibers = Array.from({ length: 70 }, () => {
-    const y = PAPILLARY + 6 + r() * (SUBCUTIS - PAPILLARY - 10);
-    const x = r() * (W + 60) - 40; const len = 30 + r() * 80; const amp = 1.5 + r() * 4;
-    return { d: `M${x.toFixed(0)} ${y.toFixed(0)} q${(len / 4).toFixed(0)} ${(-amp).toFixed(1)} ${(len / 2).toFixed(0)} ${((r() - .5) * 4).toFixed(1)} t${(len / 2).toFixed(0)} ${((r() - .5) * 4).toFixed(1)}`, w: 1.2 + r() * 2.6, o: .25 + r() * .4, c: r() > .5 ? '#d7a598' : '#e6bdb1' };
-  });
-  // 진피유두 꼭대기마다 모세혈관 고리(높이·기울기 제각각, 올라가는 쪽은 붉고 내려오는 쪽은 푸르게)
-  const papillae: number[] = [];
-  for (let x = 6; x < W; x += 1) if (junctionY(x) < junctionY(x - 1) && junctionY(x) <= junctionY(x + 1)) papillae.push(x);
-  const loops = papillae.map(x => ({ x, top: junctionY(x) + 9 + r() * 5, lean: (r() - .5) * 6, wid: 1.8 + r() * 1.4, w1: (r() - .5) * 3, w2: (r() - .5) * 3 }));
-  // 피하지방: 크기가 다른 지방세포가 소엽으로 모이고, 소엽 사이에 얇은 막
-  const fat: { d: string; tone: string }[] = [];
-  for (let y = SUBCUTIS + 6; y < H + 14; y += 13 + r() * 4) for (let x = r() * 8 - 8; x < W + 14; x += 13 + r() * 6) {
-    const rr = 6 + r() * 4;
-    fat.push({ d: blob(x, y + (r() - .5) * 4, rr, rr * (.8 + r() * .3), r, 8, .16), tone: r() > .5 ? '#fbf2d9' : '#f8ebc8' });
-  }
+  const u = (k: string) => `url(#${id}${k})`;
+  const r = rng(5);
+  const spin1 = rowCells(SP1, ROW, r, 8);
+  const spin2 = rowCells(SP2, ROW, r, 24);
+  const basal = rowCells(BAS, ROW, r, 14);
+  const melanoX = [92, 248];
   const inZone = (x: number, a: number, b: number) => x > a && x < b;
-  const beam = { top: { x: 200, to: junctionY(200) - 2, w: 30 }, mid: { x: 200, to: PAPILLARY - 14, w: 70 }, deep: { x: 200, to: 178, w: 22 }, texture: null, mole: { x: 200, to: s(200) + 12, w: 34 } }[focus];
 
-  // 모낭(x=352): 바깥뿌리집 · 속뿌리집 · 털 · 아래쪽 털망울과 털유두, 옆에 피지샘(여러 소엽)과 털세움근
-  const fx = 352;
-  const follicle = `M${fx - 10} ${s(fx) + 2} C${fx - 11} 120 ${fx - 13} 190 ${fx - 16} 228 C${fx - 20} 246 ${fx + 20} 246 ${fx + 16} 228 C${fx + 13} 190 ${fx + 11} 120 ${fx + 10} ${s(fx) + 2} Z`;
-  const sebaceous = Array.from({ length: 7 }, (_, i) => ({ d: blob(fx - 24 - (i % 3) * 7 + (r() - .5) * 3, 140 + Math.floor(i / 3) * 12 + (i % 2) * 4, 6 + r() * 2.5, 5.5 + r() * 2, r, 8, .2) }));
+  // 진피: 물결 콜라겐 결
+  const waves = Array.from({ length: 13 }, (_, i) => {
+    const y = BM + 12 + i * 8 + r() * 3; let d = `M-4 ${y.toFixed(1)}`; const amp = 2 + r() * 2.5, len = 46 + r() * 20, ph = r() * 6;
+    for (let x = 0; x <= FW + 8; x += 8) d += ` L${x} ${(y + amp * Math.sin(x / len * Math.PI * 2 + ph)).toFixed(1)}`;
+    return { d, o: .25 + r() * .25 };
+  });
+  // 진피: 가는 혈관(가지가 갈라지는 붉은·푸른 실선)
+  const vessel = (x0: number, y0: number, dir: number, len: number, color: string, depth: number): string[] => {
+    const out: string[] = []; let x = x0, y = y0;
+    let d = `M${x.toFixed(1)} ${y.toFixed(1)}`;
+    const steps = 4;
+    for (let k = 0; k < steps; k++) {
+      const nx = x + dir * len / steps, ny = y + (r() - .5) * 5;
+      d += ` Q${((x + nx) / 2).toFixed(1)} ${(ny + (r() - .5) * 4).toFixed(1)} ${nx.toFixed(1)} ${ny.toFixed(1)}`;
+      if (depth > 0 && k === 2) out.push(...vessel(nx, ny, dir * (r() > .5 ? 1 : -1), len * .4, color, depth - 1).map(p => p));
+      if (k === 1 || k === 3) out.push(`M${nx.toFixed(1)} ${ny.toFixed(1)} q${(dir * 5).toFixed(1)} -4 ${(dir * (10 + r() * 6)).toFixed(1)} ${(-(8 + r() * 6)).toFixed(1)}`);
+      x = nx; y = ny;
+    }
+    return [d, ...out];
+  };
+  const vessels = [
+    { paths: vessel(24, BM + 30, 1, 110, 'r', 1), c: '#e2707a' }, { paths: vessel(150, BM + 38, -1, 100, 'b', 0), c: '#8a86d0' },
+    { paths: vessel(214, BM + 32, 1, 110, 'r', 1), c: '#e2707a' }, { paths: vessel(336, BM + 40, -1, 90, 'b', 0), c: '#8a86d0' },
+    { paths: vessel(-4, FAT - 12, 1, 200, 'b', 1), c: '#8a86d0' }, { paths: vessel(40, FAT - 24, 1, 130, 'r', 1), c: '#e2707a' },
+    { paths: vessel(356, FAT - 14, -1, 150, 'r', 1), c: '#e2707a' },
+  ];
 
-  return <svg viewBox={`0 0 ${W} ${H}`} className="skin-section" role="img" aria-label={label}>
+  const beam = { top: { x: 176, to: BAS + ROW / 2 - 2, w: 30 }, mid: { x: 176, to: BM + 12, w: 66 }, deep: { x: 176, to: 206, w: 22 }, texture: null, mole: { x: 176, to: SP1 + 6, w: 36 } }[focus];
+
+  // 옆면(오른쪽): 앞면과 같은 층을 비스듬히
+  const side = (y: number) => `M${FW} ${y} L${FW + DX} ${y - DY}`;
+  const sideBand = (y1: number, y2: number, fill: string) => <path d={`M${FW} ${y1} L${FW + DX} ${y1 - DY} L${FW + DX} ${y2 - DY} L${FW} ${y2} Z`} fill={fill} />;
+
+  return <svg viewBox={`0 ${VB_TOP} ${FW + DX + 6} ${BOTTOM - VB_TOP + 4}`} className="skin-section" role="img" aria-label={label}>
     <defs>
-      <clipPath id={`${id}c`}><rect x="0" y="0" width={W} height={H} rx="12" /></clipPath>
-      {/* 조직 전체를 아주 약하게 일렁이게: 반듯한 선·원이 그대로 보이지 않게 */}
+      {/* 손으로 칠한 듯 아주 약한 일렁임 */}
       <filter id={`${id}w`} x="-2%" y="-2%" width="104%" height="104%">
-        <feTurbulence type="fractalNoise" baseFrequency=".035 .05" numOctaves="2" seed="11" result="t" />
-        <feDisplacementMap in="SourceGraphic" in2="t" scale="5" xChannelSelector="R" yChannelSelector="G" result="d" />
-        <feGaussianBlur in="d" stdDeviation=".3" />
+        <feTurbulence type="fractalNoise" baseFrequency=".04" numOctaves="2" seed="4" result="t" />
+        <feDisplacementMap in="SourceGraphic" in2="t" scale="2.2" xChannelSelector="R" yChannelSelector="G" />
       </filter>
       <filter id={`${id}t`} x="0" y="0" width="100%" height="100%">
-        <feTurbulence type="fractalNoise" baseFrequency=".85" numOctaves="2" seed="3" result="n" />
-        <feColorMatrix in="n" type="matrix" values="0 0 0 0 .45  0 0 0 0 .28  0 0 0 0 .24  0 0 0 .1 0" />
+        <feTurbulence type="fractalNoise" baseFrequency=".7" numOctaves="2" seed="9" result="n" />
+        <feColorMatrix in="n" type="matrix" values="0 0 0 0 .55  0 0 0 0 .35  0 0 0 0 .3  0 0 0 .07 0" />
       </filter>
       <filter id={`${id}b1`} x="-50%" y="-20%" width="200%" height="140%"><feGaussianBlur stdDeviation="1.4" /></filter>
       <filter id={`${id}b2`} x="-80%" y="-20%" width="260%" height="140%"><feGaussianBlur stdDeviation="4.5" /></filter>
       <filter id={`${id}b3`} x="-100%" y="-100%" width="300%" height="300%"><feGaussianBlur stdDeviation="6" /></filter>
-      <filter id={`${id}soft`} x="-10%" y="-10%" width="120%" height="120%"><feGaussianBlur stdDeviation="2.5" /></filter>
-      <linearGradient id={`${id}f`} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#fff" /><stop offset=".55" stopColor="#fff" stopOpacity=".75" /><stop offset="1" stopColor="#fff" stopOpacity=".2" /></linearGradient>
-      <mask id={`${id}m`}><rect x="0" y="0" width={W} height={H} fill={u('f')} /></mask>
+      <linearGradient id={`${id}f`} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#fff" /><stop offset=".5" stopColor="#fff" stopOpacity=".8" /><stop offset="1" stopColor="#fff" stopOpacity=".25" /></linearGradient>
+      <mask id={`${id}m`}><rect x="-10" y={VB_TOP} width={FW + 60} height={BOTTOM - VB_TOP} fill={u('f')} /></mask>
       <linearGradient id={`${id}h`} x1="0" y1="0" x2="1" y2="0"><stop offset="0" stopColor="#4a5058" /><stop offset=".35" stopColor="#9aa2ab" /><stop offset=".55" stopColor="#d9dde2" /><stop offset="1" stopColor="#555c64" /></linearGradient>
-      {/* 층 사이 색이 자연스럽게 이어지게 */}
-      <linearGradient id={`${id}d`} x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0" stopColor="#f8e4dd" /><stop offset=".3" stopColor="#f3d6cd" /><stop offset=".75" stopColor="#efcfc5" /><stop offset="1" stopColor="#f1d8c4" />
-      </linearGradient>
-      <linearGradient id={`${id}e`} x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0" stopColor="#f7e6db" /><stop offset=".6" stopColor="#f2d9c9" /><stop offset="1" stopColor="#eccab6" />
-      </linearGradient>
-      <radialGradient id={`${id}bulb`}><stop offset="0" stopColor="#e9a99a" /><stop offset="1" stopColor="#d88f7f" /></radialGradient>
+      <linearGradient id={`${id}top`} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#fbd6c6" /><stop offset="1" stopColor="#f8c8b5" /></linearGradient>
+      <clipPath id={`${id}front`}><rect x="0" y={TOP} width={FW} height={BOTTOM - TOP} /></clipPath>
     </defs>
-    <g clipPath={u('c')}>
-      <rect x="0" y="0" width={W} height={H} fill="#fbfbfc" />
-      <g filter={u('w')}>
-        {/* 진피 바탕 */}
-        <path d={`${curve(junctionY)} L${W} ${H} L0 ${H} Z`} fill={u('d')} />
-        {/* 진피유두층은 조금 더 밝고 성기다 */}
-        <path d={`${curve(junctionY)} ${back(papBottom)} Z`} fill="#f9e7e1" opacity=".7" filter={u('soft')} />
-        {fibers.map((f, i) => <path key={i} d={f.d} fill="none" stroke={f.c} strokeWidth={f.w} strokeLinecap="round" opacity={f.o} />)}
+
+    <g filter={u('w')}>
+      {/* 윗면(피부 표면) */}
+      <path d={`M0 ${TOP} Q2 ${TOP - 4} ${8} ${TOP - 7} L${DX} ${TOP - DY} L${FW + DX - 4} ${TOP - DY} Q${FW + DX + 2} ${TOP - DY + 1} ${FW + DX} ${TOP - DY + 5} L${FW} ${TOP} Z`} fill={u('top')} stroke="#e8a48f" strokeWidth=".8" />
+
+      {/* 오른쪽 옆면 */}
+      {sideBand(TOP, SP1, '#f2b3aa')}
+      {sideBand(SP1, BAS, '#f8dca8')}
+      {sideBand(BAS, BM, '#ecd2e4')}
+      {sideBand(BM, FAT, '#f3bfa9')}
+      {sideBand(FAT, BOTTOM, '#f3d98c')}
+      {[SP1 + ROW / 2, SP2 + ROW / 2, BAS + ROW / 2].map((y, i) => <g key={y}>
+        {[0, 1, 2].map(k => { const t = (k + .5) / 3; return <ellipse key={k} cx={FW + DX * t} cy={y - DY * t} rx="2.3" ry="4.2" fill={i === 2 ? '#c4a3d8' : '#f2b493'} opacity=".8" transform={`rotate(-38 ${FW + DX * t} ${y - DY * t})`} />; })}
+      </g>)}
+      {[SP1, SP2, BAS, BM, FAT].map(y => <path key={y} d={side(y)} stroke={y === BM ? '#9c7fd0' : '#e7b98a'} strokeWidth={y === BM ? 1.4 : .8} />)}
+      <path d={`M${FW + DX} ${TOP - DY + 4} V${BOTTOM - DY} L${FW} ${BOTTOM}`} fill="none" stroke="#e1a28c" strokeWidth=".8" />
+
+      {/* 앞 단면 */}
+      <g clipPath={u('front')}>
+        {/* 진피 */}
+        <rect x="0" y={BM} width={FW} height={FAT - BM} fill="#f9cbb6" />
+        {waves.map((w, i) => <path key={i} d={w.d} fill="none" stroke="#ec9f8c" strokeWidth="1.1" opacity={w.o} />)}
+        {vessels.map((v, i) => v.paths.map((d, k) => <path key={`${i}-${k}`} d={d} fill="none" stroke={v.c} strokeWidth={k === 0 ? 1.6 : 1} strokeLinecap="round" opacity=".85" />))}
         {/* 피하지방 */}
-        <path d={`${curve(subY)} L${W} ${H} L0 ${H} Z`} fill="#ecd8a8" />
-        {fat.map((f, i) => <path key={i} d={f.d} fill={f.tone} stroke="#dcc08a" strokeWidth=".7" />)}
-        <path d={curve(subY)} fill="none" stroke="#e2c4b0" strokeWidth="3" opacity=".6" filter={u('b1')} />
-        {/* 큰 혈관(동맥·정맥): 굵기가 변하고 안쪽이 조금 밝다 */}
-        <path d={tube(x => 214 + 10 * Math.sin(x / 70) + 3 * Math.sin(x / 17), x => 5 + 1.5 * Math.sin(x / 23), -10, 330)} fill="#b5443e" />
-        <path d={tube(x => 210 + 10 * Math.sin(x / 70) + 3 * Math.sin(x / 17), x => 1.6, -10, 330)} fill="#7d2a26" opacity=".35" filter={u('b1')} />
-        <path d={tube(x => 213 + 10 * Math.sin(x / 70) + 3 * Math.sin(x / 17), x => 1.4 + .5 * Math.sin(x / 23), -10, 330)} fill="#e3958c" opacity=".75" />
-        <path d={tube(x => 232 + 8 * Math.sin(x / 60 + 1) + 2.5 * Math.sin(x / 19), x => 6.5 + 2 * Math.sin(x / 29), 70, W + 10)} fill="#5f6aa0" />
-        <path d={tube(x => 230.5 + 8 * Math.sin(x / 60 + 1) + 2.5 * Math.sin(x / 19), x => 2 + .6 * Math.sin(x / 29), 70, W + 10)} fill="#a3abd2" opacity=".7" />
-        {[[60, '#bf5650', 214], [150, '#7480b0', 232], [230, '#bf5650', 214]].map(([bx, c, by]) => { const x = bx as number; const y = (by as number) + 8 * Math.sin(x / 65); return <path key={x} d={`M${x} ${y} C${x + 6} ${y - 18} ${x - 8} ${y - 30} ${x + 4} ${y - 46}`} fill="none" stroke={c as string} strokeWidth="1.6" strokeLinecap="round" opacity=".45" />; })}
-        {loops.map(l => { const base = l.top + 18 + r() * 8; const mid = (base + l.top) / 2; return <g key={l.x}>
-          <path d={`M${l.x - l.wid - 1} ${base} C${l.x - l.wid + l.w1} ${mid} ${l.x - l.wid * 1.2 + l.lean} ${l.top + 3} ${l.x + l.lean} ${l.top} C${l.x + l.wid * 1.3 + l.lean} ${l.top + 3} ${l.x + l.wid + l.w2} ${mid} ${l.x + l.wid + 1.5} ${base}`} fill="none" stroke="#c4554f" strokeWidth="1" strokeLinecap="round" opacity=".38" />
+        <rect x="0" y={FAT} width={FW} height={BOTTOM - FAT} fill="#f6dc8e" />
+        {Array.from({ length: 12 }, (_, i) => <path key={i} d={`M${i * 30 + 2} ${FAT + 2} h26 q3 0 3 3 v6 q0 3 -3 3 h-26 q-3 0 -3 -3 v-6 q0 -3 3 -3 Z`} fill="#f9e6a8" stroke="#e8c461" strokeWidth=".7" />)}
+        {/* 각질층 */}
+        <rect x="0" y={TOP} width={FW} height={SC} fill="#f3b2a8" />
+        {[3.5, 7, 10.5, 13.5].map(o => <path key={o} d={`M0 ${TOP + o} ${Array.from({ length: 23 }, (_, k) => `L${k * 16} ${(TOP + o + 1.1 * Math.sin(k * 1.3 + o)).toFixed(1)}`).join(' ')}`} fill="none" stroke="#e48c84" strokeWidth=".7" opacity=".55" />)}
+        {/* 표피 세포 2줄 */}
+        <rect x="0" y={SP1} width={FW} height={ROW * 2} fill="#f7d79e" />
+        {[...spin1, ...spin2].map((c, i) => { const { cx, cy } = centerOf(c); return <g key={i}>
+          <path d={cellPath(c)} fill="#fde6b8" stroke="#f0bf73" strokeWidth=".9" />
+          <ellipse cx={cx} cy={cy} rx="8" ry="5" fill="#f6b48f" />
         </g>; })}
-        {/* 모낭 + 피지샘 + 털세움근 */}
-        <path d={`M${fx + 9} 128 C${fx + 30} 116 ${fx + 40} ${junctionY(fx + 40) + 10} ${fx + 46} ${junctionY(fx + 46) + 2}`} fill="none" stroke="#c98b84" strokeWidth="3" strokeLinecap="round" opacity=".55" />
-        <path d={follicle} fill="#ebc3ad" stroke="#d29f86" strokeWidth=".8" />
-        <path d={`M${fx - 6} ${s(fx) + 4} C${fx - 7} 120 ${fx - 8} 190 ${fx - 9} 226 L${fx + 9} 226 C${fx + 8} 190 ${fx + 7} 120 ${fx + 6} ${s(fx) + 4} Z`} fill="#f2d6c1" />
-        <path d={`M${fx - 15} 230 C${fx - 18} 246 ${fx + 18} 246 ${fx + 15} 230 C${fx + 10} 222 ${fx - 10} 222 ${fx - 15} 230 Z`} fill="#d79a86" />
-        <path d={`M${fx - 5} 244 C${fx - 6} 236 ${fx - 2} 233 ${fx} 233 C${fx + 2} 233 ${fx + 6} 236 ${fx + 5} 244 Z`} fill="#eab3a6" />
-        <path d={`M${fx - 2.4} ${s(fx) - 34} C${fx - 3} 100 ${fx - 2.6} 180 ${fx - 2} 232 L${fx + 2.4} 232 C${fx + 2.6} 180 ${fx + 2.8} 100 ${fx + 1.6} ${s(fx) - 34} Z`} fill="#45342c" />
-        <path d={`M${fx - .6} ${s(fx) - 30} C${fx - 1} 100 ${fx - .8} 180 ${fx - .4} 228`} stroke="#8a6b5c" strokeWidth=".7" fill="none" opacity=".7" />
-        <path d={`M${fx - 9} 150 C${fx - 14} 147 ${fx - 16} 148 ${fx - 18} 150`} stroke="#e1c27a" strokeWidth="3" fill="none" />
-        {sebaceous.map((g, i) => <g key={i}><path d={g.d} fill="#f3df9c" stroke="#d6b964" strokeWidth=".7" /></g>)}
-        {sebaceous.map((g, i) => <circle key={i} cx={fx - 24 - (i % 3) * 7} cy={140 + Math.floor(i / 3) * 12 + (i % 2) * 4} r=".9" fill="#b39448" opacity=".6" />)}
+        {/* 기저층 */}
+        <rect x="0" y={BAS} width={FW} height={ROW + 1} fill="#ead0e7" />
+        {basal.map((c, i) => { const { cx, cy } = centerOf(c); return <g key={i}>
+          <path d={cellPath(c)} fill="#fbdde3" stroke="#a983d6" strokeWidth="1" />
+          <ellipse cx={cx} cy={cy + 1} rx="8.4" ry="6.4" fill="#c49ddb" />
+        </g>; })}
+        <path d={`M0 ${BM} ${Array.from({ length: 23 }, (_, k) => `L${k * 16} ${(BM + 1.2 * Math.sin(k * .9)).toFixed(1)}`).join(' ')}`} fill="none" stroke="#9877cf" strokeWidth="1.8" />
 
-        {/* 표피 */}
-        <path d={`${curve(s)} ${back(junctionY)} Z`} fill={u('e')} />
-        {cells.map((c, i) => <g key={i} transform={`translate(${c.x.toFixed(1)} ${c.y.toFixed(1)}) rotate(${c.rot.toFixed(0)})`}>
-          <ellipse rx={c.rx} ry={c.ry} fill={c.tone < .3 ? '#f7e8de' : '#f1d4c2'} stroke="#e0b8a1" strokeWidth=".5" />
-          {c.tone > .22 && <ellipse rx={.8 + c.tone * .7} ry={.7 + c.tone * .5} fill="#b07f73" opacity=".65" />}
-        </g>)}
-        {basal.map((b, i) => <g key={i} transform={`translate(${b.x.toFixed(1)} ${b.y.toFixed(1)}) rotate(${b.a.toFixed(0)}) scale(${b.s.toFixed(2)})`}>
-          <ellipse rx="2.9" ry="4.6" fill="#e9bfa7" stroke="#d29d85" strokeWidth=".5" />
-          <ellipse rx="1.3" ry="1.9" fill="#94645a" />
-        </g>)}
-        {/* 각질층: 얇은 판이 겹친 모양 */}
-        <path d={`${curve(x => s(x) - 3)} ${back(x => s(x) + 4)} Z`} fill="#ecd3c5" />
-        {[0, 1.8, 3.6, 5.4].map((o, i) => <path key={o} d={curve(x => s(x) - 2.6 + o + .5 * Math.sin(x / (3 + i)), 0, W, 3)} fill="none" stroke="#d9b5a3" strokeWidth=".55" opacity=".8" />)}
-        {/* 정상 멜라닌세포: 기저층에 띄엄띄엄 */}
-        {[46, 121, 266, 318].map(x => <Dendritic key={x} x={x} y={junctionY(x) - 5} a={-1.6} size={2.6} color="#7a5446" rand={r} />)}
-
-        {/* 주근깨·흑자: 기저층 멜라닌이 늘어난 자리 */}
-        {focus === 'top' && <g>
-          {basal.filter(b => inZone(b.x, 140, 262)).map((b, i) => <ellipse key={i} cx={b.x} cy={b.y - 3} rx={2.6 + r() * 1.4} ry={1.6 + r()} fill="#64402f" opacity={.6 + r() * .3} />)}
-          {cells.filter(c => inZone(c.x, 140, 262) && c.tone > .5).map((c, i) => <circle key={i} cx={c.x + (r() - .5) * 4} cy={c.y - 1} r={.6 + r() * .9} fill="#7b5040" opacity=".65" />)}
-        </g>}
-        {/* 기미: 표피 전체에 퍼진 멜라닌 + 진피 위쪽 멜라닌 포식세포 */}
+        {/* 주근깨·흑자: 기저층 세포에 멜라닌이 많이 쌓인 자리(핵 위에 갈색 알갱이) */}
+        {focus === 'top' && basal.filter(c => inZone(centerOf(c).cx, 120, 236)).map((c, i) => { const { cx, cy } = centerOf(c); return <g key={i}>
+          {Array.from({ length: 16 }, (_, k) => <circle key={k} cx={cx + (r() - .5) * 18} cy={cy - 6 + (r() - .5) * 6} r={1 + r() * .9} fill="#6e3f22" opacity=".85" />)}
+        </g>; })}
+        {/* 기미: 표피 전체에 멜라닌 + 진피 위쪽 멜라닌 포식세포 */}
         {focus === 'mid' && <g>
-          {basal.filter(b => inZone(b.x, 60, 340)).map((b, i) => <ellipse key={i} cx={b.x} cy={b.y - 3} rx={2.2 + r()} ry={1.4 + r() * .8} fill="#7b5040" opacity={.4 + r() * .3} />)}
-          {cells.filter(c => inZone(c.x, 60, 340) && c.tone > .25).map((c, i) => <circle key={i} cx={c.x + (r() - .5) * 4} cy={c.y - 1} r={.5 + r() * .8} fill="#8a5c47" opacity=".5" />)}
-          {[88, 134, 176, 214, 252, 296].map((x, i) => { const y = junctionY(x) + 14 + (i % 3) * 5; return <g key={x}>
-            <path d={blob(x, y, 6 + r() * 2, 4 + r() * 1.5, r, 8, .25)} fill="#b2856f" opacity=".75" />
-            {Array.from({ length: 7 }, (_, k) => <circle key={k} cx={x + (r() - .5) * 9} cy={y + (r() - .5) * 5} r={.5 + r() * .8} fill="#4f3127" />)}
+          {[...spin1, ...spin2, ...basal].filter(c => inZone(centerOf(c).cx, 40, 320)).map((c, i) => { const { cx, cy } = centerOf(c); return <g key={i}>
+            {Array.from({ length: c.y >= BAS ? 9 : 5 }, (_, k) => <circle key={k} cx={cx + (r() - .5) * 22} cy={cy + (r() - .5) * 12} r={.8 + r() * .8} fill="#7a4a2c" opacity=".6" />)}
+          </g>; })}
+          {[70, 128, 176, 226, 282].map((x, i) => { const y = BM + 12 + (i % 2) * 7; return <g key={x}>
+            <path d={`M${x - 9} ${y} C${x - 9} ${y - 6} ${x + 8} ${y - 7} ${x + 10} ${y - 1} C${x + 11} ${y + 5} ${x - 8} ${y + 7} ${x - 9} ${y} Z`} fill="#c99a7e" opacity=".9" />
+            {Array.from({ length: 9 }, (_, k) => <circle key={k} cx={x + (r() - .5) * 14} cy={y + (r() - .5) * 6} r={.8 + r() * .7} fill="#5a321d" />)}
           </g>; })}
         </g>}
-        {/* ABNOM: 진피 속에 흩어진 가지 달린 멜라닌세포 */}
-        {focus === 'deep' && <g>
-          {[[150, 166, .3], [176, 184, -.2], [200, 160, .15], [224, 180, -.35], [246, 164, .25], [166, 200, .1], [212, 200, -.1], [188, 174, .5]].map(([x, y, a]) => <Dendritic key={`${x}-${y}`} x={x} y={y} a={a} size={4.2 + r() * 1.6} color="#6a6580" rand={r} spindle />)}
-        </g>}
-        {/* 점(모반): 경계부 둥지 + 진피 속 모반세포(깊을수록 작고 옅다) */}
+        {/* ABNOM: 진피 속에 흩어진 멜라닌세포 */}
+        {focus === 'deep' && [[132, 196, 12, 1], [168, 214, -10, .9], [206, 192, 6, 1.05], [236, 216, -18, .9], [150, 230, 4, .85], [196, 236, -6, .95]].map(([x, y, a, s]) => <DermalMelanocyte key={`${x}-${y}`} x={x} y={y} a={a} s={s} />)}
+        {/* 점: 경계부와 진피에 모반세포가 둥지처럼 모임(깊을수록 작고 옅게) */}
         {focus === 'mole' && <g>
-          {Array.from({ length: 46 }, (_, i) => {
-            const a = i * 2.39996; const d = Math.sqrt(i) * 4.4; const x = 200 + Math.cos(a) * d * 1.45; const y = junctionY(200) + 12 + Math.sin(a) * d * .85;
-            const depth = Math.max(0, (y - junctionY(200)) / 40);
-            return <g key={i}><path d={blob(x, y, 3.2 - depth * 1, 2.7 - depth * .8, r, 7, .25)} fill={depth > .55 ? '#b48a73' : '#94634d'} stroke="#6f4636" strokeWidth=".4" />
-              <circle cx={x + (r() - .5)} cy={y} r={.9 - depth * .2} fill="#4a2e24" /></g>;
-          })}
-          {[180, 192, 206, 219].map(x => <path key={x} d={blob(x, junctionY(x) - 6, 4.5, 3.2, r, 8, .3)} fill="#7b4e3d" />)}
+          {Array.from({ length: 40 }, (_, i) => { const a = i * 2.39996; const d = Math.sqrt(i) * 5.4; const x = 176 + Math.cos(a) * d * 1.5; const y = BM + 6 + Math.abs(Math.sin(a)) * d * .95 - 4; const t = Math.max(0, (y - BM) / 34);
+            return <g key={i}><circle cx={x} cy={y} r={5 - t * 1.6} fill={t > .6 ? '#c99577' : '#a5673f'} stroke="#6d3f22" strokeWidth=".5" /><circle cx={x} cy={y} r={1.8 - t * .5} fill="#4c2814" /></g>; })}
         </g>}
-      </g>
-      {/* 조직 질감 */}
-      <rect x="0" y={SURFACE - 4} width={W} height={H} filter={u('t')} />
-      {/* 스타룩스 1540: 표면은 두고 피부 속에 아주 가는 열 기둥(미세 치료 구역) */}
-      {focus === 'texture' && <g>
-        {[120, 160, 200, 240, 280].map(x => <g key={x}>
-          <ellipse cx={x} cy={128} rx="5" ry="54" fill="#f6efe9" opacity=".75" filter={u('b1')} />
-          <ellipse cx={x} cy={128} rx="2.4" ry="50" fill="#e7b9a4" opacity=".6" filter={u('b1')} />
+        {/* 스타룩스 1540: 표면은 두고 피부 속에 아주 가는 열 기둥(미세 치료 구역) */}
+        {focus === 'texture' && [110, 150, 190, 230, 270].map(x => <g key={x}>
+          <ellipse cx={x} cy={(SP1 + 214) / 2} rx="5" ry={(214 - SP1) / 2} fill="#fff6ee" opacity=".65" filter={u('b1')} />
         </g>)}
-        <g mask={u('m')}>
-          {[120, 160, 200, 240, 280].map(x => <g key={x}>
-            <rect x={x - 4} y="22" width="8" height="160" fill="#8fbaff" opacity=".45" filter={u('b2')} />
-            <rect x={x - 1} y="22" width="2" height="156" fill="#ffffff" opacity=".9" filter={u('b1')} />
-          </g>)}
-        </g>
-        <Handpiece id={id} x={200} w={190} />
-      </g>}
-      {/* 레이저 빛: 손잡이 끝에서 나와 겨냥한 깊이에서 모인다 */}
-      {beam && <g>
-        <g mask={u('m')}>
-          <path d={`M${beam.x - beam.w / 2} 22 H${beam.x + beam.w / 2} L${beam.x + beam.w * .18} ${beam.to} H${beam.x - beam.w * .18} Z`} fill="#8fbaff" opacity=".5" filter={u('b2')} />
-          <path d={`M${beam.x - beam.w * .22} 22 H${beam.x + beam.w * .22} L${beam.x + 2} ${beam.to} H${beam.x - 2} Z`} fill="#dbe9ff" opacity=".8" filter={u('b1')} />
-        </g>
-        <ellipse cx={beam.x} cy={beam.to} rx={beam.w * .5} ry="9" fill="#bcd6ff" opacity=".85" filter={u('b3')} />
-        <ellipse cx={beam.x} cy={beam.to} rx={beam.w * .18} ry="3.5" fill="#ffffff" opacity=".95" filter={u('b1')} />
-        {/* 빛을 받은 색소가 잘게 부서진 모습 */}
-        {focus !== 'mole' && Array.from({ length: 18 }, (_, i) => { const a = i * 2.39; const d = 6 + (i % 6) * 2.6; return <circle key={i} cx={beam.x + Math.cos(a) * d * 1.4} cy={beam.to + Math.sin(a) * d * .55} r={.6 + (i % 3) * .3} fill={focus === 'deep' ? '#5f5a73' : '#6b4434'} opacity=".8" />; })}
-        <Handpiece id={id} x={beam.x} w={Math.max(34, beam.w + 14)} />
-      </g>}
-      {/* 층 이름 */}
-      <g className="skin-layer-tags">
-        <text x="8" y={SURFACE + 34}>표피</text>
-        <text x="8" y={PAPILLARY + 40}>진피</text>
-        <text x="8" y={SUBCUTIS + 24}>피하지방</text>
+        <rect x="0" y={TOP} width={FW} height={BOTTOM - TOP} filter={u('t')} />
       </g>
+      {/* 앞면 테두리 */}
+      <path d={`M0 ${TOP} V${BOTTOM} H${FW} V${TOP}`} fill="none" stroke="#e1a28c" strokeWidth=".8" />
+      {/* 멜라닌세포(정상) */}
+      {melanoX.map(x => <Melanocyte key={x} x={x} base={BM - 1} scale={.72} />)}
+    </g>
+
+    {/* 레이저 빛 */}
+    {focus === 'texture' && <g>
+      <g mask={u('m')}>{[110, 150, 190, 230, 270].map(x => <g key={x}>
+        <rect x={x - 4} y={VB_TOP + 18} width="8" height={214 - VB_TOP - 18} fill="#8fbaff" opacity=".45" filter={u('b2')} />
+        <rect x={x - 1} y={VB_TOP + 18} width="2" height={210 - VB_TOP - 18} fill="#fff" opacity=".9" filter={u('b1')} />
+      </g>)}</g>
+      <Handpiece id={id} x={190} w={200} />
+    </g>}
+    {beam && <g>
+      <g mask={u('m')}>
+        <path d={`M${beam.x - beam.w / 2} ${VB_TOP + 18} H${beam.x + beam.w / 2} L${beam.x + beam.w * .18} ${beam.to} H${beam.x - beam.w * .18} Z`} fill="#8fbaff" opacity=".5" filter={u('b2')} />
+        <path d={`M${beam.x - beam.w * .22} ${VB_TOP + 18} H${beam.x + beam.w * .22} L${beam.x + 2} ${beam.to} H${beam.x - 2} Z`} fill="#dbe9ff" opacity=".8" filter={u('b1')} />
+      </g>
+      <ellipse cx={beam.x} cy={beam.to} rx={beam.w * .5} ry="9" fill="#bcd6ff" opacity=".85" filter={u('b3')} />
+      <ellipse cx={beam.x} cy={beam.to} rx={beam.w * .18} ry="3.5" fill="#fff" opacity=".95" filter={u('b1')} />
+      {focus !== 'mole' && Array.from({ length: 18 }, (_, i) => { const a = i * 2.39; const d = 6 + (i % 6) * 2.6; return <circle key={i} cx={beam.x + Math.cos(a) * d * 1.4} cy={beam.to + Math.sin(a) * d * .55} r={.6 + (i % 3) * .3} fill={focus === 'deep' ? '#5f5a73' : '#6b4434'} opacity=".8" />; })}
+      <Handpiece id={id} x={beam.x} w={Math.max(34, beam.w + 14)} />
+    </g>}
+
+    {/* 층 이름 */}
+    <g className="skin-layer-tags">
+      <text x="6" y={SP1 + 20}>표피</text>
+      <text x="6" y={BM + 60}>진피</text>
+      <text x="6" y={BOTTOM - 3}>피하지방</text>
     </g>
   </svg>;
 }
