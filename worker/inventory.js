@@ -2,6 +2,11 @@
 // 데이터는 팀 공용 D1(INV_DB). 사용자가 정한 규칙(2026-11-08):
 // - 일반 구매: 실제 병원에 들어온 수량만 병원재고 증가. 결제금액은 고른 구매조건 그대로. 증정은 결제금액 제외·재고 포함.
 // - 선결제: 결제 때 업체재고(선결제 잔량)를 만들고, 입고확정 때 잔량 차감 + 병원재고 증가를 한 번에(batch) 처리. 추가 결제 없음.
+//   구매와 반입은 다른 기록이다: 반입은 구매가 아니라 재고 위치 이동(업체 → 병원)이라 금액을 다시 계산하지 않는다.
+//   개당원가 = 실제 구매금액 ÷ 증정 포함 총수량.
+// - 일반 품목: 등록된 구매조건(가격표·증정조건)이 있으면 그대로, 없으면 구매단가 × 수량. 업체재고·선결제 잔량은 건드리지 않음.
+// 핵심: 일반 품목은 기존 구매단가 기준으로 입고 처리하고, 선결제 품목은 최초 구매 시에만 결제 처리한다.
+//       이후 병원 반입은 업체재고에서 병원재고로 이동만 하며 구매금액은 다시 계산하지 않는다.
 // - 출고: 병원재고만 재고단위로 차감. 금액·업체재고는 건드리지 않음.
 // - 단위는 숫자만 비교하지 않고 품목에 등록된 구성수량(pack_qty: 주문단위 1개 = 재고단위 몇 개)으로 환산.
 // - 입고·출고 기록 삭제 = 그 기록이 바꾼 병원재고·업체재고를 정확히 되돌림(기록마다 증감값을 저장해 둠).
@@ -23,6 +28,8 @@ async function itemsWithOptions(db) {
   const items = await all(db, `SELECT i.*, v.name AS vendor_name FROM inv_items i LEFT JOIN inv_vendors v ON v.id = i.vendor_id WHERE i.active = 1 ORDER BY i.sort, i.id`);
   const opts = await all(db, `SELECT * FROM inv_options WHERE active = 1 ORDER BY item_id, sort, id`);
   for (const it of items) it.options = opts.filter(o => o.item_id === it.id);
+  const lastBuys = await all(db, `SELECT t.item_id, t.amount, t.qty, t.bonus_qty FROM inv_tx t WHERE t.deleted_at IS NULL AND t.kind = 'prepaid_buy' AND t.id = (SELECT max(id) FROM inv_tx x WHERE x.item_id = t.item_id AND x.kind = 'prepaid_buy' AND x.deleted_at IS NULL)`);
+  for (const it of items) it.unit_cost = it.prepaid ? unitCostOf(lastBuys.find(b => b.item_id === it.id)) : null;
   return items;
 }
 
@@ -37,6 +44,14 @@ function txStatements(db, item, t) {
       round((item.hospital_stock || 0) + hd), round((item.vendor_stock || 0) + vd), t.order_id ?? null, t.daily_date ?? null, t.invoice ? 1 : 0, t.memo || null, t.by || null, Date.now()),
   ];
 }
+
+// 일반 품목 구매금액 = 등록 구매단가(주문단위 1개 가격) × 주문단위 수(재고단위 수량 ÷ 구성수량). 단가 미확인이면 null.
+export function priceFor(item, stockQty) {
+  if (item.price == null) return null;
+  return Math.round(item.price * (stockQty / (item.pack_qty || 1)));
+}
+// 선결제 개당원가 = 실제 구매금액 ÷ 증정 포함 총수량(가장 최근 선결제 구매 기준)
+export const unitCostOf = tx => (tx && tx.amount != null && tx.qty + tx.bonus_qty > 0 ? Math.round((tx.amount / (tx.qty + tx.bonus_qty)) * 100) / 100 : null);
 
 async function loadItem(db, id) {
   const it = await one(db, 'SELECT * FROM inv_items WHERE id = ?', Number(id));
@@ -139,6 +154,13 @@ export async function handleInventory(request, env, url, user) {
         await db.prepare(`INSERT INTO inv_items (name, vendor_id, category, stock_unit, order_unit, pack_qty, price, min_stock, daily_mode, prepaid, is_pack, memo, sort, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
           .bind(f.name, f.vendor_id, f.category, f.stock_unit, f.order_unit, f.pack_qty, f.price, f.min_stock, f.daily_mode, f.prepaid, f.is_pack, f.memo, 9999, Date.now(), Date.now()).run();
       }
+      // 가격은 있는데 구매조건이 없으면 '주문단위 1개 = 등록 단가' 조건을 하나 만들어 바로 주문할 수 있게 한다
+      const saved = body.id ? await loadItem(db, body.id) : await one(db, 'SELECT * FROM inv_items ORDER BY id DESC LIMIT 1');
+      if (saved && saved.price != null && !saved.prepaid && !(await one(db, 'SELECT id FROM inv_options WHERE item_id = ? AND active = 1', saved.id))) {
+        const pack = saved.pack_qty || 1;
+        await db.prepare('INSERT INTO inv_options (item_id, label, qty, bonus_qty, amount, prepaid, sort, created_at) VALUES (?,?,?,?,?,0,0,?)')
+          .bind(saved.id, `1${saved.order_unit || saved.stock_unit}${pack !== 1 ? `(${pack}${saved.stock_unit})` : ''}`, pack, 0, saved.price, Date.now()).run();
+      }
       return json({ ok: true, items: await itemsWithOptions(db) });
     }
     if (m === 'DELETE' && path.startsWith('/items/')) {
@@ -219,13 +241,17 @@ export async function handleInventory(request, env, url, user) {
         ]);
         return json({ ok: true });
       }
-      // 주문 없이 바로 받은 일반 입고(금액은 입력값, 없으면 미입력)
+      // 주문 없이 바로 받은 일반 입고: 금액을 안 넣으면 등록된 구매단가 × 수량(주문단위는 구성수량으로 환산). 단가 미확인이면 금액 없음.
       const item = await loadItem(db, body.item_id);
       if (!item) return bad('품목을 찾을 수 없어요.', 404);
-      const amount = num(body.amount);
+      if (item.prepaid) return bad('선결제 품목은 구매(재고주문의 선결제)와 반입(선결제 반입)으로 따로 처리해요.');
+      const bonus = num(body.bonus_qty) ?? 0;
+      if (bonus < 0 || bonus > actual) return bad('증정 수량을 확인해 주세요.');
+      let amount = num(body.amount);
       if (amount != null && amount < 0) return bad('금액은 0 이상이어야 해요.');
-      await db.batch(txStatements(db, item, { date, kind: 'in', qty: actual, bonus_qty: num(body.bonus_qty) ?? 0, amount, hospital_delta: actual, memo: body.memo, by: user, invoice: body.invoice }));
-      return json({ ok: true });
+      if (amount == null) amount = priceFor(item, actual - bonus);
+      await db.batch(txStatements(db, item, { date, kind: 'in', qty: actual - bonus, bonus_qty: bonus, amount, hospital_delta: actual, memo: body.memo, by: user, invoice: body.invoice }));
+      return json({ ok: true, amount });
     }
 
     // ── 출고: 병원재고만 재고단위로 차감 ──

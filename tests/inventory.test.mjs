@@ -153,3 +153,44 @@ test('3종 시트팩 선결제 300장 is 450,000 (also fixed on an existing data
   await call(e, '/state');
   assert.equal(opt(), 450000);
 });
+
+test('general items use the registered unit price; prepaid purchase and receipt are separate records', async () => {
+  const e = env(); await call(e, '/state');
+  const gel = item(e, '클렌징 젤 300ml'), iono = item(e, '이온토P'), pack = item(e, '보관용 3종 시트팩');
+  // 금액을 안 넣으면 구매단가 × 수량(증정은 금액 제외, 재고는 포함)
+  const r1 = await call(e, '/receive', 'POST', { item_id: gel.id, actual_qty: 6, bonus_qty: 1, date: '2026-11-09' });
+  assert.equal(r1.data.amount, 5 * 29000);
+  assert.equal(item(e, '클렌징 젤 300ml').hospital_stock, gel.hospital_stock + 6);
+  assert.equal(item(e, '클렌징 젤 300ml').vendor_stock, 0);
+  // 주문단위(box 50) ≠ 재고단위(ea): 구성수량으로 환산
+  assert.equal((await call(e, '/receive', 'POST', { item_id: iono.id, actual_qty: 50, date: '2026-11-09' })).data.amount, 350000);
+  // 단가 미확인은 금액 없음(0원으로 만들지 않음)
+  const powder = item(e, '알라딘 필링 파우더');
+  assert.equal((await call(e, '/receive', 'POST', { item_id: powder.id, actual_qty: 3, date: '2026-11-09' })).data.amount, null);
+  // 선결제 품목은 일반 입고로 받지 않음
+  assert.equal((await call(e, '/receive', 'POST', { item_id: pack.id, actual_qty: 10 })).status, 400);
+  // 선결제 구매: 금액 1회, 구매+증정 수량이 잔량, 개당원가 = 금액 ÷ 증정 포함 수량
+  const optId = (await call(e, '/options', 'POST', { item_id: pack.id, label: '500+50', qty: 500, bonus_qty: 50, amount: 550000, prepaid: true })).data.items.find(i => i.id === pack.id).options.find(o => o.label === '500+50').id;
+  await call(e, '/orders', 'POST', { item_id: pack.id, option_id: optId, count: 1, date: '2026-11-09' });
+  let st = (await call(e, '/state')).data.items.find(i => i.id === pack.id);
+  assert.deepEqual([st.vendor_stock, st.hospital_stock, st.unit_cost], [550, pack.hospital_stock, 1000]);
+  // 반입은 재고 이동만: 금액·지출 그대로
+  const before = (await call(e, '/report?month=2026-11')).data;
+  await call(e, '/receive', 'POST', { from_prepaid: true, item_id: pack.id, actual_qty: 200, date: '2026-11-10' });
+  const after = (await call(e, '/report?month=2026-11')).data;
+  assert.equal(after.spend_total, before.spend_total);
+  st = (await call(e, '/state')).data.items.find(i => i.id === pack.id);
+  assert.deepEqual([st.vendor_stock, st.hospital_stock, st.unit_cost], [350, pack.hospital_stock + 200, 1000]);
+  // 출고는 병원재고만
+  await call(e, '/out', 'POST', { item_id: pack.id, qty: 5, date: '2026-11-10' });
+  st = (await call(e, '/state')).data.items.find(i => i.id === pack.id);
+  assert.deepEqual([st.vendor_stock, st.hospital_stock], [350, pack.hospital_stock + 195]);
+  assert.equal((await call(e, '/report?month=2026-11')).data.spend_total, before.spend_total);
+});
+
+test('an item saved with a price but no purchase condition gets one so it can be ordered', async () => {
+  const e = env(); await call(e, '/state');
+  const r = await call(e, '/items', 'POST', { name: '테스트 크림', stock_unit: 'ea', order_unit: 'box', pack_qty: 10, price: 50000 });
+  const it = r.data.items.find(i => i.name === '테스트 크림');
+  assert.deepEqual(it.options.map(o => [o.qty, o.amount]), [[10, 50000]]);
+});

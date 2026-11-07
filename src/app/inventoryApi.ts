@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 export type InvOption = { id: number; item_id: number; label: string | null; qty: number; bonus_qty: number; amount: number | null; prepaid: number; unit_label?: string | null };
 export type InvItem = {
   id: number; name: string; vendor_id: number | null; vendor_name?: string | null; category: string | null; stock_unit: string; order_unit: string | null; pack_qty: number | null;
-  price: number | null; min_stock: number; hospital_stock: number; vendor_stock: number; daily_mode: 'usage' | 'count' | null; prepaid: number; is_pack: number; memo: string | null; options: InvOption[];
+  price: number | null; min_stock: number; hospital_stock: number; vendor_stock: number; daily_mode: 'usage' | 'count' | null; prepaid: number; is_pack: number; memo: string | null; options: InvOption[]; unit_cost?: number | null;
 };
 export type InvVendor = { id: number; name: string; company: string | null; category: string | null; manager: string | null; payment_method: string | null; contact: string | null; bank: string | null; account: string | null; holder: string | null; memo: string | null };
 export type InvOrder = { id: number; item_id: number; item_name: string; stock_unit: string; option_label: string | null; ordered_at: string; qty: number; bonus_qty: number; amount: number | null; prepaid: number; status: string; memo: string | null };
