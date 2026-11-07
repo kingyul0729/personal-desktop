@@ -1379,3 +1379,13 @@ a:hover > .download-mark .download-arrow, a:focus-visible > .download-mark .down
 .study-archive.study-finder { display: block; min-height: 0; background: transparent; }
 .study-archive.study-finder .study-main { padding: 0; background: transparent; }
 .study-fav-mark { margin-right: 4px; color: #e0a526; vertical-align: -1px; }
+/* 메뉴 묶음(상담·재고·직원·개인) 접기/펼치기 */
+.finder-sidebar .finder-group-head { display: flex; align-items: center; gap: 6px; width: 100%; min-height: 28px; margin: 0 0 2px; padding: 0 8px; border: 0; background: none; color: #8a9097; font: inherit; font-size: 13px; font-weight: 600; text-align: left; }
+.finder-sidebar .finder-group-head svg { transform: rotate(-90deg); transition: transform .18s ease; }
+.finder-sidebar .finder-group-head[aria-expanded="true"] svg { transform: rotate(0deg); }
+.finder-group.is-closed { margin-bottom: 2px; }
+@media (prefers-reduced-motion: reduce) { .finder-sidebar .finder-group-head svg { transition: none; } }
+.pending-screen { display: grid; place-content: center; gap: 8px; min-height: 60vh; text-align: center; color: #7d838b; }
+.pending-screen strong { color: #2d3136; font-size: 20px; }
+.pending-screen p { margin: 0; font-size: 15px; }
+.pending-screen small { font-size: 13px; }
