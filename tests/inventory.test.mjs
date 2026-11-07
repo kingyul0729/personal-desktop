@@ -142,3 +142,14 @@ test('more old attendance numbers fill only empty cells and add missing days', a
   const again = await call(e, '/import-merge', 'POST', { rows: [{ staff_id: 2, work_date: '2026-06-02', attendance: '정상근무', managed_count: 9 }] });
   assert.deepEqual([again.data.added, again.data.filled], [0, 0]); // 두 번 넣어도 그대로
 });
+
+test('3종 시트팩 선결제 300장 is 450,000 (also fixed on an existing database)', async () => {
+  const e = env(); await call(e, '/state');
+  const opt = () => e.inv.prepare(`SELECT amount FROM inv_options WHERE item_id = 1010 AND qty = 300`).get().amount;
+  assert.equal(opt(), 450000);
+  e.inv.prepare(`UPDATE inv_options SET amount = 360000 WHERE item_id = 1010 AND qty = 300`).run();
+  e.inv.prepare(`DELETE FROM inv_meta WHERE key = 'fixes'`).run();
+  const { resetInvSchemaCache } = await import('../worker/invSchema.js'); resetInvSchemaCache();
+  await call(e, '/state');
+  assert.equal(opt(), 450000);
+});

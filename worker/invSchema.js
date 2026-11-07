@@ -74,6 +74,16 @@ export async function ensureInvSchema(db) {
   let ok = null;
   try { ok = await db.prepare(`SELECT value FROM inv_meta WHERE key = 'schema'`).first(); } catch { ok = null; }
   if (!ok) await db.exec(schemaSql());
+  else {
+    // 이미 만든 DB에 기준 자료 고침을 한 번씩 적용
+    const fixes = (await db.prepare(`SELECT value FROM inv_meta WHERE key = 'fixes'`).first())?.value || '';
+    if (!fixes.includes('opt300')) {
+      await db.batch([
+        db.prepare(`UPDATE inv_options SET amount = 450000 WHERE item_id = 1010 AND qty = 300 AND prepaid = 1 AND amount = 360000`),
+        db.prepare(`INSERT OR REPLACE INTO inv_meta (key, value) VALUES ('fixes', ?)`).bind(`${fixes} opt300`.trim()),
+      ]);
+    }
+  }
   ready = db;
 }
 export const resetInvSchemaCache = () => { ready = null; };

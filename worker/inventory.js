@@ -104,6 +104,7 @@ export async function handleInventory(request, env, url, user) {
         return json({ ok: true, count: stmts.length });
       }
       if (body.step === 'finish') {
+        await db.prepare(`UPDATE inv_options SET amount = 450000 WHERE item_id = 1010 AND qty = 300 AND prepaid = 1 AND amount = 360000`).run(); // 예전 파일의 잘못된 36만원 고침
         await db.prepare(`INSERT OR REPLACE INTO inv_meta (key, value) VALUES ('import', ?)`).bind(`${new Date().toISOString()} ${String(body.label || '').slice(0, 60)}`).run();
         return json({ ok: true });
       }
