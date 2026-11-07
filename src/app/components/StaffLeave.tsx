@@ -2,70 +2,84 @@ import { useCallback, useEffect, useState } from 'react';
 import { LoadingBox, SavingMark } from './Feedback';
 import { StaffUnavailable } from './StaffSchedule';
 import { staffGet, staffPost, StaffApiError } from '../staffApi';
-import { type StaffMember, WEEKDAYS, dateIn, daysInMonth, todayLocal, weekdayOf } from '../staffRules';
+import { type StaffMember, WEEKDAYS, dateIn, daysInMonth, leaveSeq, monthLabel, shiftMonth, todayLocal, weekdayOf } from '../staffRules';
 
-// 직원연차 — 예전 재고관리 앱의 연차 자료(총 발생·사용·잔여, 연차 이력, 연차 수정)와 한 해 연차 달력.
+// 직원연차 — 직원마다 자기 달력에 연차 날짜(순번 n/총)를 표시하고, 위에 총 부여 / 총 사용 / 잔여(누적, 월별 아님)를 보인다(2026-11-08 사용자 지정).
 // 연차 사용/되돌림은 직원스케줄 달력에서 '연차'를 고르면 서버가 처리한다(예전 앱과 같음).
 const LEAVE_REASONS = ['포상 연차 지급', '재계약 연차 재세팅', '연차 촉진 초기화', '행정 오류 수정', '신입 연차 당겨쓰기', '직접 입력'];
 const LOG_TYPE: Record<string, string> = { use: '연차 사용', revert: '사용 되돌림', adjust: '수동 수정', grant: '월 발생 지급', convert: '정직원 전환' };
 type LeaveLog = { id: number; log_type: string; log_date?: string | null; reason?: string | null; after_remain?: number | null; editor?: string | null; created_at?: string };
 
 export default function StaffLeave() {
-  const [year, setYear] = useState(() => Number(todayLocal().slice(0, 4)));
+  const [month, setMonth] = useState(() => todayLocal().slice(0, 7));
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [dates, setDates] = useState<Record<string, string[]>>({});
-  const [sid, setSid] = useState<number | null>(null);
-  const [logs, setLogs] = useState<LeaveLog[] | null>(null);
+  const [memos, setMemos] = useState<Record<string, string>>({});
+  const [open, setOpen] = useState<StaffMember | null>(null);
   const [state, setState] = useState({ loading: true, error: '', unavailable: false, detail: '' });
-  const [editing, setEditing] = useState(false);
   const load = useCallback(async () => {
     try {
-      const [list, ld] = await Promise.all([staffGet('/list', { include_retired: 0 }), staffGet('/leave-dates', { year })]);
-      setStaff(list); setDates(ld.leave_dates || {}); setState({ loading: false, error: '', unavailable: false, detail: '' });
-      setSid(cur => (cur && list.some((s: StaffMember) => s.id === cur) ? cur : list[0]?.id ?? null));
+      const [list, ld] = await Promise.all([staffGet('/list', { include_retired: 0 }), staffGet('/leave-dates', { year: month.slice(0, 4) })]);
+      // 예전 앱 표기(예: 7/17)는 그 날 기록의 메모에 있다
+      const m: Record<string, string> = {};
+      for (const x of list as StaffMember[]) {
+        const d = await staffGet('/month', { staff_id: x.id, month });
+        for (const r of d.attendance || []) { const hit = /표기 (\d+\/\d+)/.exec(r.memo || ''); if (r.attendance === '연차' && hit) m[`${x.id}|${r.work_date}`] = hit[1]; }
+      }
+      setStaff(list); setDates(ld.leave_dates || {}); setMemos(m); setState({ loading: false, error: '', unavailable: false, detail: '' });
     } catch (e) { setState({ loading: false, error: e instanceof Error ? e.message : '불러오지 못했어요.', unavailable: e instanceof StaffApiError && e.unavailable, detail: e instanceof StaffApiError ? e.detail : '' }); }
-  }, [year]);
+  }, [month]);
   useEffect(() => { void load(); const on = () => void load(); window.addEventListener('staff-data-changed', on); return () => window.removeEventListener('staff-data-changed', on); }, [load]);
-  useEffect(() => { if (sid == null) return; setLogs(null); staffGet(`/leave-log/${sid}`).then(setLogs, () => setLogs([])); }, [sid, staff]);
-  if (state.loading) return <LoadingBox />;
+  if (state.loading && !staff.length) return <LoadingBox />;
   if (state.error) return <StaffUnavailable message={state.error} unavailable={state.unavailable} detail={state.detail} />;
-  const s = staff.find(x => x.id === sid);
-  const mine = new Set(dates[String(sid)] || []);
-  const today = todayLocal();
+  const today = todayLocal(), n = daysInMonth(month), lead = weekdayOf(`${month}-01`);
   return <div className="sf-wrap sf-leave">
     <div className="sf-bar">
       <div className="sf-month">
-        <button type="button" aria-label="이전 해" onClick={() => setYear(y => y - 1)}>‹</button>
-        <strong>{year}년</strong>
-        <button type="button" aria-label="다음 해" onClick={() => setYear(y => y + 1)}>›</button>
+        <button type="button" aria-label="이전 달" onClick={() => setMonth(m => shiftMonth(m, -1))}>‹</button>
+        <strong>{monthLabel(month)}</strong>
+        <button type="button" aria-label="다음 달" onClick={() => setMonth(m => shiftMonth(m, 1))}>›</button>
+        <button type="button" className="sf-today" onClick={() => setMonth(todayLocal().slice(0, 7))}>이번 달</button>
       </div>
+      <small className="sf-hint">연차 숫자는 달과 상관없이 지금까지의 누적이에요.</small>
     </div>
-    <table className="sf-table is-click">
-      <thead><tr><th>직원</th><th className="num">총 발생</th><th className="num">사용</th><th className="num">잔여</th><th className="num">{year}년 사용일</th></tr></thead>
-      <tbody>{staff.map(x => <tr key={x.id} aria-selected={x.id === sid} onClick={() => setSid(x.id)} tabIndex={0} onKeyDown={e => { if (e.key === 'Enter') setSid(x.id); }}>
-        <td><b>{x.name}</b>{x.is_leader ? <small> 팀장</small> : null}</td><td className="num">{x.total_leave ?? '-'}</td><td className="num">{x.used_leave ?? '-'}</td>
-        <td className={`num${(x.remain_leave ?? 0) < 0 ? ' is-warn' : ''}`}>{x.remain_leave ?? '-'}</td><td className="num">{(dates[String(x.id)] || []).length}일</td></tr>)}</tbody>
-    </table>
-    {s && <>
-      <div className="sf-perf-head"><h3>{s.name} · {year}년 연차 달력</h3><button type="button" className="sf-btn" onClick={() => setEditing(true)}>연차 수정</button></div>
-      <div className="sf-year">{Array.from({ length: 12 }, (_, m) => {
-        const month = `${year}-${String(m + 1).padStart(2, '0')}`, n = daysInMonth(month), lead = weekdayOf(`${month}-01`);
-        const used = Array.from({ length: n }, (_, d) => dateIn(month, d + 1)).filter(d => mine.has(d)).length;
-        return <div key={month} className="sf-mini">
-          <p>{m + 1}월{used ? <small> 연차 {used}</small> : null}</p>
-          <div className="sf-mini-grid">{WEEKDAYS.map(w => <i key={w}>{w}</i>)}
-            {Array.from({ length: lead }, (_, i) => <span key={`b${i}`} />)}
-            {Array.from({ length: n }, (_, d) => { const date = dateIn(month, d + 1); return <span key={date} className={`${mine.has(date) ? 'is-leave' : ''}${date === today ? ' is-today' : ''}${weekdayOf(date) === 0 ? ' is-sun' : ''}`} title={mine.has(date) ? `${date} 연차` : undefined}>{d + 1}</span>; })}
-          </div>
-        </div>;
-      })}</div>
-      <h3 className="sf-perf-title">연차 이력</h3>
+    <div className="sf-lv-grid">{staff.map(x => {
+      const all = (dates[String(x.id)] || []).slice().sort();
+      const idx: Record<string, number> = {}; all.forEach((d, i) => { idx[d] = i + 1; });
+      const mine = new Set(all);
+      const remain = x.remain_leave ?? (x.total_leave ?? 0) - (x.used_leave ?? 0);
+      return <section key={x.id} className="sf-lv-card">
+        <header><b>{x.name}</b>{x.is_leader ? <small>팀장</small> : null}<button type="button" className="sf-btn" onClick={() => setOpen(x)}>이력·수정</button></header>
+        <dl className="sf-lv-nums"><div><dt>총 부여</dt><dd>{x.total_leave ?? '-'}</dd></div><div><dt>총 사용</dt><dd>{x.used_leave ?? '-'}</dd></div><div className={remain < 0 ? 'is-warn' : ''}><dt>잔여</dt><dd>{remain}</dd></div></dl>
+        <div className="sf-mini-grid sf-lv-cal">{WEEKDAYS.map(w => <i key={w}>{w}</i>)}
+          {Array.from({ length: lead }, (_, i) => <span key={`b${i}`} />)}
+          {Array.from({ length: n }, (_, d) => {
+            const date = dateIn(month, d + 1), on = mine.has(date);
+            const seq = on ? memos[`${x.id}|${date}`] || `${leaveSeq(x, idx, date)}/${x.total_leave ?? '-'}` : '';
+            return <span key={date} className={`${on ? 'is-leave' : ''}${date === today ? ' is-today' : ''}${weekdayOf(date) === 0 ? ' is-sun' : ''}`} title={on ? `${date} 연차 ${seq}` : undefined}>{d + 1}{on && <em>{seq}</em>}</span>;
+          })}
+        </div>
+      </section>;
+    })}</div>
+    {open && <LeaveDetail staff={open} onClose={() => setOpen(null)} onSaved={async () => { setOpen(null); await load(); }} />}
+  </div>;
+}
+
+function LeaveDetail({ staff, onClose, onSaved }: { staff: StaffMember; onClose: () => void; onSaved: () => Promise<void> }) {
+  const [logs, setLogs] = useState<LeaveLog[] | null>(null);
+  const [editing, setEditing] = useState(false);
+  useEffect(() => { staffGet(`/leave-log/${staff.id}`).then(setLogs, () => setLogs([])); }, [staff.id]);
+  if (editing) return <LeaveAdjust staff={staff} onClose={() => setEditing(false)} onSaved={onSaved} />;
+  return <div className="sf-modal" role="dialog" aria-modal="true" aria-label={`${staff.name} 연차 이력`}>
+    <div className="sf-modal-back" onClick={onClose} />
+    <div className="sf-modal-panel">
+      <div className="sf-modal-head"><strong>{staff.name} · 연차 이력</strong><button type="button" aria-label="닫기" onClick={onClose}>×</button></div>
       {logs == null ? <LoadingBox /> : !logs.length ? <p className="sf-hint">연차 이력이 없습니다</p>
         : <ul className="sf-list sf-log">{logs.map(l => <li key={l.id}><b>{LOG_TYPE[l.log_type] || l.log_type}</b>
           <span>{[l.log_date, l.reason, `잔여 ${l.after_remain ?? '-'}`].filter(Boolean).join(' · ')}</span>
           <small>{(l.created_at || '').slice(0, 16).replace('T', ' ')}{l.editor ? ` · ${l.editor}` : ''}</small></li>)}</ul>}
-    </>}
-    {editing && s && <LeaveAdjust staff={s} onClose={() => setEditing(false)} onSaved={async () => { setEditing(false); await load(); }} />}
+      <div className="sf-modal-foot"><button type="button" className="sf-btn" onClick={onClose}>닫기</button><button type="button" className="sf-btn is-primary" onClick={() => setEditing(true)}>연차 수정</button></div>
+    </div>
   </div>;
 }
 
