@@ -2,3 +2,5 @@ node_modules/
 dist/
 .sites-runtime/
 *.tgz
+scripts/inv-data/
+worker/invSeed.js

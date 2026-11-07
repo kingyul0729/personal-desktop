@@ -737,9 +737,11 @@ staff.get("/performance", async (c) => {
   return c.json(sortStaff(result));
 });
 
+import { ensureInvSchema } from './invSchema.js';
+
 export async function handleStaff(request, env, url) {
   if (!env.INV_DB) return Response.json({ error: '직원 자료(예전 재고관리 DB)가 아직 연결되지 않았어요.', unavailable: true }, { status: 503 });
-  try { return await staff.handle(request, env, url.pathname.slice('/api/staff'.length) || '/'); }
+  try { await ensureInvSchema(env.INV_DB); return await staff.handle(request, env, url.pathname.slice('/api/staff'.length) || '/'); }
   catch (e) {
     // 원인을 화면에서 바로 볼 수 있게(로그인한 직원에게만) DB 오류 문구와 예전 DB의 표 이름을 함께 돌려준다.
     let tables = [];

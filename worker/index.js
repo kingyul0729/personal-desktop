@@ -1,7 +1,7 @@
 import { handleStudy } from './study.js';
 import { handleWork } from './work.js';
 import { handleStaff } from './staff.js';
-import { handleStaffImport } from './staffImport.js';
+import { handleInventory } from './inventory.js';
 
 const defaults = [
   ['toning', '색소·토닝', 'heart'], ['acne', '여드름·흉터', 'kitty'],
@@ -669,7 +669,7 @@ export async function handleApi(request, env) {
   if (url.pathname === '/api/study' || url.pathname.startsWith('/api/study/')) return handleStudy(request, env, owner, url);
   if (url.pathname === '/api/work' || url.pathname.startsWith('/api/work/')) return handleWork(request, env, owner, url);
   if (url.pathname.startsWith('/api/staff/')) return handleStaff(request, env, url);
-  if (url.pathname === '/api/staff-import') return handleStaffImport(request, env);
+  if (url.pathname.startsWith('/api/inventory/')) return handleInventory(request, env, url, owner);
   if (url.pathname === '/api/capsules') return handleCapsules(request, env, owner);
   if (url.pathname.startsWith('/api/desktop') || url.pathname.startsWith('/api/files/')) {
     const response = await handleDesktop(request, env, owner, url);

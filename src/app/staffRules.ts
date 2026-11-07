@@ -99,6 +99,13 @@ export function leaveCumulative(byStaff: Record<string, string[]>) {
   return out;
 }
 
+// 그 해 사용 순번 = 지금 사용 연차 - (이 날 뒤에 쓴 연차 수). 앞 기록이 빠진 해에도 최근 순번이 맞게.
+export function leaveSeq(s: StaffMember, idx: Record<string, number> | undefined, date: string) {
+  if (!idx || idx[date] == null) return s.used_leave ?? '-';
+  const later = Object.keys(idx).length - idx[date];
+  return (s.used_leave ?? 0) - later;
+}
+
 export const isReadonly = (s: StaffMember, date: string) => s.status === 'retired' && !!s.retire_date && date > s.retire_date;
 
 // 달력 한 칸에 적을 줄: 정상근무가 아닌 사람만, 기록 없는 지난 평일은 '미입력 n'
@@ -116,7 +123,8 @@ export function calendarLines(date: string, staff: StaffMember[], recOf: (sid: n
     if (!st) { if (weekdayOf(date) !== 0 && date <= today) none++; continue; }
     if (st === '정상근무') continue;
     let label = SHORT[st] || st;
-    if (st === '연차') label = `연차 ${cum[s.id]?.[date] ?? s.used_leave ?? '-'}/${s.total_leave ?? '-'}`;
+    const shown = /표기 (\d+\/\d+)/.exec(rec?.memo || '');
+    if (st === '연차') label = shown ? `연차 ${shown[1]}` : `연차 ${leaveSeq(s, cum[s.id], date)}/${s.total_leave ?? '-'}`;
     const kind = st === '휴일' || st === '무급 기타' ? 'hol' : WORK_STATES.includes(st) ? 'work' : st === '연차' ? 'leave' : 'off';
     lines.push({ sid: s.id, name: s.name, label, kind });
   }

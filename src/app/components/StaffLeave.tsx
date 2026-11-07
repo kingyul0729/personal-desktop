@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { LoadingBox, SavingMark } from './Feedback';
-import { StaffImport, StaffUnavailable } from './StaffSchedule';
+import { StaffUnavailable } from './StaffSchedule';
 import { staffGet, staffPost, StaffApiError } from '../staffApi';
 import { type StaffMember, WEEKDAYS, dateIn, daysInMonth, todayLocal, weekdayOf } from '../staffRules';
 
@@ -25,10 +25,10 @@ export default function StaffLeave() {
       setSid(cur => (cur && list.some((s: StaffMember) => s.id === cur) ? cur : list[0]?.id ?? null));
     } catch (e) { setState({ loading: false, error: e instanceof Error ? e.message : '불러오지 못했어요.', unavailable: e instanceof StaffApiError && e.unavailable, detail: e instanceof StaffApiError ? e.detail : '' }); }
   }, [year]);
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => { void load(); const on = () => void load(); window.addEventListener('staff-data-changed', on); return () => window.removeEventListener('staff-data-changed', on); }, [load]);
   useEffect(() => { if (sid == null) return; setLogs(null); staffGet(`/leave-log/${sid}`).then(setLogs, () => setLogs([])); }, [sid, staff]);
   if (state.loading) return <LoadingBox />;
-  if (state.error) return <StaffUnavailable message={state.error} unavailable={state.unavailable} detail={state.detail} onImported={() => void load()} />;
+  if (state.error) return <StaffUnavailable message={state.error} unavailable={state.unavailable} detail={state.detail} />;
   const s = staff.find(x => x.id === sid);
   const mine = new Set(dates[String(sid)] || []);
   const today = todayLocal();
@@ -65,7 +65,6 @@ export default function StaffLeave() {
           <span>{[l.log_date, l.reason, `잔여 ${l.after_remain ?? '-'}`].filter(Boolean).join(' · ')}</span>
           <small>{(l.created_at || '').slice(0, 16).replace('T', ' ')}{l.editor ? ` · ${l.editor}` : ''}</small></li>)}</ul>}
     </>}
-    <StaffImport again onDone={() => void load()} />
     {editing && s && <LeaveAdjust staff={s} onClose={() => setEditing(false)} onSaved={async () => { setEditing(false); await load(); }} />}
   </div>;
 }

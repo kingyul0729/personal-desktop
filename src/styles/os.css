@@ -1487,3 +1487,68 @@ a:hover > .download-mark .download-arrow, a:focus-visible > .download-mark .down
 .sf-detail { max-width: 640px; margin: 8px auto 0; padding: 10px 12px; border: 1px solid var(--app-line); border-radius: 8px; background: #fff; color: #4a5059; font-size: 12px; text-align: left; white-space: pre-wrap; word-break: break-all; user-select: text; }
 .sf-import { display: flex; flex-direction: column; align-items: center; gap: 8px; margin-top: 8px; }
 .sf-leave > .sf-import { align-items: flex-start; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--app-line); }
+
+/* ===== 재고 화면 (2026-11-08, 새 레이아웃) ===== */
+.iv-wrap h3 { margin: 0 0 8px; font-size: 16px; }
+.iv-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; }
+.iv-card { border: 1px solid var(--app-line); border-radius: 10px; background: #fff; padding: 12px 14px; display: flex; flex-direction: column; gap: 2px; }
+.iv-card span { font-size: 12px; color: var(--app-muted); }
+.iv-card b { font-size: 14px; font-weight: 600; }
+.iv-card strong { font-size: 22px; font-variant-numeric: tabular-nums; color: #3c5a7a; }
+.iv-card small { font-size: 12px; color: var(--app-muted); }
+.iv-card.is-warn strong { color: #c0564b; }
+.iv-sec { display: flex; flex-direction: column; gap: 8px; }
+.iv-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.iv-search { height: 32px; padding: 0 10px; border: 1px solid var(--app-line); border-radius: 8px; font: inherit; font-size: 14px; min-width: 200px; }
+.iv-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; }
+.iv-row .sf-input { min-width: 140px; }
+.iv-row .sf-btn, .iv-inline .sf-btn { height: 32px; }
+.iv-inline { display: inline-flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; font-size: 13px; }
+.iv-pair { display: flex; gap: 6px; }
+.iv-pair input { width: 90px; }
+.iv-pair select, .sf-input select { height: 32px; padding: 0 8px; border: 1px solid var(--app-line); border-radius: 8px; font: inherit; font-size: 14px; background: #fff; color: var(--app-ink); }
+.iv-check { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--app-ink); white-space: nowrap; }
+.iv-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px; }
+.iv-dcard { border: 1px solid var(--app-line); border-radius: 10px; background: #fff; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+.iv-dcard dl, .iv-calc { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; font-size: 13px; }
+.iv-dcard dt { color: var(--app-muted); } .iv-dcard dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+.iv-calc { display: flex; flex-wrap: wrap; gap: 6px 18px; padding: 8px 12px; border-radius: 8px; background: #f6f7f9; }
+.iv-calc b { font-variant-numeric: tabular-nums; }
+.iv-olist { display: flex; flex-direction: column; border: 1px solid var(--app-line); border-radius: 10px; background: #fff; }
+.iv-oitem { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; padding: 10px 12px; border-bottom: 1px solid var(--app-line); }
+.iv-oitem:last-child { border-bottom: 0; }
+.iv-oitem.is-low .iv-oname b::after { content: ' 부족'; color: #c0564b; font-size: 12px; font-weight: 500; }
+.iv-oname { display: flex; flex-direction: column; gap: 2px; min-width: 180px; }
+.iv-oname small { color: var(--app-muted); font-size: 12px; }
+.sf-table tr.is-low td:first-child b { color: #c0564b; }
+.iv-total { display: flex; align-items: baseline; gap: 10px; padding: 10px 12px; border-radius: 8px; background: #eef2f6; }
+.iv-total span { font-size: 13px; color: var(--app-muted); } .iv-total b { font-size: 18px; font-variant-numeric: tabular-nums; } .iv-total small { color: var(--app-muted); }
+.iv-split { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 900px) { .iv-split { grid-template-columns: 1fr; } }
+.iv-side { display: flex; flex-direction: column; gap: 8px; }
+.iv-ilist { list-style: none; margin: 0; padding: 0; border: 1px solid var(--app-line); border-radius: 10px; background: #fff; max-height: 560px; overflow: auto; }
+.iv-ilist button { width: 100%; text-align: left; border: 0; border-bottom: 1px solid var(--app-line); background: none; padding: 8px 12px; display: flex; flex-direction: column; gap: 2px; font: inherit; cursor: pointer; color: var(--app-ink); }
+.iv-ilist button[aria-pressed="true"] { background: var(--app-selected); }
+.iv-ilist small { color: var(--app-muted); font-size: 12px; }
+.iv-form { display: flex; flex-direction: column; gap: 14px; }
+.iv-fgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; align-items: end; }
+.iv-fgrid .iv-wide { grid-column: 1 / -1; }
+.iv-acts { white-space: nowrap; } .iv-acts .sf-btn + .sf-btn { margin-left: 6px; }
+.sf-btn.is-danger { border-color: #c0564b; color: #c0564b; }
+.iv-scroll { overflow-x: auto; }
+.iv-paper { display: flex; flex-direction: column; gap: 12px; background: #fff; border: 1px solid var(--app-line); border-radius: 10px; padding: 20px; }
+.iv-paper h2 { margin: 0; font-size: 18px; } .iv-paper h2 small { font-size: 13px; color: var(--app-muted); font-weight: 400; margin-left: 6px; }
+.iv-subhead td { background: #fbfbfc; color: var(--app-muted); font-size: 13px; }
+.iv-total-row td { font-weight: 600; background: #f6f7f9; }
+.iv-foot { margin: 0; font-size: 12px; color: var(--app-muted); }
+.iv-year th, .iv-year td { white-space: nowrap; }
+@media print {
+  body * { visibility: hidden; }
+  .iv-report .iv-paper, .iv-report .iv-paper * { visibility: visible; }
+  .iv-report .iv-paper { position: absolute; left: 0; top: 0; width: 100%; border: 0; padding: 0; }
+  .iv-noprint { display: none !important; }
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
+.sf-ev { white-space: normal; overflow: visible; }
+.iv-import { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; border: 1px solid var(--app-accent); border-radius: 10px; background: #f3f6f9; }
+.iv-import p { margin: 4px 0 0; }

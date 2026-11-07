@@ -15,5 +15,3 @@ export const staffGet = async (path: string, params: Record<string, string | num
 };
 export const staffPost = async (path: string, body: unknown) =>
   parse(await fetch(`/api/staff${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }));
-export const staffImportStep = async (body: { step: 'start' | 'month'; month?: string }) =>
-  parse(await fetch('/api/staff-import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }));
