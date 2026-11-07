@@ -94,7 +94,7 @@ export function AppShell({ desktop, dispatch }: { desktop: typeof initialDesktop
     if (!desktop.running.includes(id)) return null;
     const label = SECONDARY[id]?.label ?? menuOf(id)!.label;
     return <section key={id} className={`app-pane app-pane-${id}`} aria-label={label} hidden={active !== id}>
-      {id === 'workLibrary' ? content : id === 'fileExplorer' ? <FileExplorer onFolders={sub('fileExplorer').onSubs} goto={gotos.fileExplorer} onLocation={sub('fileExplorer').onLocation} />
+      {id === 'workLibrary' || id === 'terminal' ? content : id === 'fileExplorer' ? <FileExplorer onFolders={sub('fileExplorer').onSubs} goto={gotos.fileExplorer} onLocation={sub('fileExplorer').onLocation} />
         : <FinderMain title={label} onBack={back} onForward={forward} path={pathFor(id)}
           tools={SECONDARY[id] ? <button type="button" aria-label={`${label} 닫기`} title="닫기" onClick={() => dispatch({ type: 'close', id })}><X size={19} strokeWidth={1.6} /></button> : undefined}>
           {content}

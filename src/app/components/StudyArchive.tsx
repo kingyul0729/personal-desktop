@@ -4,6 +4,8 @@ import { ArrowLeft, BookOpen, CalendarDays, Check, ChevronLeft, ChevronRight, Fi
 import '../../styles/study.css';
 import { StudyNoteText } from './StudyNoteText';
 import { announceTrash, useTrashChange } from '../trash';
+import { FinderMain, FinderPath } from './FinderFrame';
+import { ToneDot, ToneFolder } from './ToneFolder';
 
 type Attachment = { id: string; name: string; mime: string; size: number; url: string };
 type RecordItem = { id: string; title: string; category: string; studiedOn: string; content: string; tags: string; keywords: string; summary: string; favorite: number; createdAt: number; updatedAt: number; trashedAt: number | null; attachments: Attachment[] };
@@ -25,46 +27,6 @@ export const studyType = (item: Pick<RecordItem, 'attachments'>) => {
 };
 
 // Stacked cards: the selected card sits in front, the others fan out behind it on both sides.
-function StudyStack({ items, selected, onSelect, onOpen, onEdit, onRemove, onFavorite, onAdd, busy }: {
-  items: RecordItem[]; selected: number; onSelect: (index: number) => void; onOpen: (item: RecordItem) => void;
-  onEdit: (item: RecordItem) => void; onRemove: (item: RecordItem) => void; onFavorite: (item: RecordItem) => void; onAdd: () => void; busy: boolean;
-}) {
-  const current = items[selected];
-  const swipe = useRef<{ x: number; id: number } | null>(null);
-  const move = (delta: number) => onSelect((selected + delta + items.length) % items.length);
-  return <section className="study-stack" aria-roledescription="carousel" aria-label="공부 자료 카드">
-    <div className="study-stack-meta"><strong>{current.category}</strong><span><Check size={14} />{items.length}개 중 {selected + 1}번째</span></div>
-    <div className="study-stack-stage" onPointerDown={event => { swipe.current = { x: event.clientX, id: event.pointerId }; }}
-      onPointerUp={event => { const start = swipe.current; swipe.current = null; if (start && start.id === event.pointerId && Math.abs(event.clientX - start.x) > 48) move(event.clientX < start.x ? 1 : -1); }}
-      onPointerCancel={() => { swipe.current = null; }}
-      onKeyDown={event => { if (event.key === 'ArrowLeft') { event.preventDefault(); move(-1); } if (event.key === 'ArrowRight') { event.preventDefault(); move(1); } }}>
-      {items.map((item, index) => {
-        const offset = index - selected;
-        if (Math.abs(offset) > 4) return null;
-        const center = offset === 0;
-        const cover = item.attachments.find(file => file.mime.startsWith('image/'));
-        return <button key={item.id} type="button" className={`study-stack-card${center ? ' is-center' : ''}`}
-          style={{ ['--sign' as string]: Math.sign(offset), ['--distance' as string]: Math.abs(offset) }}
-          tabIndex={center ? 0 : -1} aria-current={center ? 'true' : undefined}
-          aria-label={center ? `${item.title} 열기` : `${item.title} 앞으로 가져오기`} onClick={() => center ? onOpen(item) : onSelect(index)}>
-          {center ? <div className="study-stack-preview">
-            <div className="study-stack-page">{cover ? <img src={cover.url} alt="" loading="lazy" draggable={false} /> : <div className="study-stack-text"><span>{dateLabel(item.studiedOn)}</span><p>{(item.summary || item.content || '첨부 자료를 열어 확인해 보세요.').replace(/[#*_=|]+/g, ' ').slice(0, 260)}</p></div>}</div>
-            <div className="study-stack-page study-stack-page-right"><span className="study-stack-type">{studyType(item)}</span><h3>{item.title}</h3>{item.keywords?.trim() && <p>{item.keywords.split('\n').slice(0, 4).join(' · ')}</p>}<small>{dateLabel(item.studiedOn)} · 자료 {item.attachments.length}개</small></div>
-          </div> : <span className="study-stack-spine">{item.title}</span>}
-        </button>;
-      })}
-      <button type="button" className="study-stack-arrow is-prev" aria-label="이전 카드" onClick={() => move(-1)} disabled={items.length < 2}><ChevronLeft size={22} /></button>
-      <button type="button" className="study-stack-arrow is-next" aria-label="다음 카드" onClick={() => move(1)} disabled={items.length < 2}><ChevronRight size={22} /></button>
-    </div>
-    <div className="study-stack-caption" aria-live="polite"><span className="study-category-chip">{studyType(current)}</span><h2>{current.title}</h2><p>가운데 카드를 다시 누르면 노트가 열립니다.</p></div>
-    <div className="study-stack-actions">
-      <button type="button" onClick={() => onFavorite(current)} aria-pressed={!!current.favorite} aria-label={`${current.title} 즐겨찾기 ${current.favorite ? '해제' : '추가'}`} disabled={busy}><Star size={19} fill={current.favorite ? 'currentColor' : 'none'} /></button>
-      <button type="button" onClick={() => onEdit(current)} aria-label={`${current.title} 수정`} disabled={busy}><Pencil size={18} /></button>
-      <button type="button" onClick={() => onRemove(current)} aria-label={`${current.title} 삭제`} disabled={busy}><Trash2 size={18} /></button>
-      <button type="button" onClick={onAdd} aria-label="기록 추가" disabled={busy}><Plus size={20} /></button>
-    </div>
-  </section>;
-}
 
 const toEditor = (item: RecordItem): Editor => ({ id: item.id, title: item.title, category: item.category, studiedOn: item.studiedOn, content: item.content, tags: item.tags, keywords: item.keywords || '', summary: item.summary || '', version: item.updatedAt, attachments: item.attachments });
 
@@ -81,7 +43,6 @@ export function StudyArchive({ onDirtyChange, onSubs, goto, onLocation }: { onDi
   const inputRef = useRef<HTMLInputElement>(null);
   const textInputRef = useRef<HTMLInputElement>(null);
   const [readingSize, setReadingSize] = useState(16);
-  const [view, setView] = useState<'card' | 'list'>('card'), [stackIndex, setStackIndex] = useState(0);
   const noteRef = useRef<HTMLTextAreaElement>(null);
   const reading = records.find(item => item.id === readingId && !item.trashedAt);
   const busyRef = useRef(false);
@@ -113,8 +74,6 @@ export function StudyArchive({ onDirtyChange, onSubs, goto, onLocation }: { onDi
     if (category && item.category !== category) return false;
     return `${item.title} ${item.content} ${item.keywords || ''} ${item.summary || ''} ${item.category} ${item.tags} ${item.attachments.map(file => file.name).join(' ')}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase());
   }).sort((a, b) => sort === 'title' ? a.title.localeCompare(b.title, 'ko') : sort === 'updated' ? b.updatedAt - a.updatedAt : b.studiedOn.localeCompare(a.studiedOn) || b.updatedAt - a.updatedAt), [records, filter, category, query, sort]);
-  useEffect(() => { setStackIndex(0); }, [filter, category, query, sort]);
-  const stackSelected = Math.min(stackIndex, Math.max(0, filtered.length - 1));
   const leave = (next: () => void) => { if (busyRef.current) return; if (!dirty || window.confirm('저장하지 않은 변경 사항이 있습니다. 저장하지 않고 이동할까요?')) { setEditor(null); setFiles([]); setError(''); next(); } };
   const open = (record?: RecordItem) => leave(() => {
     setReadingId(record?.id || null);
@@ -181,16 +140,33 @@ export function StudyArchive({ onDirtyChange, onSubs, goto, onLocation }: { onDi
     if (content.length > 100000) { setError('본문은 10만 자 이하로 작성해 주세요.'); return; }
     field('content', content); input?.focus();
   };
-  const heading = category || (filter === 'favorite' ? '즐겨찾기' : filter === 'trash' ? '삭제한 기록' : '전체 공부 기록');
+  // Finder 모양(가격표와 같게): 처음엔 주제 폴더, 폴더를 열면 기록 썸네일. ‹ 는 한 단계 위로.
+  const [searching, setSearching] = useState(false);
+  const [scale, setScale] = useState(100);
+  const inFolder = !!category || filter === 'favorite';
+  const showingFolders = !inFolder && !query.trim() && !editor && !reading;
+  const place = category || (filter === 'favorite' ? '즐겨찾기' : '');
+  const finderTitle = editor ? (editor.version ? '기록 수정' : '새 공부 기록') : reading ? reading.title : query.trim() ? '검색 결과' : place || '공부 보관함';
+  const up = editor ? () => leave(() => {}) : reading ? () => { setReadingId(null); setNotice(''); } : query.trim() ? () => { setQuery(''); setSearching(false); } : inFolder ? () => navigate('all') : undefined;
+  const pathParts = [{ icon: <BookOpen size={14} strokeWidth={1.7} />, label: '공부 보관함', onClick: inFolder || reading || editor ? () => leave(() => { setReadingId(null); setFilter('all'); setCategory(''); }) : undefined },
+    ...(place ? [{ icon: <FolderOpen size={14} strokeWidth={1.7} />, label: place, onClick: reading ? () => setReadingId(null) : undefined }] : []),
+    ...(reading ? [{ icon: <FileText size={14} strokeWidth={1.7} />, label: reading.title }] : [])];
+  const favorites = active.filter(item => item.favorite).length;
+  const tools = editor || reading || !authenticated ? undefined : <>
+    <button type="button" aria-label="기록 추가" title="기록 추가" onClick={() => open()} disabled={!ready}><Plus size={20} strokeWidth={1.6} /></button>
+    {searching || query ? <label className="finder-search"><Search size={15} /><input autoFocus type="search" aria-label="공부 기록 검색" placeholder="검색" value={query}
+      onChange={event => setQuery(event.target.value)} onKeyDown={event => { if (event.key === 'Escape') { setQuery(''); setSearching(false); } }} onBlur={() => { if (!query) setSearching(false); }} />
+      {query && <button type="button" aria-label="검색어 지우기" onClick={() => { setQuery(''); setSearching(false); }}><X size={14} /></button>}</label>
+      : <button type="button" className="finder-search-button" aria-label="검색" title="검색" onClick={() => setSearching(true)}><Search size={19} strokeWidth={1.6} /></button>}
+  </>;
+  const itemCount = showingFolders ? folders.length + (favorites ? 1 : 0) : filtered.length;
 
-  return <div className={`study-archive${reading && !editor ? ' study-reading' : ''}`} onKeyDown={event => { if (editor && (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') { event.preventDefault(); void save(); } }}>
+  return <FinderMain title={finderTitle} onBack={up} tools={tools} path={<FinderPath parts={pathParts} />}
+    status={editor || reading ? undefined : <>{itemCount}개 항목{notice ? ` · ${notice}` : ''}</>} scale={editor || reading ? undefined : scale} onScale={setScale}>
+  <div className={`study-archive study-finder${reading && !editor ? ' study-reading' : ''}`} onKeyDown={event => { if (editor && (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') { event.preventDefault(); void save(); } }}>
     <main className="study-main">
-      {(!reading || editor) && <header className="study-heading">
-        <div><h1>{editor ? editor.version ? '공부 기록 수정' : '새 공부 기록' : heading}</h1><span>{editor ? '자료와 함께 배운 내용을 남겨 보세요.' : '이미지와 PDF, 나의 메모를 한곳에 모아두세요.'}</span></div>
-        {!editor && <button className="study-primary" onClick={() => open()} disabled={!ready || !authenticated}><Plus size={18} />기록 추가</button>}
-      </header>}
       {error && <div className="study-alert" role="alert">{error}<button onClick={() => void load()} disabled={busy}>목록 새로고침</button></div>}
-      {notice && <div className="study-notice" role="status"><Check size={16} />{notice}</div>}
+      {notice && (editor || reading) && <div className="study-notice" role="status"><Check size={16} />{notice}</div>}
       {!ready ? <div className="study-empty"><BookOpen size={32} /><strong>{error ? '보관함을 불러오지 못했어요' : '보관함을 불러오는 중…'}</strong></div>
       : !authenticated ? <div className="study-empty"><img src="/icons/pink-folder-ribbon.png" alt="" /><h2>나만의 공부 기록을 시작해요</h2><p>이미지·PDF와 공부 메모를 저장하고<br />다른 기기에서도 같은 계정으로 열어보세요.</p><a className="study-primary" href="/signin-with-chatgpt?return_to=%2F" target="_top">로그인하고 시작하기</a></div>
       : editor ? <form className="study-editor" onSubmit={event => { event.preventDefault(); void save(); }}>
@@ -229,7 +205,7 @@ export function StudyArchive({ onDirtyChange, onSubs, goto, onLocation }: { onDi
         </fieldset>
         <p className="study-save-hint">‘기록 저장’을 누르면 자료와 메모가 함께 저장됩니다.</p>
       </form> : reading ? <>
-        <div className="study-reader-toolbar"><button onClick={() => { setReadingId(null); setNotice(''); }}><ArrowLeft size={17} />보관함</button><span>노트 읽기</span><label className="study-reading-size">글자 크기<select aria-label="본문 글자 크기" value={readingSize} onChange={event => setReadingSize(Number(event.target.value))}>{[14, 16, 18, 20].map(size => <option key={size} value={size}>{size}</option>)}</select></label><button className="study-primary" onClick={() => open(reading)}>수정</button></div>
+        <div className="study-reader-toolbar"><button onClick={() => { setReadingId(null); setNotice(''); }}><ArrowLeft size={17} />{reading.category}</button><span>노트 읽기</span><label className="study-reading-size">글자 크기<select aria-label="본문 글자 크기" value={readingSize} onChange={event => setReadingSize(Number(event.target.value))}>{[14, 16, 18, 20].map(size => <option key={size} value={size}>{size}</option>)}</select></label><button onClick={() => void mutate(reading, 'favorite')} className={reading.favorite ? 'is-favorite' : ''} aria-pressed={!!reading.favorite} disabled={busy}><Star size={16} fill={reading.favorite ? 'currentColor' : 'none'} />즐겨찾기</button><button onClick={() => { setRemoving(reading); setError(''); }} disabled={busy}><Trash2 size={15} />삭제</button><button className="study-primary" onClick={() => open(reading)}>수정</button></div>
         <div className="study-reader-scroll">
           <article className="cornell-page" aria-label="코넬식 공부 노트" style={{ fontSize: readingSize }}>
             <header className="cornell-title"><div><span>{reading.category}</span><time>{dateLabel(reading.studiedOn)}</time></div><h1>{reading.title}</h1>{reading.tags && <p>{reading.tags.split(/[,#]+/).map(tag => tag.trim()).filter(Boolean).map((tag, i) => <span key={i}>#{tag}</span>)}</p>}</header>
@@ -243,32 +219,29 @@ export function StudyArchive({ onDirtyChange, onSubs, goto, onLocation }: { onDi
             <section className="cornell-summary"><h2>한눈에 요약<span>SUMMARY</span></h2>{reading.summary?.trim() ? <StudyNoteText text={reading.summary} /> : <p className="cornell-empty">아직 작성한 요약이 없습니다. 수정에서 핵심 내용을 남길 수 있어요.</p>}</section>
           </article>
         </div>
-      </> : <>
-        <div className="study-toolbar"><label className="study-search"><Search size={17} /><input aria-label="공부 기록 검색" value={query} onChange={event => setQuery(event.target.value)} placeholder="제목, 메모, 태그 검색" />{query && <button onClick={() => setQuery('')} aria-label="검색어 지우기"><X size={16} /></button>}</label><select aria-label="보관함" className="study-scope" value={filter === 'all' ? (category ? `cat:${category}` : 'all') : filter} onChange={event => { const v = event.target.value; if (v.startsWith('cat:')) navigate('all', v.slice(4)); else navigate(v as typeof filter); }}>
-          <option value="all">전체 기록 ({active.length})</option>
-          <option value="favorite">즐겨찾기 ({active.filter(item => item.favorite).length})</option>
-          {folders.map(name => <option key={name} value={`cat:${name}`}>{name} ({counts.get(name) ?? 0})</option>)}
-        </select><select aria-label="정렬" value={sort} onChange={event => setSort(event.target.value)}><option value="date">공부 날짜순</option><option value="updated">최근 수정순</option><option value="title">제목순</option></select><div className="study-view-toggle" role="group" aria-label="보기 방식"><button type="button" aria-pressed={view === 'card'} onClick={() => setView('card')}><Layers size={15} />카드</button><button type="button" aria-pressed={view === 'list'} onClick={() => setView('list')}><LayoutGrid size={15} />목록</button></div></div>
-        <div className="study-results-line"><span>{filtered.length}개의 기록</span>{filter === 'trash' && <span>삭제한 기록은 여기에서 복원할 수 있어요.</span>}</div>
-        <div className="study-results">
-          {filtered.length && view === 'card' && filter !== 'trash' ? <StudyStack items={filtered} selected={stackSelected} onSelect={setStackIndex} busy={busy}
-            onOpen={item => { setReadingId(item.id); setNotice(''); setError(''); }} onEdit={item => open(item)} onRemove={item => { setRemoving(item); setError(''); }}
-            onFavorite={item => void mutate(item, 'favorite')} onAdd={() => open()} />
-          : filtered.length ? <div className="study-grid">{filtered.map(item => {
-            const cover = item.attachments.find(file => file.mime.startsWith('image/'));
-            return <article className="study-card" key={item.id}>
-              <button className="study-card-main" onClick={() => { setReadingId(item.id); setNotice(''); setError(''); }} disabled={!!item.trashedAt || busy} aria-label={`${item.title} 열기`}>
-                <div className="study-card-cover">{cover && !item.trashedAt ? <img src={cover.url} loading="lazy" alt="" /> : <div className="study-card-paper"><FileText size={25} /><span>{item.content ? item.content.slice(0, 110) : item.attachments.length ? 'PDF · 학습 자료' : '나의 공부 메모'}</span></div>}<span className="study-category-chip">{item.category}</span></div>
-                <div className="study-card-content"><h2>{item.title}</h2><p>{item.content.trim() ? item.content.replace(/\s+/g, ' ').slice(0, 80) : '첨부 자료를 열어 확인해 보세요.'}</p><div className="study-card-meta"><span><CalendarDays size={13} />{dateLabel(item.studiedOn)}</span><span>자료 {item.attachments.length}개</span></div>{item.tags && <div className="study-tags">{item.tags.split(/[,#]+/).map(tag => tag.trim()).filter(Boolean).slice(0, 3).map((tag, i) => <span key={i}>#{tag}</span>)}</div>}</div>
-              </button>
-              <div className="study-card-actions">{item.trashedAt ? <button onClick={() => void mutate(item, 'restore')} disabled={busy}>기록 복원</button> : <><button onClick={() => void mutate(item, 'favorite')} className={item.favorite ? 'is-favorite' : ''} aria-label={`${item.title} 즐겨찾기 ${item.favorite ? '해제' : '추가'}`} aria-pressed={!!item.favorite} disabled={busy}><Star size={16} fill={item.favorite ? 'currentColor' : 'none'} />즐겨찾기</button><button onClick={() => { setRemoving(item); setError(''); }} aria-label={`${item.title} 삭제`} disabled={busy}><Trash2 size={15} /></button></>}</div>
-            </article>;
-          })}</div> : <div className="study-empty"><img src="/icons/pink-folder-ribbon.png" alt="" /><h2>{query ? '검색한 기록이 없어요' : filter === 'favorite' ? '다시 보고 싶은 기록을 모아보세요' : filter === 'trash' ? '삭제한 기록이 없어요' : '오늘 배운 것을 첫 기록으로'}</h2><p>{query ? '다른 제목이나 태그로 검색해 보세요.' : filter === 'favorite' ? '기록의 별을 누르면 이곳에서 모아볼 수 있어요.' : filter === 'trash' ? '삭제한 공부 기록은 여기에서 복원할 수 있어요.' : '공부한 이미지·PDF를 올리고\n나만의 메모를 함께 남겨보세요.'}</p>{filter === 'all' && !query && <button className="study-primary" onClick={() => open()}><Plus size={17} />첫 기록 남기기</button>}</div>}
-        </div>
-      </>}
-      <footer className="study-footer"><span>조금씩 쌓이는 나의 공부 기록</span><span>{authenticated ? '계정에 저장' : '로그인 후 이용'}</span></footer>
+      </> : <div className={showingFolders ? 'finder-grid' : 'finder-grid pf-thumb-grid'} style={{ ['--finder-scale' as string]: scale / 100 }}>
+        {showingFolders ? <>
+          {folders.map(name => <button key={name} type="button" className="desktop-icon" onClick={() => navigate('all', name)}>
+            <div className="desktop-folder-art"><ToneFolder /></div>
+            <span><ToneDot name={name} />{name}<small className="wl-folder-count">{counts.get(name) ?? 0}</small></span>
+          </button>)}
+          {favorites > 0 && <button type="button" className="desktop-icon" onClick={() => navigate('favorite')}>
+            <div className="desktop-folder-art"><ToneFolder /></div>
+            <span><Star size={12} fill="currentColor" className="study-fav-mark" />즐겨찾기<small className="wl-folder-count">{favorites}</small></span>
+          </button>}
+        </>
+        : !filtered.length ? <p className="finder-empty">{query ? '검색한 기록이 없어요. 다른 제목이나 태그로 검색해 보세요.' : filter === 'favorite' ? '기록을 열고 즐겨찾기를 누르면 여기에 모여요.' : '기록이 없어요. 위쪽 + 버튼으로 첫 기록을 남겨 보세요.'}</p>
+        : filtered.map(item => { const cover = item.attachments.find(file => file.mime.startsWith('image/')); return <div key={item.id} className="pf-thumb">
+          <button type="button" className="pf-thumb-open" onClick={() => { setReadingId(item.id); setNotice(''); setError(''); }} aria-label={`${item.title} 열기`}>
+            <span className="pf-thumb-image wl-thumb">{cover ? <img src={cover.url} alt="" loading="lazy" /> : <span className="wl-thumb-paper"><FileText size={22} strokeWidth={1.5} /><span>{item.summary?.trim() || item.content.replace(/\s+/g, ' ').slice(0, 70) || (item.attachments.length ? 'PDF 자료' : '공부 메모')}</span></span>}</span>
+            <span className="pf-thumb-name">{item.favorite && <Star size={11} fill="currentColor" className="study-fav-mark" />}{item.title}</span>
+            <span className="pf-thumb-folder">{query.trim() ? `${item.category} · ` : ''}{dateLabel(item.studiedOn)}</span>
+          </button>
+        </div>; })}
+      </div>}
     </main>
     {removing && <div className="study-modal-backdrop"><div className="study-modal" role="dialog" aria-modal="true" aria-labelledby="study-delete-title"><h2 id="study-delete-title">기록을 삭제할까요?</h2><p>‘{removing.title}’ 기록과 첨부 자료를<br />휴지통으로 옮깁니다. 휴지통에서 복원할 수 있어요.</p>{error && <p role="alert">{error}</p>}<div><button onClick={() => setRemoving(null)} disabled={busy}>취소</button><button className="study-primary" onClick={() => void mutate(removing, 'trash')} disabled={busy}>{busy ? <><SavingMark />이동 중…</> : '휴지통으로 이동'}</button></div></div></div>}
     {preview && <div className="study-preview" role="dialog" aria-modal="true" aria-label={preview.name} onKeyDown={event => { if (event.key === 'Escape') setPreview(null); }}><header><strong>{preview.name}</strong><a href={`${preview.url}?download=1`} target="_blank" rel="noopener noreferrer"><DownloadMark />다운로드</a><button onClick={() => setPreview(null)} aria-label="미리보기 닫기"><X size={22} /></button></header>{preview.mime.startsWith('image/') ? <img src={preview.url} alt={preview.name} /> : <div className="study-pdf"><a href={preview.url} target="_blank" rel="noopener noreferrer">PDF가 보이지 않으면 새 창에서 열기</a><iframe src={preview.url} title={preview.name} /></div>}</div>}
-  </div>;
+  </div>
+  </FinderMain>;
 }
