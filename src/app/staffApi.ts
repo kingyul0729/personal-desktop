@@ -13,5 +13,16 @@ export const staffGet = async (path: string, params: Record<string, string | num
   const q = new URLSearchParams(Object.entries(params).map(([k, v]) => [k, String(v)])).toString();
   return parse(await fetch(`/api/staff${path}${q ? `?${q}` : ''}`, { cache: 'no-store' }));
 };
-export const staffPost = async (path: string, body: unknown) =>
-  parse(await fetch(`/api/staff${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }));
+// 직원 자료를 바꾸면(근태·연차·연차 수정 등) 'staff-data-changed'를 알려 직원스케줄·직원연차·성과표가 함께 다시 불러온다.
+// 여러 칸을 한꺼번에 저장할 때는 마지막 저장 뒤 한 번만 알린다.
+let changedTimer: ReturnType<typeof setTimeout> | undefined;
+export const announceStaffChange = () => {
+  if (typeof window === 'undefined') return;
+  clearTimeout(changedTimer);
+  changedTimer = setTimeout(() => window.dispatchEvent(new Event('staff-data-changed')), 250);
+};
+export const staffPost = async (path: string, body: unknown) => {
+  const data = await parse(await fetch(`/api/staff${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }));
+  announceStaffChange();
+  return data;
+};

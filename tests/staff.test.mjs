@@ -96,3 +96,17 @@ test('changing status keeps the original numbers; clinic closed day does not use
   await post({ staff_id: 1, work_date: '2026-10-08', attendance: '병원휴무' });
   assert.equal(e.inv.prepare('SELECT used_leave FROM staff WHERE id = 1').get().used_leave, before);
 });
+
+test('leave set and cleared on the schedule shows up the same on the leave screen data', async () => {
+  const e = env();
+  const used = async () => (await call(e, '/api/staff/list')).data.find(x => x.id === 3).used_leave;
+  const has = async d => JSON.stringify((await call(e, '/api/staff/leave-dates?year=2026')).data.leave_dates?.['3'] || []).includes(d);
+  const before = await used();
+  assert.equal((await call(e, '/api/staff/attendance', { method: 'POST', body: { staff_id: 3, work_date: '2026-11-12', attendance: '연차' } })).status, 200);
+  assert.equal(await used(), before + 1);
+  assert.ok(await has('2026-11-12'));
+  // 같은 날을 다시 정상근무로 바꾸면 연차가 되돌아가고 연차 날짜에서도 빠진다
+  assert.equal((await call(e, '/api/staff/attendance', { method: 'POST', body: { staff_id: 3, work_date: '2026-11-12', attendance: '정상근무', start_time: '10:00', end_time: '19:30' } })).status, 200);
+  assert.equal(await used(), before);
+  assert.ok(!(await has('2026-11-12')));
+});

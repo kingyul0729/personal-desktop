@@ -65,7 +65,6 @@ export default function StaffLeave() {
         <button type="button" aria-label="다음 달" onClick={() => setMonth(m => shiftMonth(m, 1))}>›</button>
         <button type="button" className="sf-today" onClick={() => setMonth(todayLocal().slice(0, 7))}>이번 달</button>
       </div>
-      <small className="sf-hint">지급연차·사용연차·잔여연차는 달과 상관없이 지금까지의 누적이에요.</small>
     </div>
     <div className="lv-grid">{staff.map(x => {
       const all = (dates[String(x.id)] || []).slice().sort();
