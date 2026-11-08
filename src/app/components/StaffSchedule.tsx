@@ -288,7 +288,7 @@ function Performance({ month, data, notify }: { month: string; data: Data; notif
     <h3 className="sf-perf-title">{monthLabel(month)} 성과</h3>
     {rows == null ? <LoadingBox /> : !rows.length ? <p className="sf-hint">해당 월 성과 데이터가 없습니다</p> :
       <table className="sf-table is-click">
-        <thead><tr><th>직원</th><th className="num">실근무시간</th><th className="num">관리수</th><th className="num">시간당 관리수</th><th className="num">지정 수</th>{rows.some(r => r.consult_designated != null) && <th className="num">풀상담 지정<br /><small>성과 제외</small></th>}<th className="num">잔여 연차</th></tr></thead>
+        <thead><tr><th>직원</th><th className="num">실근무시간</th><th className="num">관리수</th><th className="num">시간당 관리수</th><th className="num">지정 수</th>{rows.some(r => r.consult_designated != null) && <th className="num">풀상담 지정<br /><small>성과 제외</small></th>}<th className="num">잔여연차</th></tr></thead>
         <tbody>{rows.map(r => <tr key={r.id} onClick={() => setDetail(r)} tabIndex={0} onKeyDown={e => { if (e.key === 'Enter') setDetail(r); }}>
           <td><b>{r.name}</b></td><td className="num">{dash(r.total_hours, '시간')}</td><td className="num">{dash(r.total_managed, '명')}</td>
           <td className="num">{dash(r.avg_managed, '명')}</td><td className="num">{dash(r.total_designated, '명')}</td>
@@ -300,7 +300,7 @@ function Performance({ month, data, notify }: { month: string; data: Data; notif
       <div className="sf-modal-back" onClick={() => setDetail(null)} />
       <div className="sf-modal-panel">
         <div className="sf-modal-head"><strong>{detail.name} · {Number(month.slice(5))}월 세부 근태</strong><button type="button" aria-label="닫기" onClick={() => setDetail(null)}>×</button></div>
-        <dl className="sf-dl"><dt>근무일</dt><dd>{dash(detail.work_days, '일')}</dd><dt>실근무시간</dt><dd>{dash(detail.total_hours, '시간')}</dd><dt>이달 연차 사용</dt><dd>{dash(detail.leave_used, '개')}</dd><dt>잔여 연차</dt><dd>{dash(detail.remain_leave, '개')}</dd></dl>
+        <dl className="sf-dl"><dt>근무일</dt><dd>{dash(detail.work_days, '일')}</dd><dt>실근무시간</dt><dd>{dash(detail.total_hours, '시간')}</dd><dt>이달 사용연차</dt><dd>{dash(detail.leave_used, '개')}</dd><dt>잔여연차</dt><dd>{dash(detail.remain_leave, '개')}</dd></dl>
         <p className="sf-sub">성과 확인 사유</p>
         {detail.exclusions?.length ? <ul className="sf-list">{detail.exclusions.map(e => <li key={e.date + e.reason}><span>{Number(e.date.slice(5, 7))}/{Number(e.date.slice(8))}</span>{e.reason}</li>)}</ul> : <p className="sf-hint">성과 확인이 필요한 사유가 없습니다</p>}
       </div>

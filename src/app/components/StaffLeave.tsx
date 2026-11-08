@@ -6,7 +6,7 @@ import { StaffUnavailable } from './StaffSchedule';
 import { staffGet, staffPost, StaffApiError } from '../staffApi';
 import { type StaffMember, WEEKDAYS, dateIn, daysInMonth, leaveSeq, monthLabel, shiftMonth, todayLocal, weekdayOf } from '../staffRules';
 
-// 직원연차 — 직원마다 자기 달력에 연차 날짜(순번 n/총)를 표시하고, 위에 총 개수 / 총 사용 / 잔여(누적, 월별 아님)를 보인다(2026-11-08 사용자 지정).
+// 직원연차 — 직원마다 자기 달력에 연차 날짜(순번 n/총)를 표시하고, 위에 지급연차 / 사용연차 / 잔여연차(누적, 월별 아님)를 보인다(2026-11-08 사용자 지정).
 // 연차 사용/되돌림은 직원스케줄 달력에서 '연차'를 고르면 서버가 처리한다(예전 앱과 같음).
 // 직원별 고유 파스텔 색(id로 고정 배정 — 새로고침해도 같은 색). [진한 글자색, 연한 바탕, 상단 줄]
 const STAFF_TONES: [string, string, string][] = [
@@ -20,7 +20,7 @@ const STAFF_TONES: [string, string, string][] = [
 const toneOf = (id: number) => STAFF_TONES[(id - 1 + STAFF_TONES.length) % STAFF_TONES.length];
 
 const LEAVE_REASONS = ['포상 연차 지급', '재계약 연차 재세팅', '연차 촉진 초기화', '행정 오류 수정', '신입 연차 당겨쓰기', '직접 입력'];
-const LOG_TYPE: Record<string, string> = { use: '연차 사용', revert: '사용 되돌림', adjust: '수동 수정', grant: '월 발생 지급', convert: '정직원 전환' };
+const LOG_TYPE: Record<string, string> = { use: '연차 사용', revert: '사용 되돌림', adjust: '수동 수정', grant: '월 지급연차', convert: '정직원 전환' };
 type LeaveLog = { id: number; log_type: string; log_date?: string | null; reason?: string | null; after_remain?: number | null; editor?: string | null; created_at?: string };
 
 export default function StaffLeave() {
@@ -54,7 +54,7 @@ export default function StaffLeave() {
         <button type="button" aria-label="다음 달" onClick={() => setMonth(m => shiftMonth(m, 1))}>›</button>
         <button type="button" className="sf-today" onClick={() => setMonth(todayLocal().slice(0, 7))}>이번 달</button>
       </div>
-      <small className="sf-hint">연차 숫자는 달과 상관없이 지금까지의 누적이에요.</small>
+      <small className="sf-hint">지급연차·사용연차·잔여연차는 달과 상관없이 지금까지의 누적이에요.</small>
     </div>
     <div className="lv-grid">{staff.map(x => {
       const all = (dates[String(x.id)] || []).slice().sort();
@@ -65,9 +65,9 @@ export default function StaffLeave() {
       return <section key={x.id} className="lv-card" style={{ '--c': ink, '--c-bg': tint, '--c-line': line } as React.CSSProperties}>
         <div className="lv-sum" aria-label={`${x.name} 연차`}>
           <strong className="lv-name" title={x.name}>{x.name.length >= 3 ? x.name.slice(1) : x.name}</strong>
-          <div><span>총 개수</span><b>{x.total_leave ?? '-'}</b></div>
-          <div><span>총 사용</span><b>{x.used_leave ?? '-'}</b></div>
-          <div className="lv-rest"><span>잔여</span><b className={remain < 0 ? 'is-warn' : ''}>{remain}</b></div>
+          <div><span>지급연차</span><b>{x.total_leave ?? '-'}</b></div>
+          <div><span>사용연차</span><b>{x.used_leave ?? '-'}</b></div>
+          <div className="lv-rest"><span>잔여연차</span><b className={remain < 0 ? 'is-warn' : ''}>{remain}</b></div>
         </div>
         <div className="lv-cal">{WEEKDAYS.map((w, k) => <i key={w} className={k === 0 ? 'is-sun' : k === 6 ? 'is-sat' : ''}>{w}</i>)}
           {Array.from({ length: lead }, (_, i) => <span key={`b${i}`} />)}
@@ -79,7 +79,7 @@ export default function StaffLeave() {
           })}
         </div>
         <div className="lv-list">
-          <p>{month.slice(0, 4)}년 사용 내역 <span>{all.length}일</span><button type="button" className="lv-link" onClick={() => setOpen(x)}>이력·수정</button></p>
+          <div className="lv-list-head"><p>{month.slice(0, 4)}년 사용 내역 <b>{all.length}일</b></p><button type="button" className="lv-link" onClick={() => setOpen(x)}>이력·수정</button></div>
           {all.length ? <ul className="lv-tags">{all.map(d => <li key={d}><button type="button" className={d.slice(0, 7) === month ? 'is-here' : ''} onClick={() => setMonth(d.slice(0, 7))} title="이 달 달력 보기">
             {Number(d.slice(5, 7))}.{String(Number(d.slice(8))).padStart(2, '0')}<small>{WEEKDAYS[weekdayOf(d)]}</small><span className="lv-seq">{(memos[`${x.id}|${d}`] || `${leaveSeq(x, idx, d)}/${x.total_leave ?? '-'}`).split('/')[0]}회</span></button></li>)}</ul>
             : <p className="lv-none">아직 사용한 연차가 없어요</p>}
@@ -101,7 +101,7 @@ function LeaveDetail({ staff, onClose, onSaved }: { staff: StaffMember; onClose:
       <div className="sf-modal-head"><strong>{staff.name} · 연차 이력</strong><button type="button" aria-label="닫기" onClick={onClose}>×</button></div>
       {logs == null ? <LoadingBox /> : !logs.length ? <p className="sf-hint">연차 이력이 없습니다</p>
         : <ul className="sf-list sf-log">{logs.map(l => <li key={l.id}><b>{LOG_TYPE[l.log_type] || l.log_type}</b>
-          <span>{[l.log_date, l.reason, `잔여 ${l.after_remain ?? '-'}`].filter(Boolean).join(' · ')}</span>
+          <span>{[l.log_date, l.reason, `잔여연차 ${l.after_remain ?? '-'}`].filter(Boolean).join(' · ')}</span>
           <small>{(l.created_at || '').slice(0, 16).replace('T', ' ')}{l.editor ? ` · ${l.editor}` : ''}</small></li>)}</ul>}
       <div className="sf-modal-foot"><button type="button" className="sf-btn" onClick={onClose}>닫기</button><button type="button" className="sf-btn is-primary" onClick={() => setEditing(true)}>연차 수정</button></div>
     </div>
@@ -121,8 +121,8 @@ function LeaveAdjust({ staff, onClose, onSaved }: { staff: StaffMember; onClose:
     <div className="sf-modal-back" onClick={onClose} />
     <div className="sf-modal-panel">
       <div className="sf-modal-head"><strong>{staff.name} · 연차 수정</strong><button type="button" aria-label="닫기" onClick={onClose}>×</button></div>
-      <label className="sf-input"><span>총 발생 연차</span><input type="number" value={total} onChange={e => setTotal(e.target.value)} /></label>
-      <label className="sf-input"><span>사용 연차</span><input type="number" value={used} onChange={e => setUsed(e.target.value)} /></label>
+      <label className="sf-input"><span>지급연차</span><input type="number" value={total} onChange={e => setTotal(e.target.value)} /></label>
+      <label className="sf-input"><span>사용연차</span><input type="number" value={used} onChange={e => setUsed(e.target.value)} /></label>
       <label className="sf-input"><span>수정 사유</span><select value={reason} onChange={e => setReason(e.target.value)}>{LEAVE_REASONS.map(r => <option key={r}>{r}</option>)}</select></label>
       <label className="sf-input"><span>메모</span><textarea rows={2} value={memo} onChange={e => setMemo(e.target.value)} /></label>
       {error && <p className="sf-hint is-warn">{error}</p>}

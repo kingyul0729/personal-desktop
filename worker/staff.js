@@ -737,9 +737,9 @@ staff.get("/performance", async (c) => {
       consult_designated: consultDgCnt > 0 ? consultDgSum : null,
       leave_used: leaveUsed,
       remain_leave: remainLeave(s.total_leave, s.used_leave),
-      // 총 발생 연차(카드 '총 연차' 표시용)
+      // 지급연차(화면 '지급연차' 표시용)
       total_leave: s.total_leave,
-      // 누적 사용 연차(표시 전용, 계산 로직과 무관): 달이 바뀌어도 유지·재계약 전까지 누적
+      // 사용연차 누적(표시 전용, 계산 로직과 무관): 달이 바뀌어도 유지·재계약 전까지 누적
       used_leave: s.used_leave,
       // 비고 표시용 메타 (성과 계산 로직과 무관): 해당 월 상담 일수
       consult_count: consultCount,
