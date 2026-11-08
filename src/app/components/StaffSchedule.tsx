@@ -263,6 +263,8 @@ function Performance({ month, data, notify }: { month: string; data: Data; notif
   const [saved, setSaved] = useState<number | null>(null);
   const loadPerf = useCallback(async () => { try { setRows(await staffGet('/performance', { month, include_retired: 0 })); } catch { setRows([]); } }, [month]);
   useEffect(() => { setRows(null); void loadPerf(); }, [loadPerf]);
+  // 다른 화면(직원연차 등)에서 바꾼 값도 성과표에 바로 반영
+  useEffect(() => { const on = () => void loadPerf(); window.addEventListener('staff-data-changed', on); return () => window.removeEventListener('staff-data-changed', on); }, [loadPerf]);
   const { staff, all } = data;
   const recOf = (sid: number) => (all[sid]?.attendance || []).find(r => r.work_date === date) || null;
   const list = staff.filter(s => s.status !== 'retired' && !(s.hire_date && s.hire_date > date));
