@@ -95,6 +95,7 @@ function Schedule({ month, data, notify }: { month: string; data: Data; notify: 
   useEffect(() => { setSel(s => (s.slice(0, 7) === month ? s : today.slice(0, 7) === month ? today : `${month}-01`)); }, [month, today]);
   const [busy, setBusy] = useState<number | null>(null);
   const [bulk, setBulk] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
   const { staff, all, cum } = data;
   const recOf = useCallback((sid: number, date: string) => (all[sid]?.attendance || []).find(r => r.work_date === date) || null, [all]);
@@ -145,7 +146,8 @@ function Schedule({ month, data, notify }: { month: string; data: Data; notify: 
     </div>
     <div className="sf-side">
       <div className="sf-dhead"><h3>{dayLabelKo(sel)}</h3>
-        <button type="button" className="sf-btn" onClick={() => setBulk(true)}>일괄 설정</button></div>
+        <span className="sf-dhead-btns"><button type="button" className="sf-btn" onClick={() => setImporting(true)}>파일로 넣기</button>
+        <button type="button" className="sf-btn" onClick={() => setBulk(true)}>일괄 설정</button></span></div>
       {off && <div className="sf-confirm">{confirmClear ? <>이 날짜의 휴일을 해제할까요?
         <span><button type="button" className="sf-btn" onClick={() => setConfirmClear(false)}>취소</button>
           <button type="button" className="sf-btn is-primary" onClick={async () => { try { await staffPost('/day-status', { work_date: sel, clear: true }); setConfirmClear(false); await data.reload(true); } catch (e) { notify(e instanceof Error ? e.message : '휴무 해제 실패'); } }}>해제</button></span></>
@@ -172,6 +174,7 @@ function Schedule({ month, data, notify }: { month: string; data: Data; notify: 
       })}
       <div className="sf-sum">출근 {working} / {list.length}</div>
     </div>
+    {importing && <ScheduleImport staff={staff} onClose={() => setImporting(false)} onDone={async msg => { notify(msg); await data.reload(true); }} />}
     {bulk && <BulkDialog month={month} staff={staff} all={all} onClose={() => setBulk(false)} onDone={async msg => { notify(msg); await data.reload(true); }} />}
   </div>;
 }
@@ -185,6 +188,67 @@ function EtcTimes({ rec, date, onSave }: { rec: AttendanceRecord; date: string; 
     <label><span>종료</span><input type="time" value={z} onChange={e => setZ(e.target.value)} onBlur={() => commit(a, z)} /></label>
     <label className="sf-grow"><span>메모</span><input type="text" value={memo} placeholder="선택 입력" onChange={e => setMemo(e.target.value)} onBlur={() => { if ((memo || null) !== (rec.memo || null)) onSave({ memo: memo || null }, '메모가 저장되었습니다'); }} /></label>
     {bad && <p className="sf-hint is-warn">종료 시간이 시작 시간보다 늦어야 합니다.</p>}
+  </div>;
+}
+
+// 한 달 스케줄 파일 넣기(2026-11-08 사용자: '매달 스케줄이 나오면 자동 입력'): Claude가 스케줄 사진·표를 옮겨 만든
+// JSON 파일 { format: 'dachaeum-schedule', month, rows: [{ name, date, state, start?, end?, memo? }] } 을 한 건씩 저장한다.
+// 저장은 직원스케줄에서 고르는 것과 같은 길(statePatch → POST /attendance)이라 연차 차감·팀장 기준 규칙이 그대로 적용된다.
+// 팀장 줄을 먼저 저장하고, 빨간 날은 건너뛴다.
+type ImportRow = { name: string; date: string; state: string; start?: string; end?: string; memo?: string };
+function ScheduleImport({ staff, onClose, onDone }: { staff: StaffMember[]; onClose: () => void; onDone: (msg: string) => Promise<void> }) {
+  const [rows, setRows] = useState<(ImportRow & { s: StaffMember })[] | null>(null);
+  const [error, setError] = useState(''), [running, setRunning] = useState(false), [done, setDone] = useState(0), [fileName, setFileName] = useState('');
+  const pick = async (f?: File) => {
+    setError(''); setRows(null); if (!f) return; setFileName(f.name);
+    try {
+      const j = JSON.parse(await f.text());
+      if (j?.format !== 'dachaeum-schedule' || !Array.isArray(j.rows)) throw new Error('스케줄 파일이 아니에요');
+      const out: (ImportRow & { s: StaffMember })[] = [], bad: string[] = [];
+      const valid = new Set([...ST_LEADER, '2출', '출퇴근 기타']);
+      for (const r of j.rows as ImportRow[]) {
+        const sm = staff.find(x => x.name === r.name || x.name.slice(1) === r.name);
+        if (!sm || !/^\d{4}-\d{2}-\d{2}$/.test(r.date) || !valid.has(r.state) || (!sm.is_leader && !optionsFor(sm).includes(r.state))) { bad.push(`${r.name} ${r.date} ${r.state}`); continue; }
+        if (isRedDay(r.date) && !WORK_STATES.includes(r.state)) continue;
+        out.push({ ...r, s: sm });
+      }
+      if (bad.length) throw new Error(`확인 필요: ${bad.slice(0, 5).join(', ')}${bad.length > 5 ? ` 외 ${bad.length - 5}건` : ''}`);
+      out.sort((a, b) => (b.s.is_leader ? 1 : 0) - (a.s.is_leader ? 1 : 0) || a.date.localeCompare(b.date));
+      setRows(out);
+    } catch (e) { setError(e instanceof Error ? e.message : '파일을 읽지 못했어요'); }
+  };
+  const apply = async () => {
+    if (!rows) return; setRunning(true);
+    const cache: Record<string, AttendanceRecord[]> = {};
+    const recOf = async (sm: StaffMember, d: string) => {
+      const k = `${sm.id}|${d.slice(0, 7)}`;
+      if (!cache[k]) cache[k] = ((await staffGet('/month', { staff_id: sm.id, month: d.slice(0, 7) })) as MonthData).attendance || [];
+      return cache[k].find(r => r.work_date === d) || null;
+    };
+    const fail: string[] = []; let ok = 0;
+    for (const r of rows) {
+      try {
+        const rec = await recOf(r.s, r.date);
+        const times = r.start && r.end ? { s: r.start, e: r.end } : undefined;
+        const patch = { ...statePatch(r.state, r.s, r.date, rec, times), ...(r.memo ? { memo: r.memo } : {}) };
+        await staffPost('/attendance', payloadFor(r.s, r.date, rec, patch)); ok++; setDone(ok);
+      } catch (e) { fail.push(`${r.name} ${Number(r.date.slice(5, 7))}/${Number(r.date.slice(8))}`); }
+    }
+    setRunning(false);
+    await onDone(fail.length ? `완료 ${ok}건 · 실패 ${fail.length}건` : `${ok}건 넣었습니다`);
+    if (fail.length) setError(`실패: ${fail.join(', ')}`); else onClose();
+  };
+  const leaves = rows?.filter(r => r.state === '연차').length || 0;
+  return <div className="sf-modal" role="dialog" aria-modal="true" aria-label="스케줄 파일로 넣기">
+    <div className="sf-modal-back" onClick={() => !running && onClose()} />
+    <div className="sf-modal-panel">
+      <div className="sf-modal-head"><strong>스케줄 파일로 넣기</strong><button type="button" aria-label="닫기" onClick={() => !running && onClose()}>×</button></div>
+      <label className="sf-btn"><input type="file" accept="application/json,.json" hidden onChange={e => void pick(e.target.files?.[0])} />{fileName || '파일 고르기'}</label>
+      {rows && <p className="sf-ask">{rows.length}건{leaves ? ` · 연차 ${leaves}건` : ''}{running ? ` · ${done}/${rows.length}` : ''}</p>}
+      {error && <p className="sf-hint is-warn">{error}</p>}
+      <div className="sf-modal-foot"><button type="button" className="sf-btn" disabled={running} onClick={onClose}>닫기</button>
+        <button type="button" className="sf-btn is-primary" disabled={!rows?.length || running} onClick={() => void apply()}>{running && <SavingMark />}넣기</button></div>
+    </div>
   </div>;
 }
 
