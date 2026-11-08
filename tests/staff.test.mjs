@@ -140,3 +140,12 @@ test('performance follows the leader: designated adds to managed only on leader 
   assert.equal(p.avg_managed, 0.8);
   assert.ok(p.exclusions.some(x => /팀장 2출 · 팀장 근무시간만 인정/.test(x.reason)));
 });
+
+test('on a full consultation day staff managed count is not taken either; designated is still recorded', async () => {
+  const e = env(); await call(e, '/api/staff/list');
+  const post = body => call(e, '/api/staff/attendance', { method: 'POST', body });
+  await post({ staff_id: 1, work_date: '2027-05-03', attendance: '상담' });
+  await post({ staff_id: 2, work_date: '2027-05-03', attendance: '정상근무', start_time: '10:00', end_time: '19:30', managed_count: 7, designated_count: 2 });
+  const r = e.inv.prepare(`SELECT managed_count, designated_count FROM staff_attendance WHERE staff_id = 2 AND work_date = '2027-05-03'`).get();
+  assert.deepEqual([r.managed_count, r.designated_count], [null, 2]);
+});

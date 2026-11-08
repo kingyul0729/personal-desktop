@@ -282,7 +282,11 @@ staff.post("/attendance", async (c) => {
   // 입력할 수 없는 상태(휴무·연차·상담 등)에서는 새 값을 받지 않고 기존 값을 그대로 둔다. 성과 계산은 상태로 거른다.
   const prior = await c.env.DB.prepare(`SELECT managed_count, designated_count, start_time, end_time FROM staff_attendance WHERE staff_id=? AND work_date=?`).bind(staffId, workDate).first();
   const numOrNull = (v) => v !== "" && v != null ? Math.max(0, Number(v)) : null;
-  const allowMg = allowManagedInput(att, etcType);
+  // 풀상담일(팀장 '상담')에는 팀장·직원 모두 관리 인원을 새로 받지 않는다(사용자 지정 2026-11-08) — 기존 값은 보존
+  const leaderRow = await c.env.DB.prepare(`SELECT id FROM staff WHERE is_leader=1 LIMIT 1`).first();
+  const leaderDay = leaderRow ? await c.env.DB.prepare(`SELECT attendance FROM staff_attendance WHERE staff_id=? AND work_date=?`).bind(leaderRow.id, workDate).first() : null;
+  const fullConsultDay = att === "\uC0C1\uB2F4" && sf.is_leader === 1 || leaderDay?.attendance === "\uC0C1\uB2F4" && sf.is_leader !== 1;
+  const allowMg = allowManagedInput(att, etcType) && !fullConsultDay;
   const managed = allowMg && b.managed_count !== undefined ? numOrNull(b.managed_count) : prior?.managed_count ?? null;
   const allowDg = allowDesignatedInput(att, etcType);
   const designated = allowDg && b.designated_count !== undefined ? numOrNull(b.designated_count) : prior?.designated_count ?? null;

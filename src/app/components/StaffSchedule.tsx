@@ -303,7 +303,10 @@ function Performance({ month, data, notify }: { month: string; data: Data; notif
     try { await staffPost('/attendance', payloadFor(s, date, r, { [field]: val })); setSaved(s.id); await data.reload(true); void loadPerf(); }
     catch (e) { notify(e instanceof Error ? e.message : '저장 실패'); }
   };
-  const can = (r: AttendanceRecord, field: string) => field === 'managed_count' ? (r.attendance === '정상근무' || isTimeEtc(r)) : !((r.attendance === '기타' && r.etc_type === 'unpaid') || r.attendance === '병원휴무');
+  // 풀상담일(팀장 '상담'): 그날은 팀장·직원 모두 관리 인원을 받지 않는다(지정 환자 수는 기록만)
+  const leaderId = staff.find(x => x.is_leader)?.id;
+  const fullConsult = leaderId != null && recOf(leaderId)?.attendance === '상담';
+  const can = (r: AttendanceRecord, field: string) => field === 'managed_count' ? !fullConsult && (r.attendance === '정상근무' || isTimeEtc(r)) : !((r.attendance === '기타' && r.etc_type === 'unpaid') || r.attendance === '병원휴무');
   const n = daysInMonth(month);
   const dash = (v: unknown, unit = '') => (v == null || v === '' ? '-' : `${v}${unit}`);
   return <div className="sf-perf">
@@ -319,7 +322,7 @@ function Performance({ month, data, notify }: { month: string; data: Data; notif
         {(['managed_count', 'designated_count'] as const).map(f => <td key={f} className="num">{r && can(r, f)
           ? <input key={`${date}-${r[f]}`} type="number" min={0} inputMode="numeric" className="sf-num" defaultValue={r[f] ?? ''} aria-label={`${s.name} ${f === 'managed_count' ? '관리 인원' : '지정 환자 수'}`}
             onBlur={e => void saveCell(s, f, e.target.value)} onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }} />
-          : <small>{f === 'managed_count' && r && s.is_leader && r.attendance === '상담' ? '풀상담일 · 관리실적 제외' : '—'}</small>}</td>)}
+          : <small>{f === 'managed_count' && r && fullConsult && (s.is_leader || r.attendance === '정상근무' || isTimeEtc(r)) ? '풀상담일 · 관리실적 제외' : '—'}</small>}</td>)}
         <td><small>{saved === s.id ? '저장됨' : ''}</small></td>
       </tr>; })}</tbody>
     </table>
