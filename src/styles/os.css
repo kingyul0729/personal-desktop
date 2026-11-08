@@ -1571,12 +1571,9 @@ a:hover > .download-mark .download-arrow, a:focus-visible > .download-mark .down
    상자 위에 색 띠를 두르지 않는다(사용자: AI가 만든 티). 용어: 지급연차 / 사용연차 / 잔여연차. */
 .sf-leave { --lv-ink: #2b2d31; --lv-sub: #5f636a; --lv-muted: #8d9197; --lv-line: #ece8e1; --lv-soft: #f7f5f0; --lv-sun: #c76462; --lv-sat: #5f80b3;
   background: #fbfaf7; gap: 20px; padding: 24px 24px 36px; }
-/* 카드는 가로로 늘어나지 않게 폭 최대 276px(열 수는 화면 폭으로 1~4열), 남는 폭은 오른쪽에 둔다(2026-11-08 사용자: '가로로 긴 게 싫어') */
-.sf-leave { container-type: inline-size; container-name: leave; }
-.lv-grid { display: grid; grid-template-columns: minmax(0, 300px); justify-content: start; grid-auto-rows: 1fr; gap: 16px; align-items: stretch; }
-@container leave (min-width: 488px) { .lv-grid { grid-template-columns: repeat(2, minmax(0, 276px)); } }
-@container leave (min-width: 744px) { .lv-grid { grid-template-columns: repeat(3, minmax(0, 276px)); } }
-@container leave (min-width: 1000px) { .lv-grid { grid-template-columns: repeat(4, minmax(0, 276px)); } }
+/* 열 수는 화면 폭으로 정하고(카드 폭 236px 이상), 남는 폭은 카드들이 나눠 채운다 — 오른쪽에 빈 자리를 남기지 않음.
+   아이패드 가로 3장·세로 2장에서 카드 폭이 약 240~300px라 가로로 길어지지 않는다. 높이는 같은 줄 카드끼리만 맞춘다. */
+.lv-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(236px, 1fr)); gap: 16px; align-items: stretch; }
 .lv-card { --c: #4f7f5f; --c-bg: #e9f3ec; --c-line: #9cc9aa; display: flex; flex-direction: column; gap: 16px; padding: 18px 18px 20px; background: #fffefc; border: 1px solid var(--lv-line); border-radius: 14px; min-width: 0; height: 100%; box-sizing: border-box; container-type: inline-size; }
 
 /* 맨 위 한 줄: 이름 | 지급연차 | 사용연차 | 잔여연차 — 칸마다 가운데 */
@@ -1627,7 +1624,7 @@ a:hover > .download-mark .download-arrow, a:focus-visible > .download-mark .down
 }
 @media (max-width: 640px) {
   .sf-wrap.sf-leave { padding: 16px 16px 28px; }
-  .lv-grid { justify-content: center; grid-auto-rows: auto; }
+  .lv-grid { grid-template-columns: minmax(0, 1fr); }
 }
 
 /* ===== 재고주문 2분할 (2026-11-08 사용자 지정: 왼쪽 품목 목록 약 36% | 오른쪽 상세 약 64%, 미색·얇은 선, 그림자·상단 띠 없음) ===== */
