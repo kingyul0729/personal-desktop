@@ -8,14 +8,15 @@ import { type StaffMember, WEEKDAYS, dateIn, daysInMonth, leaveSeq, monthLabel, 
 
 // 직원연차 — 직원마다 자기 달력에 연차 날짜(순번 n/총)를 표시하고, 위에 지급연차 / 사용연차 / 잔여연차(누적, 월별 아님)를 보인다(2026-11-08 사용자 지정).
 // 연차 사용/되돌림은 직원스케줄 달력에서 '연차'를 고르면 서버가 처리한다(예전 앱과 같음).
-// 직원별 고유 파스텔 색(id로 고정 배정 — 새로고침해도 같은 색). [진한 글자색, 연한 바탕, 상단 줄]
+// 직원별 고유 파스텔 색(id로 고정 배정 — 새로고침해도 같은 색). [글자색, 연한 바탕, 테두리]
+// 2026-11-08 사용자 '너무 쨍해' → 채도를 낮춘 차분한 톤.
 const STAFF_TONES: [string, string, string][] = [
-  ['#4f7f5f', '#e9f3ec', '#9cc9aa'], // 세이지
-  ['#6b58b8', '#efecfa', '#b9adeb'], // 라벤더
-  ['#b25d38', '#fcefe7', '#f0b393'], // 피치
-  ['#8a6a17', '#faf2db', '#e8cc79'], // 버터
-  ['#a84a6c', '#fbecf1', '#eaa6bf'], // 로즈
-  ['#2f7a73', '#e5f3f1', '#93cbc5'], // 민트그린
+  ['#5e7a66', '#eef3ef', '#c6d7cb'], // 세이지
+  ['#6c6690', '#f1f0f6', '#cfcbe0'], // 라벤더
+  ['#966b55', '#f7f0eb', '#e2cbbd'], // 피치
+  ['#7f6c3a', '#f8f3e2', '#e0d3aa'], // 버터
+  ['#8f6273', '#f6eff1', '#dcc6ce'], // 로즈
+  ['#557a76', '#eef4f3', '#c2d8d5'], // 민트그린
 ];
 const toneOf = (id: number) => STAFF_TONES[(id - 1 + STAFF_TONES.length) % STAFF_TONES.length];
 
@@ -64,7 +65,7 @@ export default function StaffLeave() {
       const [ink, tint, line] = toneOf(x.id);
       return <section key={x.id} className="lv-card" style={{ '--c': ink, '--c-bg': tint, '--c-line': line } as React.CSSProperties}>
         <div className="lv-sum" aria-label={`${x.name} 연차`}>
-          <strong className="lv-name" title={x.name}>{x.name.length >= 3 ? x.name.slice(1) : x.name}</strong>
+          <strong className="lv-name" title={x.name}><i>{x.name.length >= 3 ? x.name.slice(1) : x.name}</i></strong>
           <div><span>지급연차</span><b>{x.total_leave ?? '-'}</b></div>
           <div><span>사용연차</span><b>{x.used_leave ?? '-'}</b></div>
           <div className="lv-rest"><span>잔여연차</span><b className={remain < 0 ? 'is-warn' : ''}>{remain}</b></div>
