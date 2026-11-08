@@ -3,33 +3,12 @@ import { useCallback, useEffect, useState } from 'react';
 import { LoadingBox, SavingMark } from './Feedback';
 import { OldDataBanner } from './Inventory';
 import { StaffUnavailable } from './StaffSchedule';
+import { toneOf, vividOf } from './staffTone';
 import { staffGet, staffPost, StaffApiError } from '../staffApi';
 import { type StaffMember, WEEKDAYS, dateIn, daysInMonth, isRedDay, leaveSeq, monthLabel, shiftMonth, todayLocal, weekdayOf } from '../staffRules';
 
 // 직원연차 — 직원마다 자기 달력에 연차 날짜(순번 n/총)를 표시하고, 위에 지급연차 / 사용연차 / 잔여연차(누적, 월별 아님)를 보인다(2026-11-08 사용자 지정).
 // 연차 사용/되돌림은 직원스케줄 달력에서 '연차'를 고르면 서버가 처리한다(예전 앱과 같음).
-// 직원별 고유 파스텔 색(id로 고정 배정 — 새로고침해도 같은 색). [글자색, 연한 바탕, 테두리]
-// 2026-11-08 사용자 '너무 쨍해' → 채도를 낮춘 차분한 톤.
-const STAFF_TONES: [string, string, string][] = [
-  ['#5e7a66', '#eef3ef', '#c6d7cb'], // 세이지
-  ['#6c6690', '#f1f0f6', '#cfcbe0'], // 라벤더
-  ['#966b55', '#f7f0eb', '#e2cbbd'], // 피치
-  ['#7f6c3a', '#f8f3e2', '#e0d3aa'], // 버터
-  ['#8f6273', '#f6eff1', '#dcc6ce'], // 로즈
-  ['#557a76', '#eef4f3', '#c2d8d5'], // 민트그린
-];
-// 이름 타일·달력 날짜는 채도를 낮추기 전 색 그대로(2026-11-08 사용자 요청). [글자색, 연한 바탕, 테두리]
-const STAFF_TONES_VIVID: [string, string, string][] = [
-  ['#4f7f5f', '#e9f3ec', '#9cc9aa'], // 세이지
-  ['#6b58b8', '#efecfa', '#b9adeb'], // 라벤더
-  ['#b25d38', '#fcefe7', '#f0b393'], // 피치
-  ['#8a6a17', '#faf2db', '#e8cc79'], // 버터
-  ['#a84a6c', '#fbecf1', '#eaa6bf'], // 로즈
-  ['#2f7a73', '#e5f3f1', '#93cbc5'], // 민트그린
-];
-const vividOf = (id: number) => STAFF_TONES_VIVID[(id - 1 + STAFF_TONES_VIVID.length) % STAFF_TONES_VIVID.length];
-const toneOf = (id: number) => STAFF_TONES[(id - 1 + STAFF_TONES.length) % STAFF_TONES.length];
-
 const LEAVE_REASONS = ['포상 연차 지급', '재계약 연차 재세팅', '연차 촉진 초기화', '행정 오류 수정', '신입 연차 당겨쓰기', '직접 입력'];
 const LOG_TYPE: Record<string, string> = { use: '연차 사용', revert: '사용 되돌림', adjust: '수동 수정', grant: '월 지급연차', convert: '정직원 전환' };
 type LeaveLog = { id: number; log_type: string; log_date?: string | null; reason?: string | null; after_remain?: number | null; editor?: string | null; created_at?: string };

@@ -118,19 +118,19 @@ function DailyClose({ today, notify, onSaved }: { items: InvItem[]; today: strin
     catch (e) { notify(errText(e)); } finally { setBusy(false); }
   };
   return <div className={`iv-daily${off ? ' is-off' : ''}`}>
-    <div className="iv-row">
+    <div className="iv-row iv-daybar">
       <label className="sf-input"><span>마감일</span><input type="date" value={date} onChange={e => setDate(e.target.value)} /></label>
       <label className="sf-input"><span>총 피부관리 인원</span>{data.patients_auto != null
         ? <input type="number" value={data.patients_auto} readOnly disabled aria-label="총 피부관리 인원(성과 관리 인원 합계)" />
         : <input type="number" min={0} inputMode="numeric" value={patients} onChange={e => setPatients(e.target.value)} placeholder="명" />}</label>
       <label className="sf-input"><span>메모(휴무 등)</span><input type="text" value={status} onChange={e => setStatus(e.target.value)} placeholder="선택" /></label>
-      {off && <span className="iv-tag iv-off-tag">{data.check?.label}</span>}
-      <button type="button" className="sf-btn is-primary" disabled={busy} onClick={() => void save()}>{busy && <SavingMark />}저장</button>
+      <div className="iv-row-acts">{off && <span className="iv-tag iv-off-tag">{data.check?.label}</span>}
+        <button type="button" className="sf-btn is-primary" disabled={busy} onClick={() => void save()}>{busy && <SavingMark />}저장</button></div>
     </div>
     <div className="iv-grid">{data.items.map(it => {
       const u = usedOf(it), before = it.hospital_stock + (it.used || 0), count = byCount(it);
       return <div key={it.id} className="iv-dcard">
-        <b>{it.name}</b>
+        <div className="iv-dcard-head"><b>{it.name}</b><span className="iv-unit">{it.stock_unit}</span></div>
         <dl><dt>마감 전 재고</dt><dd>{withUnit(before, it.stock_unit)}</dd></dl>
         <label className="sf-input"><span>{count ? '마감재고' : '당일 사용량'}</span>
           <input type="number" min={0} inputMode="decimal" value={vals[it.id] ?? ''} onChange={e => setVals(v => ({ ...v, [it.id]: e.target.value }))} placeholder={it.stock_unit} /></label>

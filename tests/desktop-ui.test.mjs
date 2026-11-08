@@ -112,7 +112,7 @@ test('the heart notice shows the message with a close button, and the loading bo
   close.props.onClick();
   assert.equal(closed, 1);
   const loading = ui.renderLoading();
-  assert.ok(loading.includes('role="status"') && loading.includes('불러오는 중…') && loading.includes('class="spinner"') && (loading.match(/<rect/g) ?? []).length === 12);
+  assert.ok(loading.includes('role="status"') && loading.includes('불러오는 중…') && loading.includes('class="spinner"') && loading.includes('spinner-track') && loading.includes('spinner-arc'));
   assert.ok(ui.renderLoading('가격표 불러오는 중…').includes('가격표 불러오는 중…'));
 });
 

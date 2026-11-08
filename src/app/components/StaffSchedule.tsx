@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { LoadingBox, SavingMark } from './Feedback';
 import { OldDataBanner } from './Inventory';
+import { StaffAvatar } from './staffTone';
 import { staffGet, staffPost, StaffApiError } from '../staffApi';
 import {
   type AttendanceRecord, type MonthData, type StaffMember, WEEKDAYS, WORK_STATES, ST_LEADER, ST_STAFF, calendarLines, dateIn, dayLabelKo, daysInMonth, diffMin,
@@ -137,7 +138,7 @@ function Schedule({ month, data, notify }: { month: string; data: Data; notify: 
           const date = dateIn(month, i + 1), cell = calendarLines(date, staff, recOf, isHoliday(date), cum, today);
           return <button key={date} type="button" className={`sf-day${date === sel ? ' is-sel' : ''}${date === today ? ' is-today' : ''}${isRedDay(date) ? ' is-sun' : ''}`} aria-pressed={date === sel} onClick={() => { setSel(date); setConfirmClear(false); }}>
             <span className="sf-dn">{i + 1}</span>
-            {cell.all ? <span className="sf-ev is-hol">휴일</span> : cell.lines.map(l => <span key={l.sid} className={`sf-ev is-${l.kind}`}><b>{l.name}</b> {l.label}</span>)}
+            {cell.all ? <span className="sf-ev is-hol">휴일</span> : cell.lines.map(l => <span key={l.sid} className={`sf-ev is-${l.kind}`}><b><i>{l.name.length >= 3 ? l.name[0] : ''}</i>{l.name.length >= 3 ? l.name.slice(1) : l.name}</b> <span>{l.label}</span></span>)}
             {cell.none > 0 && <span className="sf-ev is-none">미입력 {cell.none}</span>}
           </button>;
         })}
@@ -161,7 +162,7 @@ function Schedule({ month, data, notify }: { month: string; data: Data; notify: 
         const cur = st || (isHoliday(sel) ? '휴일' : '');
         const blank = isReadonly(s, sel) ? '퇴사' : sel <= today && weekdayOf(sel) !== 0 ? '미입력' : '-';
         return <div key={s.id} className="sf-srow">
-          <div className="sf-sline"><b>{s.name}</b>{s.is_leader ? <small>팀장</small> : null}
+          <div className="sf-sline"><StaffAvatar id={s.id} name={s.name} /><b>{s.name}</b>{s.is_leader ? <small>팀장</small> : null}
             {busy === s.id && <SavingMark />}
             <select className={`sf-select${st && st !== '정상근무' ? ' is-ch' : ''}${!cur ? ' is-none' : ''}`} value={cur} disabled={locked || busy === s.id} aria-label={`${s.name} 상태`} onChange={e => choose(s, e.target.value)}>
               {!cur && <option value="" disabled>{blank}</option>}

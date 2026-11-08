@@ -20,10 +20,11 @@ export function DesktopNotice({ message, onClose }: { message: string; onClose: 
   </div>;
 }
 
-// 불러오는 중: 회색 막대 12개가 돌아가는 스피너(사용자가 고른 그림) + 글자.
+// 불러오는 중: 연한 바탕 고리 위로 진한 호가 도는 스피너(2026-11-09 Fluent 2 UI 키트 기준, 예전 막대 12개 대체).
 export function Spinner({ size = 28 }: { size?: number }) {
-  return <svg className="spinner" width={size} height={size} viewBox="0 0 40 40" aria-hidden="true">
-    {Array.from({ length: 12 }, (_, i) => <rect key={i} x="18.25" y="3" width="3.5" height="10" rx="1.75" transform={`rotate(${i * 30} 20 20)`} style={{ opacity: 0.18 + (i / 11) * 0.82 }} />)}
+  return <svg className="spinner" width={size} height={size} viewBox="0 0 32 32" aria-hidden="true">
+    <circle cx="16" cy="16" r="13" className="spinner-track" />
+    <path d="M16 3 A13 13 0 0 1 29 16" className="spinner-arc" />
   </svg>;
 }
 export function LoadingBox({ label = '불러오는 중…' }: { label?: string }) {
@@ -33,11 +34,11 @@ export function LoadingBox({ label = '불러오는 중…' }: { label?: string }
   </div>;
 }
 
-// 저장·이동 중: 점 하나 위로 짧은 호가 도는 표시. 버튼 글자 앞에 붙는다.
+// 저장·이동 중: 버튼 글자 앞의 작은 고리 스피너(같은 Fluent 2 모양).
 export function SavingMark() {
   return <svg className="saving-mark" width="16" height="16" viewBox="0 0 20 20" aria-hidden="true">
-    <circle cx="10" cy="11.5" r="4.5" className="saving-dot" />
-    <path d="M4.54 4.99 A8.5 8.5 0 0 1 15.46 4.99" className="saving-arc" />
+    <circle cx="10" cy="10" r="7.5" className="saving-track" />
+    <path d="M10 2.5 A7.5 7.5 0 0 1 17.5 10" className="saving-arc" />
   </svg>;
 }
 

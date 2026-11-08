@@ -1789,3 +1789,204 @@ a:hover > .download-mark .download-arrow, a:focus-visible > .download-mark .down
 
 .iv-off-tag { align-self: flex-end; height: 36px; padding: 0 14px; font-size: 13px; }
 .sf-dhead-btns { display: inline-flex; gap: 6px; }
+
+/* ===== UI 키트 v5 (2026-11-09 사용자 지정: Fluent 2 이미지 — 탭·버튼·입력·카드·아바타·스피너·슬라이더) =====
+   색은 그대로(직원·재고 = 세이지, 나머지 = 웜그레이, 파랑은 금액 계산만). 모양만 Fluent 2처럼:
+   간격 4·8·12·16·24, 컨트롤 높이 36(터치 기기 40), 둥글기 8(컨트롤)·12(카드)·999(알약 탭), 포커스는 진한 2px 테두리.
+   상자 위 색 띠·그림자 없음. 내용 폭 기준(@container sfw)으로 아이패드 가로·세로·휴대폰을 나눈다. */
+.sf-wrap { container-type: inline-size; container-name: sfw; --ui-h: 36px; --ui-r: 8px; --ui-card-r: 12px; --ui-line: #e6e1d9; --ui-line-strong: #d6d0c6; --ui-ink: #2b2d31; --ui-sub: #7d8187; --ui-faint: #a3a6ab; --ui-fill: #f6f4f0; }
+.sf-wrap:has(.sf-perf) { container-name: sfw perf; }
+@media (pointer: coarse) { .sf-wrap { --ui-h: 40px; } }
+.sf-wrap { padding: 24px 28px 40px; gap: 20px; }
+
+/* 포커스: 이미지의 진한 테두리 */
+.sf-wrap :is(button, input, select, textarea, [role="tab"]):focus-visible,
+.app-finder .finder-sidebar button:focus-visible { outline: 2px solid var(--ui-ink, #2b2d31); outline-offset: 2px; }
+
+/* 버튼 */
+.sf-wrap .sf-btn, .sf-wrap .sf-month button { height: var(--ui-h); min-width: var(--ui-h); padding: 0 14px; border: 1px solid var(--ui-line-strong); border-radius: var(--ui-r); background: #fff; color: var(--ui-ink); font-size: 14px; font-weight: 600; white-space: nowrap; transition: background .12s, border-color .12s; }
+.sf-wrap .sf-btn:hover, .sf-wrap .sf-month button:hover { background: #f5f3ef; border-color: #cbc4b9; }
+.sf-wrap .sf-btn:active, .sf-wrap .sf-month button:active { background: #ece9e3; }
+.sf-wrap .sf-btn.is-primary { background: var(--sage); border-color: var(--sage); color: #fff; }
+.sf-wrap .sf-btn.is-primary:hover { background: var(--sage-ink); border-color: var(--sage-ink); }
+.sf-wrap .sf-btn.is-primary:active { background: #3e5546; }
+.sf-wrap .sf-btn.is-danger { background: #fff; border-color: #e7c3c0; color: #c2504a; }
+.sf-wrap .sf-btn:disabled { background: #f3f1ee; border-color: #ebe7e1; color: #b2aea8; opacity: 1; }
+.sf-wrap .sf-btn.is-primary:disabled { background: #c9d4cc; border-color: #c9d4cc; color: #fff; }
+.sf-wrap .sf-month strong { font-size: 18px; font-weight: 700; letter-spacing: -.01em; }
+
+/* 탭(Fluent 알약 탭): 상자로 묶지 않고, 고른 탭만 연한 세이지 알약 + 테두리 */
+.sf-wrap .sf-seg, .sf-wrap .iv-obar .sf-seg { display: inline-flex; gap: 4px; padding: 0; border: 0; border-radius: 0; background: none; overflow: visible; }
+.sf-wrap .sf-seg button, .sf-wrap .iv-obar .sf-seg button { height: var(--ui-h); padding: 0 16px; border: 1px solid transparent; border-radius: 999px; background: none; color: #5f636a; font-size: 14px; font-weight: 500; white-space: nowrap; }
+.sf-wrap .sf-seg button:hover { background: #f1eee9; color: var(--ui-ink); }
+.sf-wrap .sf-seg button[aria-selected="true"] { background: var(--sage-bg); border-color: var(--sage-line); color: var(--sage-ink); font-weight: 600; }
+.sf-wrap .sf-pills { gap: 6px; }
+.sf-wrap .sf-pills button { height: 32px; padding: 0 14px; border: 1px solid var(--ui-line); border-radius: 999px; background: #fff; font-size: 13px; font-weight: 500; color: #5f636a; }
+.sf-wrap .sf-pills button:hover { background: #f5f3ef; }
+.sf-wrap .sf-pills button[aria-pressed="true"] { background: var(--sage-bg); border-color: var(--sage-line); color: var(--sage-ink); font-weight: 600; }
+.sf-wrap .sf-daypick button { min-width: 36px; padding: 0; }
+
+/* 입력: 칸 이름 위(12px), 칸 높이 36/40, 테두리 + 아래 선 조금 진하게(Fluent 입력) */
+.sf-wrap .sf-input { gap: 6px; font-size: 12px; font-weight: 500; color: var(--ui-sub); min-width: 0; }
+.sf-wrap :is(.sf-input input, .sf-input select, .sf-times input, .sf-range input, .sf-select, .iv-pair input, .iv-pair select, .iv-search, .iv-code input) { height: var(--ui-h); padding: 0 12px; border: 1px solid var(--ui-line); border-bottom-color: var(--ui-line-strong); border-radius: var(--ui-r); background: #fff; color: var(--ui-ink); font-size: 14px; box-sizing: border-box; min-width: 0; transition: border-color .12s, box-shadow .12s; }
+.sf-wrap .sf-input textarea { padding: 8px 12px; border: 1px solid var(--ui-line); border-bottom-color: var(--ui-line-strong); border-radius: var(--ui-r); font-size: 14px; }
+.sf-wrap :is(.sf-input input, .sf-input select, .sf-input textarea, .sf-times input, .sf-select, .iv-pair input, .iv-pair select, .iv-search, .iv-code input):hover { border-color: var(--ui-line-strong); }
+.sf-wrap :is(.sf-input input, .sf-input select, .sf-input textarea, .sf-times input, .sf-select, .iv-pair input, .iv-pair select, .iv-search, .iv-code input, .sf-num):focus { outline: none; border-color: var(--sage); box-shadow: inset 0 -1px 0 var(--sage); }
+.sf-wrap :is(.sf-input input, .sf-num):disabled, .sf-wrap .sf-input input[readonly] { background: var(--ui-fill); border-color: #ece8e1; color: #6b6f75; -webkit-text-fill-color: #6b6f75; opacity: 1; }
+.sf-wrap .sf-input input::placeholder, .sf-wrap .iv-search::placeholder { color: var(--ui-faint); }
+.sf-wrap .sf-num { height: 32px; border: 1px solid var(--ui-line); border-bottom-color: var(--ui-line-strong); border-radius: 6px; background: #fff; }
+.sf-wrap .sf-select.is-ch { border-color: var(--sage-line); background: #f7faf8; color: var(--sage-ink); }
+
+/* 카드(Fluent 카드): 흰 바탕, 얇은 선, 12px 둥글기, 16~20 여백 */
+.sf-wrap .iv-sec, .iv-block, .sf-perf > section { border-radius: var(--ui-card-r); border-color: #ece8e1; padding: 20px; gap: 16px; }
+.sf-wrap .sf-cal, .sf-wrap .sf-side { border-color: #ece8e1; border-radius: var(--ui-card-r); }
+.sf-wrap .sf-table { border-radius: var(--ui-card-r); }
+.sf-wrap .sf-table tbody tr { transition: background .1s; }
+.sf-wrap .sf-table tbody tr:hover { background: #faf8f5; }
+
+/* 아바타: 동그라미 + 성 뺀 이름(직원마다 같은 색) */
+.ui-avatar { display: inline-grid; place-items: center; flex: none; border-radius: 50%; font-weight: 700; line-height: 1; letter-spacing: -.03em; font-style: normal; }
+
+/* 스피너(Fluent): 연한 고리 + 도는 진한 호 */
+.spinner { fill: none; animation: ui-spin 1s linear infinite; }
+.spinner-track { fill: none; stroke: #e7e3dd; stroke-width: 3.5; }
+.spinner-arc { fill: none; stroke: #45413d; stroke-width: 3.5; stroke-linecap: round; }
+.sf-wrap .spinner-arc { stroke: var(--sage); }
+.saving-mark { margin-right: 6px; vertical-align: -3px; }
+.saving-track { fill: none; stroke: currentColor; stroke-width: 2.4; opacity: .28; }
+.saving-mark .saving-arc { fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; opacity: 1; transform-origin: 10px 10px; animation: ui-spin .9s linear infinite; }
+@keyframes ui-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spinner, .saving-mark .saving-arc { animation: none !important; } }
+
+/* 슬라이더(Fluent): 진한 채운 선 + 흰 테두리 동그라미 손잡이 */
+.app-finder input[type="range"], .finder-status input[type="range"] { -webkit-appearance: none; appearance: none; height: 20px; background: transparent; accent-color: #45413d; cursor: pointer; }
+.app-finder input[type="range"]::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: #cfcac3; }
+.app-finder input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; margin-top: -6px; border-radius: 50%; background: #45413d; border: 3px solid #fff; box-shadow: 0 0 0 1px #d6d0c6; }
+.app-finder input[type="range"]::-moz-range-track { height: 4px; border-radius: 2px; background: #cfcac3; }
+.app-finder input[type="range"]::-moz-range-progress { height: 4px; border-radius: 2px; background: #45413d; }
+.app-finder input[type="range"]::-moz-range-thumb { width: 12px; height: 12px; border-radius: 50%; background: #45413d; border: 3px solid #fff; box-shadow: 0 0 0 1px #d6d0c6; }
+
+/* 왼쪽 메뉴(Fluent 내비): 고른 항목은 연한 알약, 글자 굵게 */
+.app-finder .finder-sidebar button[aria-pressed="true"] { background: #e3e0dc; font-weight: 600; }
+.app-finder .finder-sidebar button { border-radius: 8px; }
+
+/* ── 재고체크 ───────────────────────── */
+/* 맨 위 숫자 카드: 한 줄을 꽉 채움(오른쪽 빈 자리 없음) */
+.sf-wrap .iv-cards { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+.sf-wrap .iv-card { padding: 16px 18px; gap: 2px; border-radius: var(--ui-card-r); min-width: 0; }
+.sf-wrap .iv-card > span { font-size: 12px; font-weight: 500; color: var(--ui-sub); }
+.sf-wrap .iv-card > b { font-size: 14px; font-weight: 600; color: var(--ui-ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sf-wrap .iv-card > strong { margin-top: 6px; font-size: 24px; line-height: 30px; font-weight: 700; letter-spacing: -.01em; }
+.sf-wrap .iv-card > small { margin-top: 2px; font-size: 12px; line-height: 17px; color: var(--ui-sub); }
+
+/* 일일 재고: 위 입력 줄 = 흰 카드 한 장(마감일 | 총 피부관리 인원 | 메모 | 상태·저장), 아래 품목 카드 같은 폭 격자 */
+.iv-daily { display: flex; flex-direction: column; gap: 16px; }
+.sf-wrap .iv-daybar { display: grid; grid-template-columns: minmax(150px, 1fr) minmax(130px, 1fr) minmax(160px, 1.4fr) auto; align-items: end; gap: 12px 16px; padding: 18px 20px; background: #fff; border: 1px solid #ece8e1; border-radius: var(--ui-card-r); }
+.sf-wrap .iv-daybar .sf-input { min-width: 0; }
+.iv-row-acts { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+.iv-row-acts .sf-btn.is-primary { min-width: 84px; }
+.sf-wrap .iv-off-tag { align-self: auto; height: var(--ui-h); padding: 0 12px; border-radius: 999px; background: #f4efe6; color: #8a6a3a; font-size: 12.5px; font-weight: 600; }
+.sf-wrap .iv-grid { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+.sf-wrap .iv-dcard { padding: 16px 18px 14px; gap: 12px; border-color: #ece8e1; border-radius: var(--ui-card-r); }
+.iv-dcard-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; }
+.iv-dcard-head b { font-size: 15px; line-height: 22px; font-weight: 600; color: var(--ui-ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.iv-unit { flex: none; height: 22px; padding: 0 8px; display: inline-flex; align-items: center; border-radius: 999px; background: var(--ui-fill); color: var(--ui-sub); font-size: 11.5px; font-weight: 600; }
+.sf-wrap .iv-dcard dl { gap: 6px 12px; font-size: 13px; line-height: 18px; }
+.sf-wrap .iv-dcard dd { color: var(--ui-ink); font-weight: 500; }
+.sf-wrap .iv-dcard dl:last-child { padding-top: 10px; border-top: 1px solid #f1ede7; }
+.sf-wrap .iv-dcard .sf-input input { font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* 아이패드 세로(내용 폭 좁음): 입력 줄 2열, 메모·버튼은 아래 줄 */
+@container sfw (max-width: 760px) {
+  .sf-wrap .iv-daybar { grid-template-columns: 1fr 1fr; }
+  .sf-wrap .iv-daybar > label:nth-child(3) { grid-column: 1 / -1; }
+  .iv-row-acts { grid-column: 1 / -1; }
+  .iv-row-acts .sf-btn.is-primary { flex: 1; }
+}
+/* 휴대폰: 여백 줄이고 숫자 카드는 2열, 품목 카드는 1열 */
+@container sfw (max-width: 520px) {
+  .sf-wrap .iv-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .sf-wrap .iv-card { padding: 14px; }
+  .sf-wrap .iv-card > strong { font-size: 20px; line-height: 26px; }
+  .sf-wrap .iv-card > small { display: none; }
+  .sf-wrap .iv-daybar { padding: 16px; gap: 12px; }
+  .sf-wrap .iv-grid { grid-template-columns: minmax(0, 1fr); }
+  .sf-wrap .sf-seg button { padding: 0 14px; }
+}
+@media (max-width: 640px) { .sf-wrap { padding: 16px 16px 32px; gap: 16px; } .sf-wrap .iv-sec, .iv-block, .sf-perf > section { padding: 16px; } }
+
+/* 전체 재고 표·기록 표: 좁으면 옆으로 밀어서 보기(표가 찌그러지지 않게) */
+@container sfw (max-width: 640px) {
+  .sf-wrap > .sf-table, .sf-wrap .iv-sec > .sf-table { display: block; overflow-x: auto; white-space: nowrap; }
+}
+/* 숫자 카드는 늘 한 줄(개수만큼 똑같이 나눔), 휴대폰은 옆으로 밀어서 보기 */
+.sf-wrap .iv-cards { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); }
+@container sfw (max-width: 520px) {
+  .sf-wrap .iv-cards { grid-template-columns: none; grid-auto-columns: minmax(150px, 46%); overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; margin: 0 -16px; padding: 0 16px 2px; scroll-padding: 0 16px; }
+  .sf-wrap .iv-cards::-webkit-scrollbar { display: none; }
+  .sf-wrap .iv-card { scroll-snap-align: start; }
+}
+
+/* ── 직원스케줄 달력 칩: 성 뺀 이름(굵게) + 상태, 글자 단위로 깨지지 않게 ── */
+.sf-wrap .sf-ev { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 4px; padding: 2px 6px; border-radius: 6px; font-size: 11.5px; line-height: 1.4; word-break: keep-all; overflow-wrap: normal; }
+.sf-wrap .sf-ev b { white-space: nowrap; }
+.sf-wrap .sf-ev b i { display: none; }
+.sf-wrap .sf-day { gap: 3px; padding: 6px 5px; }
+.sf-wrap .sf-dhead h3 { white-space: nowrap; font-size: 16px; }
+.sf-wrap .sf-dhead { flex-wrap: wrap; row-gap: 8px; }
+.sf-wrap .sf-side { padding: 16px; gap: 12px; }
+.sf-wrap .sf-srow { padding-bottom: 12px; }
+.sf-wrap .sf-sline { gap: 10px; }
+.sf-wrap .sf-sline b { font-size: 14.5px; }
+.sf-wrap .sf-wk span { font-size: 12.5px; font-weight: 600; padding: 10px 0; }
+@container sfw (max-width: 520px) {
+  .sf-wrap .sf-day { min-height: 72px; padding: 4px 3px; }
+  .sf-wrap .sf-ev { padding: 1px 4px; font-size: 10.5px; column-gap: 2px; }
+  .sf-wrap .sf-ev > span { font-size: 10px; }
+  .sf-wrap .sf-bar { gap: 8px; }
+  .sf-wrap .sf-month { gap: 4px; }
+  .sf-wrap .sf-month strong { font-size: 16px; min-width: 0; padding: 0 4px; }
+}
+
+/* ── 재고입출고·품목 입력 줄: 같은 폭 격자, 칸은 셀을 꽉 채움, 버튼은 줄 끝 ── */
+.sf-wrap .iv-sec > .iv-row, .sf-wrap > .iv-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); align-items: end; gap: 12px 16px; }
+.sf-wrap .iv-row .sf-input :is(input, select) { width: 100%; }
+.sf-wrap .iv-pair { display: flex; gap: 6px; min-width: 0; }
+.sf-wrap .iv-pair input { flex: 1; width: auto; min-width: 0; }
+.sf-wrap .iv-pair select { flex: none; width: auto; }
+.sf-wrap .iv-row > .sf-btn { justify-self: start; min-width: 96px; }
+.sf-wrap .iv-row > .iv-check { height: var(--ui-h); }
+.sf-wrap .iv-check input { width: 18px; height: 18px; accent-color: var(--sage); }
+.sf-wrap .iv-calc { padding: 12px 14px; border-radius: 10px; background: var(--ui-fill); font-size: 13px; }
+.sf-wrap > .iv-row { max-width: 240px; }
+@container sfw (max-width: 520px) {
+  .sf-wrap .iv-sec > .iv-row { grid-template-columns: minmax(0, 1fr); }
+  .sf-wrap .iv-row > .sf-btn { justify-self: stretch; }
+  .sf-wrap > .iv-row { max-width: none; }
+}
+
+/* ── 재고주문 2분할: 내용 폭 기준으로 쌓기(아이패드 세로에서도 오른쪽이 찌그러지지 않게) ── */
+@container sfw (max-width: 720px) {
+  .iv-split { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .iv-split-list { position: static; max-height: 280px; }
+  .iv-split-detail { padding: 20px 18px; gap: 22px; }
+  .iv-d-opts li { grid-template-columns: minmax(0, 1fr) auto; }
+  .iv-d-opts .sf-btn { grid-column: 1 / -1; width: 100%; }
+  .iv-d-wait li { grid-template-columns: auto minmax(0, 1fr) auto; }
+}
+@container sfw (max-width: 520px) {
+  .iv-d-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 14px; }
+  .iv-d-stats > div:nth-child(3) { border-left: 0; }
+}
+.iv-split-list, .iv-split-detail { border-radius: var(--ui-card-r); }
+.iv-split-list li button { border-radius: 8px; }
+.iv-split-list li button[aria-current="true"] { background: var(--sage-bg); color: var(--sage-ink); font-weight: 600; }
+
+/* ── 휴대폰 위 메뉴 줄: 알약 모양 ── */
+@media (max-width: 640px) {
+  .app-finder .finder-sidebar { gap: 4px; padding: 8px 10px; }
+  .app-finder .finder-sidebar button { border-radius: 999px; min-height: 34px; padding: 0 12px; }
+  .app-finder .finder-sidebar .finder-group-head { padding: 0 6px 0 10px; }
+}
+.sf-wrap .iv-row .sf-input .iv-pair input { flex: 1 1 auto; width: 0; min-width: 0; }
+.sf-wrap .iv-row .sf-input .iv-pair select { flex: none; width: auto; min-width: 64px; }
