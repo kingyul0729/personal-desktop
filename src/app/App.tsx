@@ -65,6 +65,8 @@ export function AppShell({ desktop, dispatch }: { desktop: typeof initialDesktop
   // 왼쪽 메뉴 접기/펼치기(2026-11-08 사용자 요청) — 기기별로 기억
   const [sideFolded, setSideFolded] = useState(() => { try { return localStorage.getItem('app-side-folded') === '1'; } catch { return false; } });
   const foldSide = (v: boolean) => { setSideFolded(v); try { localStorage.setItem('app-side-folded', v ? '1' : '0'); } catch { /* 저장 안 돼도 화면은 동작 */ } };
+  // 메뉴를 고르면 바로 접힘(2026-11-09 사용자 선택). 묶음 이름·하위 폴더를 펼치는 누름은 접지 않는다.
+  const pickDone = () => foldSide(true);
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => ({ [SIDEBAR_GROUPS.find(group => group.items.some(item => item.id === HOME))?.title ?? '']: true }));
   const goSub = (id: WindowId, sub: string) => { open(id); setGotos(current => ({ ...current, [id]: { id: sub, n: (current[id]?.n ?? 0) + 1 } })); };
   const sub = (id: WindowId) => ({
@@ -126,13 +128,13 @@ export function AppShell({ desktop, dispatch }: { desktop: typeof initialDesktop
             return <Fragment key={item.id}>
             <div className="finder-item">
               <button type="button" aria-pressed={selected === item.id && (!root || at === root || !children.some(child => child.id === at))} aria-current={selected === item.id ? 'page' : undefined} aria-expanded={children.length ? isOpen : undefined}
-                onClick={() => { if (root) goSub(item.id, root); else open(item.id); if (children.length) setExpanded(current => ({ ...current, [item.id]: !isOpen })); }}>
+                onClick={() => { if (root) goSub(item.id, root); else open(item.id); if (children.length) setExpanded(current => ({ ...current, [item.id]: !isOpen })); else pickDone(); }}>
                 <item.icon size={17} strokeWidth={1.7} /><span>{item.label}</span>
                 {children.length > 0 && <ChevronDown className="finder-chevron" size={15} strokeWidth={1.8} aria-hidden="true" />}
               </button>
             </div>
             {isOpen && <div className="finder-sub" role="group" aria-label={`${item.label} 하위 목록`}>
-              {children.map(child => <button key={child.id} type="button" aria-pressed={selected === item.id && at === child.id} onClick={() => goSub(item.id, child.id)}>
+              {children.map(child => <button key={child.id} type="button" aria-pressed={selected === item.id && at === child.id} onClick={() => { goSub(item.id, child.id); pickDone(); }}>
                 <ToneDot name={child.name} /><span>{child.name}</span>{child.count !== undefined && <small>{child.count}</small>}
               </button>)}
             </div>}
