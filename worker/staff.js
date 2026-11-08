@@ -81,6 +81,8 @@ function allowManagedInput(att, etcType) {
 function allowDesignatedInput(att, etcType) {
   if (att === "\uAE30\uD0C0" && etcType === "unpaid") return false;
   if (att === "\uBCD1\uC6D0\uD734\uBB34") return false;
+  // 본인이 휴무·연차·휴일이면 지정 환자 수도 받지 않는다(팀장·직원 공통, 사용자 지정 2026-11-08)
+  if (att === "\uD734\uBB34" || att === "\uC5F0\uCC28" || att === "\uACF5\uD734\uC77C") return false;
   return true;
 }
 function remainLeave(total, used) {
@@ -284,9 +286,11 @@ staff.post("/attendance", async (c) => {
   const numOrNull = (v) => v !== "" && v != null ? Math.max(0, Number(v)) : null;
   // 풀상담일(팀장 '상담')에는 팀장·직원 모두 관리 인원을 새로 받지 않는다(사용자 지정 2026-11-08) — 기존 값은 보존
   const leaderRow = await c.env.DB.prepare(`SELECT id FROM staff WHERE is_leader=1 LIMIT 1`).first();
-  const leaderDay = leaderRow ? await c.env.DB.prepare(`SELECT attendance FROM staff_attendance WHERE staff_id=? AND work_date=?`).bind(leaderRow.id, workDate).first() : null;
+  const leaderDay = leaderRow ? await c.env.DB.prepare(`SELECT attendance, etc_type FROM staff_attendance WHERE staff_id=? AND work_date=?`).bind(leaderRow.id, workDate).first() : null;
   const fullConsultDay = att === "\uC0C1\uB2F4" && sf.is_leader === 1 || leaderDay?.attendance === "\uC0C1\uB2F4" && sf.is_leader !== 1;
-  const allowMg = allowManagedInput(att, etcType) && !fullConsultDay;
+  // 팀장이 휴무·연차 등으로 근무하지 않은 날에는 직원 관리 인원도 받지 않는다(0 처리). 팀장 근태가 아직 없으면 막지 않는다(입력 순서 때문)
+  const leaderOff = sf.is_leader !== 1 && !!leaderDay && !(leaderDay.attendance === "\uC815\uC0C1\uADFC\uBB34" || leaderDay.attendance === "\uAE30\uD0C0" && leaderDay.etc_type === "time") && leaderDay.attendance !== "\uC0C1\uB2F4";
+  const allowMg = allowManagedInput(att, etcType) && !fullConsultDay && !leaderOff;
   const managed = allowMg && b.managed_count !== undefined ? numOrNull(b.managed_count) : prior?.managed_count ?? null;
   const allowDg = allowDesignatedInput(att, etcType);
   const designated = allowDg && b.designated_count !== undefined ? numOrNull(b.designated_count) : prior?.designated_count ?? null;
@@ -656,9 +660,7 @@ staff.get("/performance", async (c) => {
     const att = attByStaff[s.id] || [];
     const isLeaderSelf = s.is_leader === 1;
     let workDays = 0, totalMin = 0, totalMgSum = 0, totalMgCnt = 0, dgSum = 0, dgCnt = 0, leaveUsed = 0;
-    // 시간당 관리수의 분모: 팀장이 일부만 근무한 날(2출·조퇴 등)은 직원 본인 근무시간을 쓴다.
-    // 실근무시간은 팀장 근무시간 기준(겹친 시간)이지만, 관리 인원은 하루치라 겹친 시간으로 나누면 시간당이 부풀기 때문(사용자 지정 2026-11-08).
-    let avgMin = 0;
+
     let consultCount = 0, consultDgSum = 0, consultDgCnt = 0;
     const exclusions = [];
     let satOffCount = 0;
@@ -713,9 +715,6 @@ staff.get("/performance", async (c) => {
           workDays++;
           totalMin += creditedMin;
         }
-        const leaderPartial = !isLeaderSelf && leaderAtt[r.work_date]?.attendance === "\uAE30\uD0C0";
-        const ownWorkDay = r.attendance === "\uC815\uC0C1\uADFC\uBB34" || r.attendance === "\uAE30\uD0C0" && r.etc_type === "time";
-        if (ownWorkDay && !isFullConsultDay(r.work_date) && creditedMin > 0) avgMin += leaderPartial ? r.work_minutes : creditedMin;
       }
       const ownWork = r.attendance === "\uC815\uC0C1\uADFC\uBB34" || r.attendance === "\uAE30\uD0C0" && r.etc_type === "time";
       // 관리수 = 관리 인원 + 지정 환자 수(사용자 지정 2026-11-08). 팀장이 근무한 날만(팀장 기준).
@@ -749,9 +748,9 @@ staff.get("/performance", async (c) => {
       retire_date: s.retire_date,
       work_days: workDays,
       total_hours: totalMin > 0 ? Math.round(totalMin / 6) / 10 : null,
-      // 시간당 관리수 = 관리수 합계 ÷ 근무시간(분→시간). 팀장 일부 근무일만 직원 본인 근무시간(avgMin 설명 참고).
+      // 시간당 관리수 = 관리수 합계 ÷ 실근무시간(팀장 근무시간과 겹친 시간). 팀장 2출 날은 관리 인원도 2시 이후만 적는다(사용자 지정 2026-11-08).
       //   관리인원 기록 일수(totalMgCnt)로 나누지 않는다(2026-08 확정) — 총근무시간이 0이면 계산하지 않음.
-      avg_managed: totalMgCnt > 0 && avgMin > 0 ? Math.round(totalMgSum / (avgMin / 60) * 10) / 10 : null,
+      avg_managed: totalMgCnt > 0 && totalMin > 0 ? Math.round(totalMgSum / (totalMin / 60) * 10) / 10 : null,
       // 관리수 = 관리 인원 + 지정 환자 수(팀장 근무일만). 지정 환자 수는 별도 컬럼으로도 표시.
       total_managed: totalMgCnt > 0 ? totalMgSum : null,
       // 지정 환자 수(별도 컬럼)

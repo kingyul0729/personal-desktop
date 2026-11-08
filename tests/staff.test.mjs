@@ -136,8 +136,8 @@ test('performance follows the leader: designated adds to managed only on leader 
   p = await perf();
   assert.equal(p.total_hours, 15);
   assert.equal(p.total_managed, 16);
-  // 시간당 관리수는 팀장 2출 날도 직원 본인 근무시간(9.5)으로 나눠 부풀지 않는다: 16 ÷ 19 = 0.8
-  assert.equal(p.avg_managed, 0.8);
+  // 팀장 2출 날은 관리 인원도 2시 이후만 적으므로 시간당 = 관리수 ÷ 실근무시간: 16 ÷ 15 = 1.1
+  assert.equal(p.avg_managed, 1.1);
   assert.ok(p.exclusions.some(x => /팀장 2출 · 팀장 근무시간만 인정/.test(x.reason)));
 });
 
@@ -148,4 +148,19 @@ test('on a full consultation day staff managed count is not taken either; design
   await post({ staff_id: 2, work_date: '2027-05-03', attendance: '정상근무', start_time: '10:00', end_time: '19:30', managed_count: 7, designated_count: 2 });
   const r = e.inv.prepare(`SELECT managed_count, designated_count FROM staff_attendance WHERE staff_id = 2 AND work_date = '2027-05-03'`).get();
   assert.deepEqual([r.managed_count, r.designated_count], [null, 2]);
+});
+
+test('leader off: staff managed is not taken, designated is; own day off closes both for anyone', async () => {
+  const e = env(); await call(e, '/api/staff/list');
+  const post = body => call(e, '/api/staff/attendance', { method: 'POST', body });
+  const row = (id, d) => e.inv.prepare(`SELECT managed_count, designated_count FROM staff_attendance WHERE staff_id = ? AND work_date = ?`).get(id, d);
+  await post({ staff_id: 1, work_date: '2027-06-02', attendance: '휴무', designated_count: 2 });
+  assert.deepEqual([row(1, '2027-06-02').managed_count, row(1, '2027-06-02').designated_count], [null, null]);
+  await post({ staff_id: 2, work_date: '2027-06-02', attendance: '기타', etc_type: 'time', etc_detail: '2시 출근', start_time: '14:00', end_time: '19:30', managed_count: 5, designated_count: 1 });
+  assert.deepEqual([row(2, '2027-06-02').managed_count, row(2, '2027-06-02').designated_count], [null, 1]);
+  const p = (await call(e, '/api/staff/performance?month=2027-06')).data.find(x => x.id === 2);
+  assert.deepEqual([p.total_managed, p.total_designated], [null, 1]);
+  // 직원 본인 연차면 지정 환자 수도 받지 않음
+  await post({ staff_id: 3, work_date: '2027-06-03', attendance: '연차', designated_count: 2 });
+  assert.equal(row(3, '2027-06-03').designated_count, null);
 });

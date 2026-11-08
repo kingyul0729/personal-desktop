@@ -306,7 +306,13 @@ function Performance({ month, data, notify }: { month: string; data: Data; notif
   // 풀상담일(팀장 '상담'): 그날은 팀장·직원 모두 관리 인원을 받지 않는다(지정 환자 수는 기록만)
   const leaderId = staff.find(x => x.is_leader)?.id;
   const fullConsult = leaderId != null && recOf(leaderId)?.attendance === '상담';
-  const can = (r: AttendanceRecord, field: string) => field === 'managed_count' ? !fullConsult && (r.attendance === '정상근무' || isTimeEtc(r)) : !((r.attendance === '기타' && r.etc_type === 'unpaid') || r.attendance === '병원휴무');
+  // 팀장이 근무하지 않은 날(휴무·연차 등)은 직원 관리 인원을 받지 않는다. 팀장 근태가 아직 없으면 막지 않는다
+  const leaderRec = leaderId != null ? recOf(leaderId) : null;
+  const leaderOff = !!leaderRec && !(leaderRec.attendance === '정상근무' || isTimeEtc(leaderRec)) && leaderRec.attendance !== '상담';
+  // 본인이 휴무·연차·휴일이면 지정 환자 수도 닫는다(팀장·직원 공통)
+  const can = (r: AttendanceRecord, field: string, s: StaffMember) => field === 'managed_count'
+    ? !fullConsult && !(leaderOff && !s.is_leader) && (r.attendance === '정상근무' || isTimeEtc(r))
+    : !((r.attendance === '기타' && r.etc_type === 'unpaid') || ['병원휴무', '휴무', '연차', '공휴일'].includes(r.attendance));
   const n = daysInMonth(month);
   const dash = (v: unknown, unit = '') => (v == null || v === '' ? '-' : `${v}${unit}`);
   return <div className="sf-perf">
@@ -319,7 +325,7 @@ function Performance({ month, data, notify }: { month: string; data: Data; notif
       <thead><tr><th>직원</th><th className="num">관리 인원</th><th className="num">지정 환자 수</th><th /></tr></thead>
       <tbody>{list.map(s => { const r = recOf(s.id); return <tr key={s.id}>
         <td><b>{s.name}</b> <small>{r ? stateOf(r) : '스케줄 없음'}</small></td>
-        {(['managed_count', 'designated_count'] as const).map(f => <td key={f} className="num">{r && can(r, f)
+        {(['managed_count', 'designated_count'] as const).map(f => <td key={f} className="num">{r && can(r, f, s)
           ? <input key={`${date}-${r[f]}`} type="number" min={0} inputMode="numeric" className="sf-num" defaultValue={r[f] ?? ''} aria-label={`${s.name} ${f === 'managed_count' ? '관리 인원' : '지정 환자 수'}`}
             onBlur={e => void saveCell(s, f, e.target.value)} onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }} />
           : <small>{f === 'managed_count' && r && fullConsult && (s.is_leader || r.attendance === '정상근무' || isTimeEtc(r)) ? '풀상담일 · 관리실적 제외' : '—'}</small>}</td>)}
