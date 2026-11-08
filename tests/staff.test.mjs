@@ -177,14 +177,15 @@ test('red days (sundays and 2026 public holidays) are clinic holidays on the sch
   assert.deepEqual([cell.all, cell.none], ['휴일', 0]);
 });
 
-test('daily stock check is only open on leader work days', async () => {
+test('daily stock: leader work day check is reported, and saving is allowed any day', async () => {
   const e = env(); await call(e, '/api/staff/list');
   const daily = async d => (await call(e, `/api/inventory/daily?date=${d}`)).data;
   assert.deepEqual((await daily('2027-08-02')).check, { ok: false, label: '팀장 근태 미입력' });
   await call(e, '/api/staff/attendance', { method: 'POST', body: { staff_id: 1, work_date: '2027-08-02', attendance: '휴무' } });
   assert.deepEqual((await daily('2027-08-02')).check, { ok: false, label: '팀장 휴무' });
+  // 팀장이 쉬는 날도 마감재고·총 피부관리 인원은 기록할 수 있다(화면이 당일 사용량만 닫음)
   const r = await call(e, '/api/inventory/daily', { method: 'POST', body: { date: '2027-08-02', patients: 5, used: {} } });
-  assert.equal(r.status, 400);
+  assert.equal(r.status, 200);
   await call(e, '/api/staff/attendance', { method: 'POST', body: { staff_id: 1, work_date: '2027-08-03', attendance: '기타', etc_type: 'time', start_time: '14:00', end_time: '19:30' } });
   assert.equal((await daily('2027-08-03')).check.ok, true);
   assert.equal((await call(e, '/api/inventory/daily', { method: 'POST', body: { date: '2027-08-03', patients: 5, used: {} } })).status, 200);

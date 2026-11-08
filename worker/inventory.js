@@ -64,8 +64,8 @@ function optionUnits(item, o) {
   return { qty: Number(o.qty) || 0, bonus: Number(o.bonus_qty) || 0, amount: o.amount == null ? null : Number(o.amount) };
 }
 
-// 일일재고는 팀장이 출근한 날에만 한다(사용자 지정 2026-11-08). 팀장 휴무·연차·상담(풀상담)·미입력·빨간 날은 마감 없음,
-// 그날 못 센 재고 차이는 따로 표시하지 않는다.
+// 그날 팀장이 출근했는지(사용자 지정 2026-11-08): 출근한 날은 품목 방식대로, 아니면(미입력·휴무·연차·상담·빨간 날) 화면이
+// 당일 사용량을 닫고 마감재고만 받는다. 기록·수정은 언제든 가능. 못 센 날 생긴 재고 차이는 따로 표시하지 않는다.
 async function dailyCheck(db, date) {
   const lead = await db.prepare(`SELECT a.attendance, a.etc_type FROM staff s LEFT JOIN staff_attendance a ON a.staff_id = s.id AND a.work_date = ? WHERE s.is_leader = 1 ORDER BY s.status = 'retired', s.id LIMIT 1`).bind(date).first().catch(() => null);
   const att = lead?.attendance || null;
@@ -329,7 +329,6 @@ export async function handleInventory(request, env, url, user) {
     }
     if (m === 'POST' && path === '/daily') {
       const date = okDate(body.date) ? body.date : null;
-      if (date && !(await dailyCheck(db, date)).ok) return bad('팀장 근무일에만 일일재고를 마감할 수 있어요.');
       if (!date) return bad('날짜를 확인해 주세요.');
       const patients = num(body.patients);
       if (patients != null && (patients < 0 || !Number.isInteger(patients))) return bad('피부관리 인원은 0 이상의 정수예요.');

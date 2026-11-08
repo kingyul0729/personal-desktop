@@ -78,6 +78,9 @@ function AdjustDialog({ item, today, onClose, onDone }: { item: InvItem; today: 
 }
 
 type DailyItem = { id: number; name: string; stock_unit: string; hospital_stock: number; daily_mode: 'usage' | 'count'; used: number | null; used15: number };
+// 일일재고(2026-11-08 사용자 지정): 언제든 기록·수정. 팀장이 출근한 날은 품목 방식대로(당일 사용량 또는 마감재고),
+// 팀장이 출근하지 않은 날(미입력·휴무·연차·상담·휴일)은 당일 사용량·모델링 사용 인원은 닫고 모든 품목 마감재고만 적는다.
+// 총 피부관리 인원·메모는 늘 열림. 못 센 날 생긴 차이는 따로 표시하지 않는다.
 function DailyClose({ today, notify, onSaved }: { items: InvItem[]; today: string; notify: (m: string) => void; onSaved: () => void }) {
   const [date, setDate] = useState(today);
   const [data, setData] = useState<{ check?: { ok: boolean; label: string | null }; day: { patients: number | null; status: string | null; extra: Record<string, unknown> } | null; items: DailyItem[] } | null>(null);
@@ -85,16 +88,19 @@ function DailyClose({ today, notify, onSaved }: { items: InvItem[]; today: strin
   const [busy, setBusy] = useState(false);
   const load = useCallback(async () => {
     const d = await invGet('/daily', { date });
+    const off = d.check ? !d.check.ok : false;
     setData(d); setPatients(d.day?.patients == null ? '' : String(d.day.patients)); setStatus(d.day?.status || ''); setPeople(d.day?.extra?.modeling_people == null ? '' : String(d.day.extra.modeling_people));
-    // 사용량 방식은 입력한 사용량, 개수 방식은 남은 개수(현재 재고 + 이미 기록한 사용량)를 보여 준다
-    setVals(Object.fromEntries(d.items.map((it: DailyItem) => [it.id, it.used == null ? '' : it.daily_mode === 'usage' ? String(it.used) : String(it.hospital_stock)])));
+    // 당일 사용량 칸은 기록한 사용량, 마감재고 칸은 지금 재고(= 기록 뒤 남은 수량)
+    setVals(Object.fromEntries(d.items.map((it: DailyItem) => [it.id, it.used == null ? '' : !off && it.daily_mode === 'usage' ? String(it.used) : String(it.hospital_stock)])));
   }, [date]);
   useEffect(() => { setData(null); load().catch(e => notify(errText(e))); }, [load, notify]);
   if (!data) return <LoadingBox />;
+  const off = data.check ? !data.check.ok : false;
+  const byCount = (it: DailyItem) => off || it.daily_mode === 'count';
   const usedOf = (it: DailyItem) => {
     const v = vals[it.id];
     if (v === '' || v == null) return null;
-    if (it.daily_mode === 'usage') return Number(v);
+    if (!byCount(it)) return Number(v);
     const before = it.hospital_stock + (it.used || 0); // 이 날 기록 전 재고
     return Math.round((before - Number(v)) * 1000) / 1000;
   };
@@ -102,32 +108,30 @@ function DailyClose({ today, notify, onSaved }: { items: InvItem[]; today: strin
     const used: Record<number, number | null> = {};
     for (const it of data.items) {
       const u = usedOf(it);
-      if (u != null && (!Number.isFinite(u) || u < 0)) { notify(`${it.name}: 남은 수량이 마감 전 재고보다 많아요.`); return; }
+      if (u != null && (!Number.isFinite(u) || u < 0)) { notify(`${it.name}: 마감재고가 마감 전 재고보다 많아요.`); return; }
       used[it.id] = u ?? 0;
     }
     setBusy(true);
-    try { await invSend('POST', '/daily', { date, patients: patients === '' ? null : Number(patients), status: status || null, extra: { modeling_people: people === '' ? null : Number(people) }, used }); notify('마감을 저장했어요.'); announceInventory(); onSaved(); await load(); }
+    try { await invSend('POST', '/daily', { date, patients: patients === '' ? null : Number(patients), status: status || null, extra: { modeling_people: off ? (data.day?.extra?.modeling_people ?? null) : people === '' ? null : Number(people) }, used }); notify('마감을 저장했어요.'); announceInventory(); onSaved(); await load(); }
     catch (e) { notify(errText(e)); } finally { setBusy(false); }
   };
-  // 팀장이 출근한 날만 마감(팀장 휴무·상담·빨간 날은 칸을 닫고 상태만 표시)
-  const off = data.check ? !data.check.ok : false;
   return <div className={`iv-daily${off ? ' is-off' : ''}`}>
     <div className="iv-row">
       <label className="sf-input"><span>마감일</span><input type="date" value={date} onChange={e => setDate(e.target.value)} /></label>
-      <label className="sf-input"><span>총 피부관리 인원</span><input type="number" min={0} inputMode="numeric" value={patients} disabled={off} onChange={e => setPatients(e.target.value)} placeholder="명" /></label>
-      <label className="sf-input"><span>메모(휴무 등)</span><input type="text" value={status} disabled={off} onChange={e => setStatus(e.target.value)} placeholder="선택" /></label>
-      {off ? <span className="iv-tag iv-off-tag">{data.check?.label}</span>
-        : <button type="button" className="sf-btn is-primary" disabled={busy} onClick={() => void save()}>{busy && <SavingMark />}저장</button>}
+      <label className="sf-input"><span>총 피부관리 인원</span><input type="number" min={0} inputMode="numeric" value={patients} onChange={e => setPatients(e.target.value)} placeholder="명" /></label>
+      <label className="sf-input"><span>메모(휴무 등)</span><input type="text" value={status} onChange={e => setStatus(e.target.value)} placeholder="선택" /></label>
+      {off && <span className="iv-tag iv-off-tag">{data.check?.label}</span>}
+      <button type="button" className="sf-btn is-primary" disabled={busy} onClick={() => void save()}>{busy && <SavingMark />}저장</button>
     </div>
     <div className="iv-grid">{data.items.map(it => {
-      const u = usedOf(it), before = it.hospital_stock + (it.used || 0);
+      const u = usedOf(it), before = it.hospital_stock + (it.used || 0), count = byCount(it);
       return <div key={it.id} className="iv-dcard">
         <b>{it.name}</b>
         <dl><dt>마감 전 재고</dt><dd>{withUnit(before, it.stock_unit)}</dd></dl>
-        <label className="sf-input"><span>{it.daily_mode === 'usage' ? '당일 사용량' : '남은 수량(미개봉)'}</span>
-          <input type="number" min={0} inputMode="decimal" value={vals[it.id] ?? ''} disabled={off} onChange={e => setVals(v => ({ ...v, [it.id]: e.target.value }))} placeholder={it.stock_unit} /></label>
-        {it.name.includes('모델링') && <label className="sf-input"><span>사용 인원</span><input type="number" min={0} inputMode="numeric" value={people} disabled={off} onChange={e => setPeople(e.target.value)} placeholder="명" /></label>}
-        <dl><dt>마감재고</dt><dd>{u == null ? '—' : withUnit(before - u, it.stock_unit)}</dd><dt>최근 15일 사용</dt><dd>{withUnit(it.used15, it.stock_unit)}</dd></dl>
+        <label className="sf-input"><span>{count ? '마감재고' : '당일 사용량'}</span>
+          <input type="number" min={0} inputMode="decimal" value={vals[it.id] ?? ''} onChange={e => setVals(v => ({ ...v, [it.id]: e.target.value }))} placeholder={it.stock_unit} /></label>
+        {it.name.includes('모델링') && !off && <label className="sf-input"><span>사용 인원</span><input type="number" min={0} inputMode="numeric" value={people} onChange={e => setPeople(e.target.value)} placeholder="명" /></label>}
+        <dl>{!off && <><dt>{count ? '당일 사용량' : '마감재고'}</dt><dd>{u == null ? '—' : withUnit(count ? u : before - u, it.stock_unit)}</dd></>}<dt>최근 15일 사용</dt><dd>{withUnit(it.used15, it.stock_unit)}</dd></dl>
       </div>;
     })}</div>
   </div>;
