@@ -1,3 +1,4 @@
+import type React from 'react';
 import { useCallback, useEffect, useState } from 'react';
 import { LoadingBox, SavingMark } from './Feedback';
 import { OldDataBanner } from './Inventory';
@@ -7,6 +8,17 @@ import { type StaffMember, WEEKDAYS, dateIn, daysInMonth, leaveSeq, monthLabel, 
 
 // 직원연차 — 직원마다 자기 달력에 연차 날짜(순번 n/총)를 표시하고, 위에 총 부여 / 총 사용 / 잔여(누적, 월별 아님)를 보인다(2026-11-08 사용자 지정).
 // 연차 사용/되돌림은 직원스케줄 달력에서 '연차'를 고르면 서버가 처리한다(예전 앱과 같음).
+// 직원별 고유 파스텔 색(id로 고정 배정 — 새로고침해도 같은 색). [진한 글자색, 연한 바탕, 상단 줄]
+const STAFF_TONES: [string, string, string][] = [
+  ['#4f7f5f', '#e9f3ec', '#9cc9aa'], // 세이지
+  ['#6b58b8', '#efecfa', '#b9adeb'], // 라벤더
+  ['#b25d38', '#fcefe7', '#f0b393'], // 피치
+  ['#8a6a17', '#faf2db', '#e8cc79'], // 버터
+  ['#a84a6c', '#fbecf1', '#eaa6bf'], // 로즈
+  ['#2f7a73', '#e5f3f1', '#93cbc5'], // 민트그린
+];
+const toneOf = (id: number) => STAFF_TONES[(id - 1 + STAFF_TONES.length) % STAFF_TONES.length];
+
 const LEAVE_REASONS = ['포상 연차 지급', '재계약 연차 재세팅', '연차 촉진 초기화', '행정 오류 수정', '신입 연차 당겨쓰기', '직접 입력'];
 const LOG_TYPE: Record<string, string> = { use: '연차 사용', revert: '사용 되돌림', adjust: '수동 수정', grant: '월 발생 지급', convert: '정직원 전환' };
 type LeaveLog = { id: number; log_type: string; log_date?: string | null; reason?: string | null; after_remain?: number | null; editor?: string | null; created_at?: string };
@@ -49,9 +61,10 @@ export default function StaffLeave() {
       const idx: Record<string, number> = {}; all.forEach((d, i) => { idx[d] = i + 1; });
       const mine = new Set(all);
       const remain = x.remain_leave ?? (x.total_leave ?? 0) - (x.used_leave ?? 0);
-      return <section key={x.id} className="lv-card">
+      const [ink, tint, line] = toneOf(x.id);
+      return <section key={x.id} className="lv-card" style={{ '--c': ink, '--c-bg': tint, '--c-line': line } as React.CSSProperties}>
         <header className="lv-head">
-          <div className="lv-who"><strong>{x.name}</strong>{x.is_leader ? <span>팀장</span> : null}</div>
+          <div className="lv-who"><i className="lv-avatar" aria-hidden="true">{x.name.slice(-2)}</i><div><strong>{x.name}</strong><span>{x.is_leader ? '팀장' : '피부팀'}</span></div></div>
           <button type="button" className="lv-link" onClick={() => setOpen(x)}>이력·수정</button>
         </header>
         <div className="lv-sum">
@@ -70,9 +83,8 @@ export default function StaffLeave() {
         </div>
         <div className="lv-list">
           <p>{month.slice(0, 4)}년 사용 내역 <span>{all.length}일</span></p>
-          {all.length ? <ol>{all.map(d => <li key={d}><button type="button" className={d.slice(0, 7) === month ? 'is-here' : ''} onClick={() => setMonth(d.slice(0, 7))} title="이 달 달력 보기">
-            <span>{Number(d.slice(5, 7))}월 {Number(d.slice(8))}일 <small>{WEEKDAYS[weekdayOf(d)]}</small></span>
-            <span className="lv-seq">{memos[`${x.id}|${d}`] || `${leaveSeq(x, idx, d)}/${x.total_leave ?? '-'}`}</span></button></li>)}</ol>
+          {all.length ? <ul className="lv-tags">{all.map(d => <li key={d}><button type="button" className={d.slice(0, 7) === month ? 'is-here' : ''} onClick={() => setMonth(d.slice(0, 7))} title="이 달 달력 보기">
+            {Number(d.slice(5, 7))}.{String(Number(d.slice(8))).padStart(2, '0')}<small>{WEEKDAYS[weekdayOf(d)]}</small><span className="lv-seq">{(memos[`${x.id}|${d}`] || `${leaveSeq(x, idx, d)}/${x.total_leave ?? '-'}`).split('/')[0]}회</span></button></li>)}</ul>
             : <p className="lv-none">아직 사용한 연차가 없어요</p>}
         </div>
       </section>;

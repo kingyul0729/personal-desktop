@@ -1610,3 +1610,39 @@ a:hover > .download-mark .download-arrow, a:focus-visible > .download-mark .down
 .lv-list li button.is-here > span:first-child::before { content: ''; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--lv-mint); margin-right: 6px; vertical-align: 2px; }
 .lv-seq { font-size: 12px; color: var(--lv-muted); font-variant-numeric: tabular-nums; }
 .lv-none { margin: 0; font-size: 13px; color: var(--lv-muted); }
+
+/* ===== 직원연차 v3 (2026-11-08): 직원별 고유 파스텔색(--c 진한 / --c-bg 연한 / --c-line 상단 줄), 미색 바탕, 더 넉넉한 여백 ===== */
+.sf-leave { background: #fbfaf7; margin: -0px; gap: 28px; padding: 28px 36px 40px; }
+.sf-leave .lv-grid { grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 28px; }
+.lv-card { --c: #4f7f5f; --c-bg: #e9f3ec; --c-line: #9cc9aa; position: relative; overflow: hidden; background: #fffefc; border: 1px solid #eeebe5; border-radius: 18px; padding: 30px 26px 24px; gap: 26px; }
+.lv-card::before { content: ''; position: absolute; inset: 0 0 auto 0; height: 4px; background: var(--c-line); }
+.lv-who { align-items: center; gap: 12px; }
+.lv-who > div { display: flex; flex-direction: column; gap: 2px; }
+.lv-who strong { font-size: 17px; font-weight: 700; color: #24262a; }
+.lv-who span { font-size: 12px; color: #8b8f95; font-weight: 500; }
+.lv-avatar { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; background: var(--c-bg); color: var(--c); font-style: normal; font-size: 13px; font-weight: 700; letter-spacing: -.02em; flex: none; }
+.lv-link { padding: 6px 10px; border-radius: 8px; color: #6f747b; }
+.lv-link:hover { background: var(--c-bg); color: var(--c); text-decoration: none; }
+.lv-sum { background: #f8f6f2; border-radius: 14px; padding: 18px 20px; }
+.lv-sum > div + div { border-left-color: #ebe7e0; padding-left: 18px; }
+.lv-sum span { color: #8b8f95; font-weight: 500; }
+.lv-sum b { color: #3a3d42; font-weight: 600; }
+.lv-rest strong { color: var(--c); }
+.lv-cal { row-gap: 6px; }
+.lv-cal i { color: #9a9ea4; padding-bottom: 10px; }
+.lv-cal span { min-height: 44px; border-radius: 12px; }
+.lv-cal span b { font-weight: 500; color: #34373b; }
+.lv-cal span.is-leave { background: var(--c-bg); box-shadow: inset 0 0 0 1px var(--c-line); }
+.lv-cal span.is-leave b { color: var(--c); font-weight: 700; }
+.lv-cal span em { color: var(--c); }
+.lv-cal span.is-today { box-shadow: inset 0 0 0 1.5px #34373b; }
+.lv-cal span.is-leave.is-today { box-shadow: inset 0 0 0 1.5px var(--c); }
+.lv-list { border-top-color: #efece6; padding-top: 20px; gap: 12px; }
+.lv-tags { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.lv-list .lv-tags li button { width: auto; justify-content: flex-start; border-bottom: 0; text-align: center; display: inline-flex; align-items: baseline; gap: 4px; border: 0; border-radius: 8px; background: var(--c-bg); color: var(--c); padding: 6px 10px; font: inherit; font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; cursor: pointer; }
+.lv-list .lv-tags li button small { font-size: 11px; font-weight: 500; opacity: .75; }
+.lv-list .lv-tags li button .lv-seq { font-size: 11px; font-weight: 500; color: var(--c); opacity: .7; margin-left: 4px; }
+.lv-list .lv-tags li button.is-here { box-shadow: inset 0 0 0 1.5px var(--c-line); }
+.lv-list .lv-tags li button:hover { color: var(--c); filter: brightness(.97); }
+
+.lv-list .lv-tags li button.is-here > span:first-child::before { content: none; }
