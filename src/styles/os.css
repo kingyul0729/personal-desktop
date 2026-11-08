@@ -1570,3 +1570,43 @@ a:hover > .download-mark .download-arrow, a:focus-visible > .download-mark .down
 .sf-lv-list button em { font-style: normal; color: var(--app-muted); margin-left: 4px; }
 .sf-lv-list button.is-here { border-color: var(--app-accent); background: #f3f2f1; }
 .iv-code { width: 100%; justify-content: flex-end; align-items: center; } .iv-code input { height: 32px; padding: 0 10px; border: 1px solid var(--app-line); border-radius: 8px; font: inherit; font-size: 14px; letter-spacing: .04em; width: 220px; }
+
+/* ===== 직원연차 v2 (2026-11-08 사용자 요청: 여유 있는 간격, 파스텔·SaaS 톤, 주말 대비, 칩 대신 조용한 목록) ===== */
+.sf-leave { --lv-ink: #26282b; --lv-muted: #8a8f96; --lv-line: #eceae7; --lv-soft: #f7f6f3;
+  --lv-mint: #0d8a6a; --lv-mint-bg: #e4f4ee; --lv-sun: #e5484d; --lv-sat: #3b7be0; gap: 22px; }
+.lv-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 22px; }
+.lv-card { background: #fff; border: 1px solid var(--lv-line); border-radius: 16px; padding: 22px 22px 18px; display: flex; flex-direction: column; gap: 20px; }
+.lv-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.lv-who { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.lv-who strong { font-size: 17px; font-weight: 700; color: var(--lv-ink); letter-spacing: -.01em; }
+.lv-who span { font-size: 12px; color: var(--lv-muted); font-weight: 500; }
+.lv-link { border: 0; background: none; padding: 6px 2px; font: inherit; font-size: 13px; color: var(--lv-muted); cursor: pointer; }
+.lv-link:hover { color: var(--lv-ink); text-decoration: underline; text-underline-offset: 3px; }
+.lv-sum { display: grid; grid-template-columns: 1.3fr 1fr 1fr; align-items: end; padding: 16px 18px; background: var(--lv-soft); border-radius: 12px; }
+.lv-sum > div { display: flex; flex-direction: column; gap: 4px; }
+.lv-sum > div + div { padding-left: 16px; border-left: 1px solid var(--lv-line); }
+.lv-sum span { font-size: 12px; color: var(--lv-muted); }
+.lv-sum b { font-size: 18px; font-weight: 600; color: var(--lv-ink); font-variant-numeric: tabular-nums; }
+.lv-rest strong { font-size: 30px; line-height: 1; font-weight: 700; color: var(--lv-mint); font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
+.lv-rest strong small { font-size: 13px; font-weight: 500; margin-left: 2px; color: var(--lv-muted); }
+.lv-rest strong.is-warn { color: var(--lv-sun); }
+.lv-cal { display: grid; grid-template-columns: repeat(7, 1fr); row-gap: 4px; text-align: center; }
+.lv-cal i { font-style: normal; font-size: 11px; font-weight: 600; color: var(--lv-muted); padding-bottom: 8px; }
+.lv-cal i.is-sun, .lv-cal span.is-sun b { color: var(--lv-sun); }
+.lv-cal i.is-sat, .lv-cal span.is-sat b { color: var(--lv-sat); }
+.lv-cal span { min-height: 44px; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 1px; padding-top: 6px; border-radius: 10px; }
+.lv-cal span b { font-size: 13px; font-weight: 500; color: var(--lv-ink); font-variant-numeric: tabular-nums; }
+.lv-cal span.is-leave { background: var(--lv-mint-bg); }
+.lv-cal span.is-leave b { color: var(--lv-mint); font-weight: 700; }
+.lv-cal span em { font-style: normal; font-size: 9.5px; color: var(--lv-mint); opacity: .85; }
+.lv-cal span.is-today { box-shadow: inset 0 0 0 1.5px var(--lv-ink); }
+.lv-list { border-top: 1px solid var(--lv-line); padding-top: 16px; display: flex; flex-direction: column; gap: 8px; }
+.lv-list > p { margin: 0; display: flex; justify-content: space-between; font-size: 12px; color: var(--lv-muted); }
+.lv-list > p span { color: var(--lv-ink); font-weight: 600; }
+.lv-list ol { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; column-gap: 18px; }
+.lv-list li button { width: 100%; display: flex; justify-content: space-between; align-items: baseline; gap: 8px; border: 0; border-bottom: 1px dashed var(--lv-line); background: none; padding: 7px 0; font: inherit; font-size: 13px; color: var(--lv-ink); cursor: pointer; text-align: left; }
+.lv-list li button small { color: var(--lv-muted); font-size: 11px; margin-left: 2px; }
+.lv-list li button:hover { color: var(--lv-mint); }
+.lv-list li button.is-here > span:first-child::before { content: ''; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--lv-mint); margin-right: 6px; vertical-align: 2px; }
+.lv-seq { font-size: 12px; color: var(--lv-muted); font-variant-numeric: tabular-nums; }
+.lv-none { margin: 0; font-size: 13px; color: var(--lv-muted); }

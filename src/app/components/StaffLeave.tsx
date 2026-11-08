@@ -44,25 +44,37 @@ export default function StaffLeave() {
       </div>
       <small className="sf-hint">연차 숫자는 달과 상관없이 지금까지의 누적이에요.</small>
     </div>
-    <div className="sf-lv-grid">{staff.map(x => {
+    <div className="lv-grid">{staff.map(x => {
       const all = (dates[String(x.id)] || []).slice().sort();
       const idx: Record<string, number> = {}; all.forEach((d, i) => { idx[d] = i + 1; });
       const mine = new Set(all);
       const remain = x.remain_leave ?? (x.total_leave ?? 0) - (x.used_leave ?? 0);
-      return <section key={x.id} className="sf-lv-card">
-        <header><b>{x.name}</b>{x.is_leader ? <small>팀장</small> : null}<button type="button" className="sf-btn" onClick={() => setOpen(x)}>이력·수정</button></header>
-        <dl className="sf-lv-nums"><div><dt>총 부여</dt><dd>{x.total_leave ?? '-'}</dd></div><div><dt>총 사용</dt><dd>{x.used_leave ?? '-'}</dd></div><div className={remain < 0 ? 'is-warn' : ''}><dt>잔여</dt><dd>{remain}</dd></div></dl>
-        <div className="sf-mini-grid sf-lv-cal">{WEEKDAYS.map(w => <i key={w}>{w}</i>)}
+      return <section key={x.id} className="lv-card">
+        <header className="lv-head">
+          <div className="lv-who"><strong>{x.name}</strong>{x.is_leader ? <span>팀장</span> : null}</div>
+          <button type="button" className="lv-link" onClick={() => setOpen(x)}>이력·수정</button>
+        </header>
+        <div className="lv-sum">
+          <div className="lv-rest"><span>잔여</span><strong className={remain < 0 ? 'is-warn' : ''}>{remain}<small>일</small></strong></div>
+          <div><span>총 부여</span><b>{x.total_leave ?? '-'}</b></div>
+          <div><span>총 사용</span><b>{x.used_leave ?? '-'}</b></div>
+        </div>
+        <div className="lv-cal">{WEEKDAYS.map((w, k) => <i key={w} className={k === 0 ? 'is-sun' : k === 6 ? 'is-sat' : ''}>{w}</i>)}
           {Array.from({ length: lead }, (_, i) => <span key={`b${i}`} />)}
           {Array.from({ length: n }, (_, d) => {
-            const date = dateIn(month, d + 1), on = mine.has(date);
+            const date = dateIn(month, d + 1), on = mine.has(date), wd = weekdayOf(date);
             const seq = on ? memos[`${x.id}|${date}`] || `${leaveSeq(x, idx, date)}/${x.total_leave ?? '-'}` : '';
-            return <span key={date} className={`${on ? 'is-leave' : ''}${date === today ? ' is-today' : ''}${weekdayOf(date) === 0 ? ' is-sun' : ''}`} title={on ? `${date} 연차 ${seq}` : undefined}>{d + 1}{on && <em>{seq}</em>}</span>;
+            return <span key={date} className={`${on ? 'is-leave' : ''}${date === today ? ' is-today' : ''}${wd === 0 ? ' is-sun' : wd === 6 ? ' is-sat' : ''}`} title={on ? `${date} 연차 ${seq}` : undefined}>
+              <b>{d + 1}</b>{on && <em>{seq.split('/')[0]}번째</em>}</span>;
           })}
         </div>
-        <div className="sf-lv-list"><small>{month.slice(0, 4)}년 연차 {all.length}일</small>
-          {all.length ? all.map(d => <button key={d} type="button" className={d.slice(0, 7) === month ? 'is-here' : ''} onClick={() => setMonth(d.slice(0, 7))} title="이 달 달력 보기">
-            {Number(d.slice(5, 7))}/{Number(d.slice(8))}<em>{memos[`${x.id}|${d}`] || `${leaveSeq(x, idx, d)}/${x.total_leave ?? '-'}`}</em></button>) : <small>없음</small>}</div>
+        <div className="lv-list">
+          <p>{month.slice(0, 4)}년 사용 내역 <span>{all.length}일</span></p>
+          {all.length ? <ol>{all.map(d => <li key={d}><button type="button" className={d.slice(0, 7) === month ? 'is-here' : ''} onClick={() => setMonth(d.slice(0, 7))} title="이 달 달력 보기">
+            <span>{Number(d.slice(5, 7))}월 {Number(d.slice(8))}일 <small>{WEEKDAYS[weekdayOf(d)]}</small></span>
+            <span className="lv-seq">{memos[`${x.id}|${d}`] || `${leaveSeq(x, idx, d)}/${x.total_leave ?? '-'}`}</span></button></li>)}</ol>
+            : <p className="lv-none">아직 사용한 연차가 없어요</p>}
+        </div>
       </section>;
     })}</div>
     {open && <LeaveDetail staff={open} onClose={() => setOpen(null)} onSaved={async () => { setOpen(null); await load(); }} />}
