@@ -1763,3 +1763,4 @@ a:hover > .download-mark .download-arrow, a:focus-visible > .download-mark .down
 .lv-cal span.is-leave b, .lv-cal span em { color: var(--cv); }
 .lv-cal span.is-leave.is-today { box-shadow: inset 0 0 0 1.5px var(--cv); }
 .sf-leave { --lv-sun: #d9484d; --lv-sat: #3b74d6; }
+.lv-sum .lv-rest b { color: var(--cv); }
