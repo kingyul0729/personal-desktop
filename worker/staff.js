@@ -618,6 +618,15 @@ staff.get("/performance", async (c) => {
   ).bind(from, to).all()).results;
   const clinicOff = new Set(clinicOffRows.map((r) => r.work_date));
   const isFullConsultDay = (date) => leaderAtt[date]?.attendance === "\uC0C1\uB2F4";
+  // 팀장 그날 상태 이름(성과 확인 사유에 그대로 보여 줌)
+  const leaderLabel = (date) => {
+    const l = leaderAtt[date];
+    if (clinicOff.has(date)) return "병원휴무일";
+    if (!l) return "팀장 근태 미입력";
+    if (l.attendance === "기타" && l.etc_type === "time") return l.etc_detail === "2시 출근" ? "팀장 2출" : "팀장 출퇴근 기타";
+    if (l.attendance === "공휴일") return "팀장 휴일";
+    return "팀장 " + l.attendance;
+  };
   const ctxCache = {};
   const ctxOf = (date) => {
     if (!ctxCache[date]) ctxCache[date] = leaderWorkContext(leaderAtt[date] || null, date, clinicOff.has(date));
@@ -675,7 +684,10 @@ staff.get("/performance", async (c) => {
         } else if (isUnpaidEtc) {
           reason = "\uC131\uACFC \uC81C\uC678";
         } else if (selfEligibleStatus && !isLeaderSelf && !eligible) {
-          reason = "\uD300\uC7A5 \uAE30\uC900 \uC81C\uC678";
+          // 성과는 팀장 기준(팀장만 관리): 팀장이 근무하지 않았거나 팀장 근태가 비면 그날 근무시간·관리수 0
+          reason = leaderLabel(r.work_date) + " \u00B7 \uD300\uC7A5 \uAE30\uC900 \uC81C\uC678";
+        } else if (selfEligibleStatus && !isLeaderSelf && eligible && leaderAtt[r.work_date]?.attendance === "\uAE30\uD0C0") {
+          reason = leaderLabel(r.work_date) + " \u00B7 \uD300\uC7A5 \uADFC\uBB34\uC2DC\uAC04\uB9CC \uC778\uC815";
         }
         if (reason) exclusions.push({ date: r.work_date, reason });
       }
@@ -696,9 +708,11 @@ staff.get("/performance", async (c) => {
         }
       }
       const ownWork = r.attendance === "\uC815\uC0C1\uADFC\uBB34" || r.attendance === "\uAE30\uD0C0" && r.etc_type === "time";
+      // 관리수 = 관리 인원 + 지정 환자 수(사용자 지정 2026-11-08). 팀장이 근무한 날만(팀장 기준).
+      // 팀장 휴무·연차·미입력 등으로 빠지는 날의 지정 환자 수는 관리수에 더하지 않고 '지정 수'에만 따로 셈(아래).
       if (eligible && ownWork && !isFullConsultDay(r.work_date)) {
-        if (r.managed_count != null) {
-          totalMgSum += r.managed_count;
+        if (r.managed_count != null || r.designated_count != null) {
+          totalMgSum += (r.managed_count || 0) + (r.designated_count || 0);
           totalMgCnt++;
         }
       }
@@ -728,7 +742,7 @@ staff.get("/performance", async (c) => {
       // 평균 관리수 = 총 관리 인원 합계 ÷ 총근무시간(분→시간 환산, ②와 동일 totalMin 기준).
       //   관리인원 기록 일수(totalMgCnt)로 나누지 않는다(2026-08 확정) — 총근무시간이 0이면 계산하지 않음.
       avg_managed: totalMgCnt > 0 && totalMin > 0 ? Math.round(totalMgSum / (totalMin / 60) * 10) / 10 : null,
-      // 총 관리 인원 = 일반 관리 인원(managed_count)만. 지정 환자 수는 별도 컬럼으로 표시.
+      // 관리수 = 관리 인원 + 지정 환자 수(팀장 근무일만). 지정 환자 수는 별도 컬럼으로도 표시.
       total_managed: totalMgCnt > 0 ? totalMgSum : null,
       // 지정 환자 수(별도 컬럼)
       total_designated: dgCnt > 0 ? dgSum : null,

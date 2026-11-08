@@ -265,6 +265,14 @@ function Performance({ month, data, notify }: { month: string; data: Data; notif
   };
   const leaderRec = staff.find(x => x.is_leader) ? recOf(staff.find(x => x.is_leader)!.id) : null;
   const fullConsult = leaderRec?.attendance === '상담'; // 풀상담일: 관리 실적 제외
+  // 성과는 팀장 기준(팀장만 관리): 그날 팀장 상태를 입력 위에 보여 준다
+  const leaderSt = leaderRec ? stateOf(leaderRec) : null;
+  const anyStaffRec = staff.some(x => !x.is_leader && recOf(x.id));
+  const leaderNote = fullConsult ? null
+    : !leaderRec ? !anyStaffRec ? null : '팀장 근태 미입력 — 성과는 팀장 기준이라, 팀장 근태를 넣기 전까지 이 날 직원 근무시간·관리수는 0으로 처리돼요. 지정 환자 수는 지정 수에만 따로 표시돼요.'
+    : leaderSt === '정상근무' ? null
+    : leaderSt === '2출' || leaderSt === '출퇴근 기타' ? `팀장 ${leaderSt} (${leaderRec.start_time || '?'}–${leaderRec.end_time || '?'}) — 직원 근무시간은 팀장이 실제로 근무한 시간과 겹친 만큼만 인정해요.`
+    : `팀장 ${leaderSt} — 성과는 팀장 기준이라 이 날 직원 근무시간·관리수는 0으로 처리돼요. 지정 환자 수는 관리수에 더하지 않고 지정 수에만 따로 표시돼요.`;
   const can = (r: AttendanceRecord, field: string) => field === 'managed_count' ? (r.attendance === '정상근무' || isTimeEtc(r)) : !((r.attendance === '기타' && r.etc_type === 'unpaid') || r.attendance === '병원휴무');
   const n = daysInMonth(month);
   const dash = (v: unknown, unit = '') => (v == null || v === '' ? '-' : `${v}${unit}`);
@@ -273,6 +281,7 @@ function Performance({ month, data, notify }: { month: string; data: Data; notif
       <select className="sf-select" value={date} aria-label="날짜" onChange={e => setDate(e.target.value)}>
         {Array.from({ length: n }, (_, i) => { const d = dateIn(month, i + 1); return <option key={d} value={d}>{dayLabelKo(d)}</option>; })}
       </select></div>
+    {leaderNote && <p className="sf-ask">{leaderNote}</p>}
     {fullConsult && <p className="sf-ask">풀상담일 · 관리실적 제외 — 이 날 관리 인원과 지정 환자 수는 기록만 하고 성과·평균·시간당 관리수에는 넣지 않아요.</p>}
     <table className="sf-table">
       <thead><tr><th>직원</th><th className="num">관리 인원</th><th className="num">지정 환자 수</th><th /></tr></thead>
@@ -286,9 +295,10 @@ function Performance({ month, data, notify }: { month: string; data: Data; notif
       </tr>; })}</tbody>
     </table>
     <h3 className="sf-perf-title">{monthLabel(month)} 성과</h3>
+    <p className="sf-hint">성과는 팀장 기준이에요. 팀장이 근무한 날만 세고, 근무시간은 팀장 근무시간과 겹친 만큼만 인정해요. 관리수 = 관리 인원 + 지정 환자 수(팀장이 근무하지 않은 날의 지정 환자 수는 지정 수에만).</p>
     {rows == null ? <LoadingBox /> : !rows.length ? <p className="sf-hint">해당 월 성과 데이터가 없습니다</p> :
       <table className="sf-table is-click">
-        <thead><tr><th>직원</th><th className="num">실근무시간</th><th className="num">관리수</th><th className="num">시간당 관리수</th><th className="num">지정 수</th>{rows.some(r => r.consult_designated != null) && <th className="num">풀상담 지정<br /><small>성과 제외</small></th>}<th className="num">잔여연차</th></tr></thead>
+        <thead><tr><th>직원</th><th className="num">실근무시간</th><th className="num">관리수<br /><small>지정 포함</small></th><th className="num">시간당 관리수</th><th className="num">지정 수</th>{rows.some(r => r.consult_designated != null) && <th className="num">풀상담 지정<br /><small>성과 제외</small></th>}<th className="num">잔여연차</th></tr></thead>
         <tbody>{rows.map(r => <tr key={r.id} onClick={() => setDetail(r)} tabIndex={0} onKeyDown={e => { if (e.key === 'Enter') setDetail(r); }}>
           <td><b>{r.name}</b></td><td className="num">{dash(r.total_hours, '시간')}</td><td className="num">{dash(r.total_managed, '명')}</td>
           <td className="num">{dash(r.avg_managed, '명')}</td><td className="num">{dash(r.total_designated, '명')}</td>
