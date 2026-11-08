@@ -210,8 +210,16 @@ function BulkDialog({ month, staff, all, onClose, onDone }: { month: string; sta
     const targets = dates.filter(d => !offs.has(d));
     if (!targets.length) return setError('고른 날짜가 모두 휴일입니다');
     const over = targets.filter(d => recs[d]).length;
-    const sf = s;
-    const perfDays = sf?.is_leader ? targets.filter(d => staff.some(x => !x.is_leader && (() => { const r = (all[x.id]?.attendance || []).find(y => y.work_date === d); return !!r && (r.managed_count != null || r.designated_count != null); })())).length : 0;
+    // 팀장 근태를 바꾸면 직원 성과가 다시 계산되므로, 고른 날짜가 어느 달이든 직원 관리 실적이 있는 날을 센다(스케줄·성과 연동)
+    let perfDays = 0;
+    if (s.is_leader) {
+      const others = staff.filter(x => !x.is_leader && x.status !== 'retired');
+      const byStaff: Record<number, AttendanceRecord[]> = {};
+      for (const x of others) byStaff[x.id] = [...(all[x.id]?.attendance || [])];
+      for (const mo of [...new Set(targets.map(d => d.slice(0, 7)))].filter(m => m !== month))
+        for (const x of others) { try { byStaff[x.id].push(...(((await staffGet('/month', { staff_id: x.id, month: mo })) as MonthData).attendance || [])); } catch { /* 못 불러오면 그 달은 안내에서 빠짐 */ } }
+      perfDays = targets.filter(d => others.some(x => byStaff[x.id].some(r => r.work_date === d && (r.managed_count != null || r.designated_count != null)))).length;
+    }
     setAsk(`${targets.length}일에 '${finalSt === '2출' ? '출퇴근 기타 · 2출' : finalSt}' 적용${over ? ` · 기존 기록 ${over}건 바뀜` : ''}${perfDays ? ` · 직원 관리 실적이 있는 ${perfDays}일은 팀장 기준으로 직원 성과가 다시 계산됨` : ''}${dates.length > targets.length ? ` · 휴일 ${dates.length - targets.length}일 제외` : ''}`);
     return { targets, recs };
   };
