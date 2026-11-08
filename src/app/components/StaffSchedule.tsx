@@ -86,7 +86,14 @@ function Schedule({ month, data, notify }: { month: string; data: Data; notify: 
   const clinicOff = (date: string) => dayStatus.some(r => r.work_date === date && r.status === 'clinic_off');
   const isHoliday = (date: string) => clinicOff(date) || (!!leader && ['공휴일', '병원휴무'].includes(recOf(leader.id, date)?.attendance || ''));
 
-  const save = async (s: StaffMember, date: string, patch: Partial<AttendanceRecord>, msg = '저장되었습니다') => {
+  // 성과는 팀장 기준이라 팀장 근태를 바꾸면 그날 직원 성과도 바뀐다 — 직원 실적이 이미 있는 날이면 먼저 묻는다(2026-11-08 사용자 요청)
+  const [pending, setPending] = useState<{ text: string; run: () => void } | null>(null);
+  const staffWithPerf = (date: string) => staff.filter(x => !x.is_leader && (() => { const r = recOf(x.id, date); return !!r && (r.managed_count != null || r.designated_count != null); })()).length;
+  const save = async (s: StaffMember, date: string, patch: Partial<AttendanceRecord>, msg = '저장되었습니다', asked = false) => {
+    const onlyMemo = Object.keys(patch).every(k => k === 'memo');
+    const n = s.is_leader && !onlyMemo && !asked ? staffWithPerf(date) : 0;
+    if (n) { setPending({ text: `${dayLabelKo(date)}에 직원 ${n}명의 관리 실적이 있어요. 성과는 팀장 기준이라 팀장 근태를 바꾸면 이 날 직원 근무시간·관리수가 다시 계산돼요. 바꿀까요?`, run: () => void save(s, date, patch, msg, true) }); return; }
+    setPending(null);
     setBusy(s.id);
     try { await staffPost('/attendance', payloadFor(s, date, recOf(s.id, date), patch)); notify(msg); await data.reload(true); }
     catch (e) { notify(e instanceof Error ? e.message : '저장 실패'); }
@@ -126,6 +133,9 @@ function Schedule({ month, data, notify }: { month: string; data: Data; notify: 
         <span><button type="button" className="sf-btn" onClick={() => setConfirmClear(false)}>취소</button>
           <button type="button" className="sf-btn is-primary" onClick={async () => { try { await staffPost('/day-status', { work_date: sel, clear: true }); setConfirmClear(false); await data.reload(true); } catch (e) { notify(e instanceof Error ? e.message : '휴무 해제 실패'); } }}>해제</button></span></>
         : <>병원 휴일로 정해진 날이에요. <button type="button" className="sf-btn" onClick={() => setConfirmClear(true)}>휴일 해제</button></>}</div>}
+      {pending && <div className="sf-confirm">{pending.text}
+        <span><button type="button" className="sf-btn" onClick={() => setPending(null)}>취소</button>
+          <button type="button" className="sf-btn is-primary" onClick={() => pending.run()}>바꾸기</button></span></div>}
       {list.map(s => {
         const rec = recOf(s.id, sel), st = stateOf(rec), locked = isReadonly(s, sel) || off, opts = optionsFor(s);
         if (WORK_STATES.includes(st || '')) working++;
@@ -200,7 +210,9 @@ function BulkDialog({ month, staff, all, onClose, onDone }: { month: string; sta
     const targets = dates.filter(d => !offs.has(d));
     if (!targets.length) return setError('고른 날짜가 모두 휴일입니다');
     const over = targets.filter(d => recs[d]).length;
-    setAsk(`${targets.length}일에 '${finalSt === '2출' ? '출퇴근 기타 · 2출' : finalSt}' 적용${over ? ` · 기존 기록 ${over}건 바뀜` : ''}${dates.length > targets.length ? ` · 휴일 ${dates.length - targets.length}일 제외` : ''}`);
+    const sf = s;
+    const perfDays = sf?.is_leader ? targets.filter(d => staff.some(x => !x.is_leader && (() => { const r = (all[x.id]?.attendance || []).find(y => y.work_date === d); return !!r && (r.managed_count != null || r.designated_count != null); })())).length : 0;
+    setAsk(`${targets.length}일에 '${finalSt === '2출' ? '출퇴근 기타 · 2출' : finalSt}' 적용${over ? ` · 기존 기록 ${over}건 바뀜` : ''}${perfDays ? ` · 직원 관리 실적이 있는 ${perfDays}일은 팀장 기준으로 직원 성과가 다시 계산됨` : ''}${dates.length > targets.length ? ` · 휴일 ${dates.length - targets.length}일 제외` : ''}`);
     return { targets, recs };
   };
   const apply = async () => {
@@ -295,7 +307,7 @@ function Performance({ month, data, notify }: { month: string; data: Data; notif
       </tr>; })}</tbody>
     </table>
     <h3 className="sf-perf-title">{monthLabel(month)} 성과</h3>
-    <p className="sf-hint">성과는 팀장 기준이에요. 팀장이 근무한 날만 세고, 근무시간은 팀장 근무시간과 겹친 만큼만 인정해요. 관리수 = 관리 인원 + 지정 환자 수(팀장이 근무하지 않은 날의 지정 환자 수는 지정 수에만).</p>
+    <p className="sf-hint">성과는 팀장 기준이에요. 팀장이 근무한 날만 세고, 실근무시간은 팀장 근무시간과 겹친 만큼만 인정해요. 관리수 = 관리 인원 + 지정 환자 수(팀장이 근무하지 않은 날의 지정 환자 수는 지정 수에만). 시간당 관리수는 팀장이 일부만 근무한 날도 직원 본인 근무시간으로 나눠요.</p>
     {rows == null ? <LoadingBox /> : !rows.length ? <p className="sf-hint">해당 월 성과 데이터가 없습니다</p> :
       <table className="sf-table is-click">
         <thead><tr><th>직원</th><th className="num">실근무시간</th><th className="num">관리수<br /><small>지정 포함</small></th><th className="num">시간당 관리수</th><th className="num">지정 수</th>{rows.some(r => r.consult_designated != null) && <th className="num">풀상담 지정<br /><small>성과 제외</small></th>}<th className="num">잔여연차</th></tr></thead>

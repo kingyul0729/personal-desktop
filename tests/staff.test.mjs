@@ -136,5 +136,7 @@ test('performance follows the leader: designated adds to managed only on leader 
   p = await perf();
   assert.equal(p.total_hours, 15);
   assert.equal(p.total_managed, 16);
+  // 시간당 관리수는 팀장 2출 날도 직원 본인 근무시간(9.5)으로 나눠 부풀지 않는다: 16 ÷ 19 = 0.8
+  assert.equal(p.avg_managed, 0.8);
   assert.ok(p.exclusions.some(x => /팀장 2출 · 팀장 근무시간만 인정/.test(x.reason)));
 });

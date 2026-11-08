@@ -557,7 +557,7 @@ function MonthReport({ a, b }: { a: MonthRep; b: MonthRep }) {
     ['지출 합계', won(a.spend_total), won(b.spend_total), diff(a.spend_total, b.spend_total, won), true],
     ['일반 구매', won(a.spend_general), won(b.spend_general), diff(a.spend_general, b.spend_general, won), false],
     ['선결제 신규 구매', won(a.spend_prepaid), won(b.spend_prepaid), diff(a.spend_prepaid, b.spend_prepaid, won), false],
-    ['관리 인원', `${a.patients}명`, `${b.patients}명`, diff(a.patients, b.patients, v => `${v}명`), false],
+    ['총 피부관리 인원', `${a.patients}명`, `${b.patients}명`, diff(a.patients, b.patients, v => `${v}명`), false],
     ['입고 건수', `${a.in_count}건`, `${b.in_count}건`, diff(a.in_count, b.in_count, v => `${v}건`), false],
     ['거래명세서 미등록', `${a.no_invoice}건`, `${b.no_invoice}건`, diff(a.no_invoice, b.no_invoice, v => `${v}건`), false],
   ];
@@ -590,7 +590,7 @@ function YearReport({ year, months }: { year: string; months: MonthRep[] }) {
   const names = Array.from(new Set(months.flatMap(m => m.usage.map(u => `${u.name}|${u.stock_unit}`))));
   return <article className="iv-paper">
     <h2>{year}년 피부팀 연말 보고</h2>
-    <Block n={1} title="월별 합계" sub={sum('spend_total') > 0 ? `연간 지출 ${readWon(sum('spend_total'))}` : undefined}><div className="iv-scroll"><table className="sf-table iv-year"><thead><tr><th>월</th><th className="num">지출 합계</th><th className="num">일반 구매</th><th className="num">선결제</th><th className="num">관리 인원</th><th className="num">입고</th>{names.map(n => <th key={n} className="num">{n.split('|')[0]}<br /><small>{n.split('|')[1]}</small></th>)}</tr></thead>
+    <Block n={1} title="월별 합계" sub={sum('spend_total') > 0 ? `연간 지출 ${readWon(sum('spend_total'))}` : undefined}><div className="iv-scroll"><table className="sf-table iv-year"><thead><tr><th>월</th><th className="num">지출 합계</th><th className="num">일반 구매</th><th className="num">선결제</th><th className="num">총 피부관리 인원</th><th className="num">입고</th>{names.map(n => <th key={n} className="num">{n.split('|')[0]}<br /><small>{n.split('|')[1]}</small></th>)}</tr></thead>
       <tbody>{months.map(m => <tr key={m.month}><td>{Number(m.month.slice(5))}월</td><td className="num">{m.spend_total ? won(m.spend_total) : '—'}</td><td className="num">{m.spend_general ? won(m.spend_general) : '—'}</td><td className="num">{m.spend_prepaid ? won(m.spend_prepaid) : '—'}</td>
         <td className="num">{m.patients || '—'}</td><td className="num">{m.in_count || '—'}</td>{names.map(n => { const u = m.usage.find(x => `${x.name}|${x.stock_unit}` === n); return <td key={n} className="num">{u ? fmtQty(u.used) : '—'}</td>; })}</tr>)}
         <tr className="iv-total-row"><td>합계</td><td className="num">{won(sum('spend_total'))}</td><td className="num">{won(sum('spend_general'))}</td><td className="num">{won(sum('spend_prepaid'))}</td><td className="num">{sum('patients')}</td><td className="num">{sum('in_count')}</td>

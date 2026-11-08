@@ -652,6 +652,9 @@ staff.get("/performance", async (c) => {
     const att = attByStaff[s.id] || [];
     const isLeaderSelf = s.is_leader === 1;
     let workDays = 0, totalMin = 0, totalMgSum = 0, totalMgCnt = 0, dgSum = 0, dgCnt = 0, leaveUsed = 0;
+    // 시간당 관리수의 분모: 팀장이 일부만 근무한 날(2출·조퇴 등)은 직원 본인 근무시간을 쓴다.
+    // 실근무시간은 팀장 근무시간 기준(겹친 시간)이지만, 관리 인원은 하루치라 겹친 시간으로 나누면 시간당이 부풀기 때문(사용자 지정 2026-11-08).
+    let avgMin = 0;
     let consultCount = 0, consultDgSum = 0, consultDgCnt = 0;
     const exclusions = [];
     let satOffCount = 0;
@@ -706,6 +709,9 @@ staff.get("/performance", async (c) => {
           workDays++;
           totalMin += creditedMin;
         }
+        const leaderPartial = !isLeaderSelf && leaderAtt[r.work_date]?.attendance === "\uAE30\uD0C0";
+        const ownWorkDay = r.attendance === "\uC815\uC0C1\uADFC\uBB34" || r.attendance === "\uAE30\uD0C0" && r.etc_type === "time";
+        if (ownWorkDay && !isFullConsultDay(r.work_date) && creditedMin > 0) avgMin += leaderPartial ? r.work_minutes : creditedMin;
       }
       const ownWork = r.attendance === "\uC815\uC0C1\uADFC\uBB34" || r.attendance === "\uAE30\uD0C0" && r.etc_type === "time";
       // 관리수 = 관리 인원 + 지정 환자 수(사용자 지정 2026-11-08). 팀장이 근무한 날만(팀장 기준).
@@ -739,9 +745,9 @@ staff.get("/performance", async (c) => {
       retire_date: s.retire_date,
       work_days: workDays,
       total_hours: totalMin > 0 ? Math.round(totalMin / 6) / 10 : null,
-      // 평균 관리수 = 총 관리 인원 합계 ÷ 총근무시간(분→시간 환산, ②와 동일 totalMin 기준).
+      // 시간당 관리수 = 관리수 합계 ÷ 근무시간(분→시간). 팀장 일부 근무일만 직원 본인 근무시간(avgMin 설명 참고).
       //   관리인원 기록 일수(totalMgCnt)로 나누지 않는다(2026-08 확정) — 총근무시간이 0이면 계산하지 않음.
-      avg_managed: totalMgCnt > 0 && totalMin > 0 ? Math.round(totalMgSum / (totalMin / 60) * 10) / 10 : null,
+      avg_managed: totalMgCnt > 0 && avgMin > 0 ? Math.round(totalMgSum / (avgMin / 60) * 10) / 10 : null,
       // 관리수 = 관리 인원 + 지정 환자 수(팀장 근무일만). 지정 환자 수는 별도 컬럼으로도 표시.
       total_managed: totalMgCnt > 0 ? totalMgSum : null,
       // 지정 환자 수(별도 컬럼)
