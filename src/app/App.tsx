@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useReducer, useState, type ReactNode } from 'react';
 import { ToneDot } from './components/ToneFolder';
-import { ArrowLeftRight, BookOpen, Calculator, CalendarCheck, CalendarDays, ChevronDown, ClipboardCheck, FileBarChart, GraduationCap, ShoppingCart, FileText, FolderOpen, Settings, Trash2, X, type LucideIcon } from 'lucide-react';
+import { ArrowLeftRight, BookOpen, Calculator, CalendarCheck, CalendarDays, ChevronDown, ClipboardCheck, PanelLeftClose, PanelLeftOpen, FileBarChart, GraduationCap, ShoppingCart, FileText, FolderOpen, Settings, Trash2, X, type LucideIcon } from 'lucide-react';
 import { StudyArchive, STUDY_CATEGORIES } from './components/StudyArchive';
 import { FileExplorer } from './components/FileExplorer';
 import { ControlPanel } from './components/ControlPanel';
@@ -62,6 +62,9 @@ export function AppShell({ desktop, dispatch }: { desktop: typeof initialDesktop
   // 처음엔 모두 접힌 상태. 메뉴 이름을 누르면 그 화면이 열리면서 하위 목록이 펼쳐지고, 다시 누르면 접힌다.
   const [expanded, setExpanded] = useState<Partial<Record<WindowId, boolean>>>({});
   // 묶음(상담·재고·직원·개인): 처음엔 지금 보고 있는 화면의 묶음만 펼친다.
+  // 왼쪽 메뉴 접기/펼치기(2026-11-08 사용자 요청) — 기기별로 기억
+  const [sideFolded, setSideFolded] = useState(() => { try { return localStorage.getItem('app-side-folded') === '1'; } catch { return false; } });
+  const foldSide = (v: boolean) => { setSideFolded(v); try { localStorage.setItem('app-side-folded', v ? '1' : '0'); } catch { /* 저장 안 돼도 화면은 동작 */ } };
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => ({ [SIDEBAR_GROUPS.find(group => group.items.some(item => item.id === HOME))?.title ?? '']: true }));
   const goSub = (id: WindowId, sub: string) => { open(id); setGotos(current => ({ ...current, [id]: { id: sub, n: (current[id]?.n ?? 0) + 1 } })); };
   const sub = (id: WindowId) => ({
@@ -112,9 +115,10 @@ export function AppShell({ desktop, dispatch }: { desktop: typeof initialDesktop
   };
 
   return <main className="web-os app-shell">
-    <section className="desktop-finder app-finder" aria-label="다채움">
+    <section className={`desktop-finder app-finder${sideFolded ? ' is-side-folded' : ''}`} aria-label="다채움">
+      {sideFolded && <nav className="finder-rail" aria-label="메뉴 접힘"><button type="button" className="finder-fold" aria-label="메뉴 펼치기" title="메뉴 펼치기" onClick={() => foldSide(false)}><PanelLeftOpen size={18} strokeWidth={1.6} /></button></nav>}
       <nav className="finder-sidebar" aria-label="메뉴">
-        <div className="finder-lights" aria-hidden="true"><i /><i /><i /></div>
+        <div className="finder-side-top"><div className="finder-lights" aria-hidden="true"><i /><i /><i /></div><button type="button" className="finder-fold" aria-label="메뉴 접기" title="메뉴 접기" onClick={() => foldSide(true)}><PanelLeftClose size={18} strokeWidth={1.6} /></button></div>
         {SIDEBAR_GROUPS.map(group => { const fixed = group.title === '설정'; const groupOpen = fixed || !!openGroups[group.title]; return <div key={group.title} className={`finder-group${fixed ? ' finder-group-bottom' : ''}${groupOpen ? '' : ' is-closed'}`}>
           {fixed ? <p>{group.title}</p> : <button type="button" className="finder-group-head" aria-expanded={groupOpen} onClick={() => setOpenGroups(groupOpen ? {} : { [group.title]: true })}><ChevronDown size={13} strokeWidth={2} aria-hidden="true" />{group.title}</button>}
           {groupOpen && <>

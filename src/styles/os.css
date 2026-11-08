@@ -1615,7 +1615,6 @@ a:hover > .download-mark .download-arrow, a:focus-visible > .download-mark .down
 .sf-leave { background: #fbfaf7; margin: -0px; gap: 28px; padding: 28px 36px 40px; }
 .sf-leave .lv-grid { grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 28px; }
 .lv-card { --c: #4f7f5f; --c-bg: #e9f3ec; --c-line: #9cc9aa; position: relative; overflow: hidden; background: #fffefc; border: 1px solid #eeebe5; border-radius: 18px; padding: 30px 26px 24px; gap: 26px; }
-.lv-card::before { content: ''; position: absolute; inset: 0 0 auto 0; height: 4px; background: var(--c-line); }
 .lv-who { align-items: center; gap: 12px; }
 .lv-who > div { display: flex; flex-direction: column; gap: 2px; }
 .lv-who strong { font-size: 17px; font-weight: 700; color: #24262a; }
@@ -1646,3 +1645,29 @@ a:hover > .download-mark .download-arrow, a:focus-visible > .download-mark .down
 .lv-list .lv-tags li button:hover { color: var(--c); filter: brightness(.97); }
 
 .lv-list .lv-tags li button.is-here > span:first-child::before { content: none; }
+
+/* 직원연차 v4 (2026-11-08 사용자 지정): 상자 위 색 띠·아바타·이름 머리줄 없음. 요약 상자 = 이름 | 총 부여 | 총 사용 | 잔여.
+   상자 위에 띠를 두르지 않는다(사용자: AI가 만든 티가 나는 특징). */
+.lv-sum { grid-template-columns: auto 1fr 1fr 1fr; align-items: center; column-gap: 0; }
+.lv-sum .lv-name { font-size: 17px; font-weight: 700; color: var(--c); padding-right: 18px; white-space: nowrap; letter-spacing: -.01em; }
+.lv-sum .lv-name + div { border-left: 1px solid #ebe7e0; padding-left: 18px; }
+.lv-sum b { font-size: 19px; }
+.lv-sum .lv-rest b { color: var(--c); font-weight: 700; }
+.lv-sum .lv-rest b.is-warn { color: var(--lv-sun); }
+.lv-list > p { align-items: center; gap: 8px; justify-content: flex-start; }
+.lv-list > p .lv-link { margin-left: auto; font-size: 12px; padding: 4px 8px; }
+
+/* 왼쪽 메뉴 접기/펼치기 */
+.finder-side-top { display: flex; align-items: center; justify-content: space-between; }
+.finder-side-top .finder-lights { padding-right: 0; }
+.finder-fold { width: 30px; height: 30px; display: grid; place-items: center; border: 0; border-radius: 7px; background: none; color: #8a8580; cursor: pointer; padding: 0; }
+.finder-fold:hover { background: rgba(0, 0, 0, .05); color: #45413d; }
+.app-finder.is-side-folded { grid-template-columns: 48px minmax(0, 1fr); }
+.app-finder.is-side-folded .finder-sidebar { display: none; }
+.finder-rail { display: flex; flex-direction: column; align-items: center; padding: 18px 0; background: var(--f-side); border-right: 1px solid #dddad8; }
+@media (max-width: 640px) {
+  .finder-fold { display: none; }
+  .app-finder.is-side-folded { grid-template-columns: minmax(0, 1fr); }
+  .finder-rail { display: none; }
+  .app-finder.is-side-folded .finder-sidebar { display: flex; }
+}

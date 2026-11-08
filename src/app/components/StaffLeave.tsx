@@ -63,14 +63,11 @@ export default function StaffLeave() {
       const remain = x.remain_leave ?? (x.total_leave ?? 0) - (x.used_leave ?? 0);
       const [ink, tint, line] = toneOf(x.id);
       return <section key={x.id} className="lv-card" style={{ '--c': ink, '--c-bg': tint, '--c-line': line } as React.CSSProperties}>
-        <header className="lv-head">
-          <div className="lv-who"><i className="lv-avatar" aria-hidden="true">{x.name.slice(-2)}</i><div><strong>{x.name}</strong><span>{x.is_leader ? '팀장' : '피부팀'}</span></div></div>
-          <button type="button" className="lv-link" onClick={() => setOpen(x)}>이력·수정</button>
-        </header>
-        <div className="lv-sum">
-          <div className="lv-rest"><span>잔여</span><strong className={remain < 0 ? 'is-warn' : ''}>{remain}<small>일</small></strong></div>
+        <div className="lv-sum" aria-label={`${x.name} 연차`}>
+          <strong className="lv-name" title={x.name}>{x.name.length >= 3 ? x.name.slice(1) : x.name}</strong>
           <div><span>총 부여</span><b>{x.total_leave ?? '-'}</b></div>
           <div><span>총 사용</span><b>{x.used_leave ?? '-'}</b></div>
+          <div className="lv-rest"><span>잔여</span><b className={remain < 0 ? 'is-warn' : ''}>{remain}</b></div>
         </div>
         <div className="lv-cal">{WEEKDAYS.map((w, k) => <i key={w} className={k === 0 ? 'is-sun' : k === 6 ? 'is-sat' : ''}>{w}</i>)}
           {Array.from({ length: lead }, (_, i) => <span key={`b${i}`} />)}
@@ -82,7 +79,7 @@ export default function StaffLeave() {
           })}
         </div>
         <div className="lv-list">
-          <p>{month.slice(0, 4)}년 사용 내역 <span>{all.length}일</span></p>
+          <p>{month.slice(0, 4)}년 사용 내역 <span>{all.length}일</span><button type="button" className="lv-link" onClick={() => setOpen(x)}>이력·수정</button></p>
           {all.length ? <ul className="lv-tags">{all.map(d => <li key={d}><button type="button" className={d.slice(0, 7) === month ? 'is-here' : ''} onClick={() => setMonth(d.slice(0, 7))} title="이 달 달력 보기">
             {Number(d.slice(5, 7))}.{String(Number(d.slice(8))).padStart(2, '0')}<small>{WEEKDAYS[weekdayOf(d)]}</small><span className="lv-seq">{(memos[`${x.id}|${d}`] || `${leaveSeq(x, idx, d)}/${x.total_leave ?? '-'}`).split('/')[0]}회</span></button></li>)}</ul>
             : <p className="lv-none">아직 사용한 연차가 없어요</p>}
