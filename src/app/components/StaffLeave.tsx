@@ -77,15 +77,15 @@ export default function StaffLeave() {
           {Array.from({ length: n }, (_, d) => {
             const date = dateIn(month, d + 1), on = mine.has(date), wd = weekdayOf(date);
             const seq = on ? memos[`${x.id}|${date}`] || `${leaveSeq(x, idx, date)}/${x.total_leave ?? '-'}` : '';
-            return <span key={date} className={`${on ? 'is-leave' : ''}${date === today ? ' is-today' : ''}${wd === 0 ? ' is-sun' : wd === 6 ? ' is-sat' : ''}`} title={on ? `${date} 연차 ${seq.split('/')[0]}번째` : undefined}>
-              <b>{d + 1}</b>{on && <em>{seq.split('/')[0]}번째</em>}</span>;
+            return <span key={date} className={`${on ? 'is-leave' : ''}${date === today ? ' is-today' : ''}${wd === 0 ? ' is-sun' : wd === 6 ? ' is-sat' : ''}`} title={on ? `${date} 연차 ${seq}` : undefined}>
+              <b>{d + 1}</b>{on && <em>{seq}</em>}</span>;
           })}
           {Array.from({ length: 42 - lead - n }, (_, i) => <span key={`a${i}`} aria-hidden="true" />)}
         </div>
         <div className="lv-list">
           <div className="lv-list-head"><p>{month.slice(0, 4)}년 사용 내역 <b>{all.length}일</b></p><button type="button" className="lv-link" onClick={() => setOpen(x)}>이력·수정</button></div>
           {all.length ? <ul className="lv-tags">{all.map(d => <li key={d}><button type="button" className={d.slice(0, 7) === month ? 'is-here' : ''} onClick={() => setMonth(d.slice(0, 7))} title="이 달 달력 보기">
-            {Number(d.slice(5, 7))}.{String(Number(d.slice(8))).padStart(2, '0')}<small>{WEEKDAYS[weekdayOf(d)]}</small><span className="lv-seq">{(memos[`${x.id}|${d}`] || `${leaveSeq(x, idx, d)}/${x.total_leave ?? '-'}`).split('/')[0]}회</span></button></li>)}</ul>
+            {Number(d.slice(5, 7))}/{Number(d.slice(8))}<small>{WEEKDAYS[weekdayOf(d)]}</small><span className="lv-seq" aria-label={`${(memos[`${x.id}|${d}`] || `${leaveSeq(x, idx, d)}/${x.total_leave ?? '-'}`).split('/')[0]}번째`}>{(memos[`${x.id}|${d}`] || `${leaveSeq(x, idx, d)}/${x.total_leave ?? '-'}`).split('/')[0]}</span></button></li>)}</ul>
             : <p className="lv-none">아직 사용한 연차가 없어요</p>}
         </div>
       </section>;

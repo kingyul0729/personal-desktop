@@ -1751,3 +1751,9 @@ a:hover > .download-mark .download-arrow, a:focus-visible > .download-mark .down
 .sf-wrap.sf-leave { padding: 24px 24px 36px; gap: 20px; }
 .iv-d-stats dd { font-size: 16px; }
 .iv-d-stats > div { padding: 0 8px; }
+
+/* 직원연차 동그라미 모양(2026-11-08 사용자 표시): 이름·오늘·연차 날짜는 동그라미, 달력 연차 표기는 'N/지급연차', 내역은 'M/D 요일 ⓝ' */
+.lv-name { border-radius: 50%; }
+.lv-cal span { width: min(100%, 38px); max-width: none; height: auto; aspect-ratio: 1; border-radius: 50%; }
+.lv-cal span em { font-size: 8px; letter-spacing: -.04em; }
+.lv-tags button .lv-seq { opacity: 1; width: 18px; height: 18px; flex: none; display: grid; place-items: center; border-radius: 50%; background: #fffefc; color: var(--c); box-shadow: inset 0 0 0 1px var(--c-line); font-size: 10px; font-weight: 700; line-height: 1; }
