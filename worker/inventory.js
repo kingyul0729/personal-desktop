@@ -12,6 +12,7 @@
 // - 입고·출고 기록 삭제 = 그 기록이 바꾼 병원재고·업체재고를 정확히 되돌림(기록마다 증감값을 저장해 둠).
 // - 단가 미확인 품목은 price=null 그대로(0원으로 바꾸지 않음).
 import { isRedDay } from './redDays.js';
+import { dailyPatientsAuto } from './staff.js';
 import { ensureInvSchema, INV_TABLES } from './invSchema.js';
 
 const json = (body, status = 200) => Response.json(body, { status, headers: { 'cache-control': 'no-store' } });
@@ -325,12 +326,13 @@ export async function handleInventory(request, env, url, user) {
       const used = await all(db, `SELECT item_id, qty, id FROM inv_tx WHERE deleted_at IS NULL AND daily_date = ? AND kind = 'out'`, date);
       const since = new Date(Date.parse(date) - 14 * 864e5).toISOString().slice(0, 10);
       const recent = await all(db, `SELECT item_id, sum(qty) AS q FROM inv_tx WHERE deleted_at IS NULL AND kind = 'out' AND daily_date BETWEEN ? AND ? GROUP BY item_id`, since, date);
-      return json({ date, check: await dailyCheck(db, date), day: day ? { ...day, extra: day.extra ? JSON.parse(day.extra) : {} } : null, items: items.map(it => ({ ...it, used: used.find(u => u.item_id === it.id)?.qty ?? null, used15: recent.find(r => r.item_id === it.id)?.q ?? 0 })) });
+      return json({ date, check: await dailyCheck(db, date), patients_auto: await dailyPatientsAuto(db, date), day: day ? { ...day, extra: day.extra ? JSON.parse(day.extra) : {} } : null, items: items.map(it => ({ ...it, used: used.find(u => u.item_id === it.id)?.qty ?? null, used15: recent.find(r => r.item_id === it.id)?.q ?? 0 })) });
     }
     if (m === 'POST' && path === '/daily') {
       const date = okDate(body.date) ? body.date : null;
       if (!date) return bad('날짜를 확인해 주세요.');
-      const patients = num(body.patients);
+      const auto = date ? await dailyPatientsAuto(db, date) : null;
+      const patients = auto ?? num(body.patients); // 성과에 관리 인원이 있으면 그 합계가 우선
       if (patients != null && (patients < 0 || !Number.isInteger(patients))) return bad('피부관리 인원은 0 이상의 정수예요.');
       const stmts = [db.prepare(`INSERT INTO inv_daily (date, patients, status, extra, updated_by, updated_at) VALUES (?,?,?,?,?,?)
         ON CONFLICT(date) DO UPDATE SET patients = excluded.patients, status = excluded.status, extra = excluded.extra, updated_by = excluded.updated_by, updated_at = excluded.updated_at`)

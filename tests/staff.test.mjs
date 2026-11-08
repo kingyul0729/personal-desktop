@@ -191,3 +191,20 @@ test('daily stock: leader work day check is reported, and saving is allowed any 
   assert.equal((await call(e, '/api/inventory/daily', { method: 'POST', body: { date: '2027-08-03', patients: 5, used: {} } })).status, 200);
   assert.equal((await daily('2026-05-01')).check.label, '휴일');
 });
+
+test('총 피부관리 인원 follows the managed counts entered in performance', async () => {
+  const e = env(); await call(e, '/api/staff/list');
+  const post = b => call(e, '/api/staff/attendance', { method: 'POST', body: b });
+  await post({ staff_id: 1, work_date: '2027-09-01', attendance: '정상근무', start_time: '10:00', end_time: '19:30', managed_count: 6, designated_count: 2 });
+  await post({ staff_id: 2, work_date: '2027-09-01', attendance: '정상근무', start_time: '10:00', end_time: '19:30', managed_count: 5 });
+  const day = (await call(e, '/api/inventory/daily?date=2027-09-01')).data;
+  assert.deepEqual([day.patients_auto, day.day.patients], [11, 11]);
+  await post({ staff_id: 2, work_date: '2027-09-01', attendance: '정상근무', start_time: '10:00', end_time: '19:30', managed_count: 7 });
+  assert.equal((await call(e, '/api/inventory/daily?date=2027-09-01')).data.day.patients, 13);
+  // 일일재고에서 다른 숫자를 보내도 성과 합계가 우선
+  await call(e, '/api/inventory/daily', { method: 'POST', body: { date: '2027-09-01', patients: 99, used: {} } });
+  assert.equal((await call(e, '/api/inventory/daily?date=2027-09-01')).data.day.patients, 13);
+  // 관리 인원이 없는 날은 직접 적은 값
+  await call(e, '/api/inventory/daily', { method: 'POST', body: { date: '2027-09-02', patients: 15, used: {} } });
+  assert.equal((await call(e, '/api/inventory/daily?date=2027-09-02')).data.day.patients, 15);
+});

@@ -83,7 +83,7 @@ type DailyItem = { id: number; name: string; stock_unit: string; hospital_stock:
 // 총 피부관리 인원·메모는 늘 열림. 못 센 날 생긴 차이는 따로 표시하지 않는다.
 function DailyClose({ today, notify, onSaved }: { items: InvItem[]; today: string; notify: (m: string) => void; onSaved: () => void }) {
   const [date, setDate] = useState(today);
-  const [data, setData] = useState<{ check?: { ok: boolean; label: string | null }; day: { patients: number | null; status: string | null; extra: Record<string, unknown> } | null; items: DailyItem[] } | null>(null);
+  const [data, setData] = useState<{ check?: { ok: boolean; label: string | null }; patients_auto?: number | null; day: { patients: number | null; status: string | null; extra: Record<string, unknown> } | null; items: DailyItem[] } | null>(null);
   const [patients, setPatients] = useState(''), [status, setStatus] = useState(''), [vals, setVals] = useState<Record<number, string>>({}), [people, setPeople] = useState('');
   const [busy, setBusy] = useState(false);
   const load = useCallback(async () => {
@@ -94,6 +94,8 @@ function DailyClose({ today, notify, onSaved }: { items: InvItem[]; today: strin
     setVals(Object.fromEntries(d.items.map((it: DailyItem) => [it.id, it.used == null ? '' : !off && it.daily_mode === 'usage' ? String(it.used) : String(it.hospital_stock)])));
   }, [date]);
   useEffect(() => { setData(null); load().catch(e => notify(errText(e))); }, [load, notify]);
+  // 성과에 관리 인원을 적으면 총 피부관리 인원이 바뀌므로 다시 불러온다
+  useEffect(() => { const on = () => { load().catch(() => undefined); }; window.addEventListener('staff-data-changed', on); return () => window.removeEventListener('staff-data-changed', on); }, [load]);
   if (!data) return <LoadingBox />;
   const off = data.check ? !data.check.ok : false;
   const byCount = (it: DailyItem) => off || it.daily_mode === 'count';
@@ -118,7 +120,9 @@ function DailyClose({ today, notify, onSaved }: { items: InvItem[]; today: strin
   return <div className={`iv-daily${off ? ' is-off' : ''}`}>
     <div className="iv-row">
       <label className="sf-input"><span>마감일</span><input type="date" value={date} onChange={e => setDate(e.target.value)} /></label>
-      <label className="sf-input"><span>총 피부관리 인원</span><input type="number" min={0} inputMode="numeric" value={patients} onChange={e => setPatients(e.target.value)} placeholder="명" /></label>
+      <label className="sf-input"><span>총 피부관리 인원</span>{data.patients_auto != null
+        ? <input type="number" value={data.patients_auto} readOnly disabled aria-label="총 피부관리 인원(성과 관리 인원 합계)" />
+        : <input type="number" min={0} inputMode="numeric" value={patients} onChange={e => setPatients(e.target.value)} placeholder="명" />}</label>
       <label className="sf-input"><span>메모(휴무 등)</span><input type="text" value={status} onChange={e => setStatus(e.target.value)} placeholder="선택" /></label>
       {off && <span className="iv-tag iv-off-tag">{data.check?.label}</span>}
       <button type="button" className="sf-btn is-primary" disabled={busy} onClick={() => void save()}>{busy && <SavingMark />}저장</button>

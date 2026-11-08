@@ -85,6 +85,17 @@ function allowDesignatedInput(att, etcType) {
   if (att === "\uD734\uBB34" || att === "\uC5F0\uCC28" || att === "\uACF5\uD734\uC77C") return false;
   return true;
 }
+// 총 피부관리 인원(일일재고) = 그날 직원들이 성과에 적은 관리 인원 합계(사용자 지정 2026-11-08, 예전 앱도 같은 숫자).
+// 관리 인원이 한 명이라도 적힌 날만 자동으로 채운다(풀상담일처럼 관리 인원이 없는 날은 일일재고에서 직접 적은 값을 둔다).
+export async function dailyPatientsAuto(db, date) {
+  const r = await db.prepare(`SELECT count(managed_count) AS n, sum(managed_count) AS s FROM staff_attendance WHERE work_date = ?`).bind(date).first();
+  return r && r.n > 0 ? r.s : null;
+}
+async function syncDailyPatients(db, date) {
+  const auto = await dailyPatientsAuto(db, date);
+  if (auto == null) return;
+  await db.prepare(`INSERT INTO inv_daily (date, patients, updated_by, updated_at) VALUES (?, ?, '성과 입력', ?) ON CONFLICT(date) DO UPDATE SET patients = excluded.patients, updated_at = excluded.updated_at`).bind(date, auto, Date.now()).run();
+}
 function remainLeave(total, used) {
   return (total || 0) - (used || 0);
 }
@@ -406,6 +417,7 @@ staff.post("/attendance", async (c) => {
     b.editor || "\uAD00\uB9AC\uC790",
     isDemo
   ), ...leaveStmts]);
+  await syncDailyPatients(c.env.DB, workDate);
   const updated = await c.env.DB.prepare(`SELECT * FROM staff WHERE id=?`).bind(staffId).first();
   return c.json({
     ok: true,
