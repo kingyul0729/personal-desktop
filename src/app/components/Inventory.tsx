@@ -68,7 +68,6 @@ function AllStock({ state, notify }: { state: InvState; notify: (m: string) => v
 function AdjustDialog({ item, today, onClose, onDone }: { item: InvItem; today: string; onClose: () => void; onDone: (m: string) => void }) {
   const [h, setH] = useState(String(item.hospital_stock)), [v, setV] = useState(String(item.vendor_stock)), [memo, setMemo] = useState(''), [error, setError] = useState(''), [busy, setBusy] = useState(false);
   return <Modal title={`${item.name} 재고 맞추기`} onClose={onClose}>
-    <p className="sf-hint">실제로 센 수량을 넣으면 차이만큼 기록해요. 이 기록을 지우면 원래대로 돌아가요.</p>
     <label className="sf-input"><span>병원재고 ({item.stock_unit}) · 지금 {fmtQty(item.hospital_stock)}</span><input type="number" min={0} inputMode="decimal" value={h} onChange={e => setH(e.target.value)} /></label>
     {item.prepaid ? <label className="sf-input"><span>선결제 잔량 ({item.stock_unit}) · 지금 {fmtQty(item.vendor_stock)}</span><input type="number" min={0} inputMode="decimal" value={v} onChange={e => setV(e.target.value)} /></label> : null}
     <label className="sf-input"><span>메모</span><input value={memo} onChange={e => setMemo(e.target.value)} placeholder="예: 11월 실사" /></label>
@@ -189,7 +188,7 @@ export function OldDataImport({ onDone, merge = false }: { onDone: () => void; m
     } catch (e) { setState({ running: false, text: '', error: `${errText(e)} — 다시 누르면 처음부터 다시 넣어요.` }); }
   };
   return <section className={`iv-import${merge ? ' is-merge' : ''}`}>
-    <div><b>{merge ? '예전 근태·성과 더 넣기' : '예전 앱 자료 넣기'}</b><p className="sf-hint">{merge ? '새로 받은 예전 자료 파일에서 근태·성과 숫자만 더해요. 비어 있는 칸만 채우고 이미 입력한 값은 바꾸지 않아요.' : '직원 근태·성과와 재고 기록(사진에서 옮긴 숫자) 파일을 한 번 넣으면 직원·재고 화면에 바로 보여요.'}</p></div>
+    <div><b>{merge ? '예전 근태·성과 더 넣기' : '예전 앱 자료 넣기'}</b></div>
     <div className="iv-inline">
       <label className="sf-btn"><input type="file" accept="application/json,.json" hidden onChange={e => void pick(e.target.files?.[0])} />{file ? file.name : '파일 고르기'}</label>
       <button type="button" className="sf-btn is-primary" disabled={!file || state.running} onClick={() => void run()}>{state.running && <SavingMark />}{merge ? '더 넣기' : '넣기'}</button>
@@ -272,7 +271,6 @@ function OrderBoard({ state, q, notify }: { state: InvState; q: string; notify: 
         </> : <p className="iv-split-empty">왼쪽에서 품목을 고르세요</p>}
       </section>
     </div>
-    <p className="sf-hint">구매조건이 없는 품목(단가 미확인 등)은 '품목·구매조건'에서 조건을 먼저 등록하면 주문할 수 있어요.</p>
     {pick && <OrderDialog item={pick.item} opt={pick.opt} today={state.today} onClose={() => setPick(null)} onDone={msg => { notify(msg); setPick(null); announceInventory(); }} />}
   </>;
 }
@@ -292,7 +290,6 @@ function OrderDialog({ item, opt, today, onClose, onDone }: { item: InvItem; opt
     <label className="sf-input"><span>{opt.prepaid ? '결제일' : '주문일'}</span><input type="date" value={date} onChange={e => setDate(e.target.value)} /></label>
     <label className="sf-input"><span>메모</span><input type="text" value={memo} onChange={e => setMemo(e.target.value)} placeholder="선택" /></label>
     <div className="iv-total"><span>{opt.prepaid ? '선결제 금액' : '결제금액'}</span><b>{fmtWon(total)}</b>{total != null && total >= 10000 && <small>{readWon(total)}</small>}</div>
-    <p className="sf-hint">{opt.prepaid ? `결제하면 선결제 잔량이 ${fmtQty((opt.qty + opt.bonus_qty) * n)} ${item.stock_unit} 늘고, 병원재고는 실제로 들어올 때(입고확정) 늘어요.` : `받을 수량 ${fmtQty((opt.qty + opt.bonus_qty) * n)} ${item.stock_unit}${opt.bonus_qty ? '(증정 포함 · 증정은 결제금액 제외)' : ''}`}</p>
     {error && <p className="sf-hint is-warn">{error}</p>}
     <div className="sf-modal-foot"><button type="button" className="sf-btn" onClick={onClose}>닫기</button><button type="button" className="sf-btn is-primary" disabled={busy || n < 1} onClick={() => void submit()}>{busy && <SavingMark />}{opt.prepaid ? '선결제 기록' : '주문'}</button></div>
   </Modal>;
@@ -434,7 +431,6 @@ function Receive({ state, notify }: { state: InvState; notify: (m: string) => vo
           <td className="num"><input className="sf-num" type="number" min={0} inputMode="decimal" value={actual[o.id] ?? String(o.qty + o.bonus_qty)} onChange={e => setActual(a => ({ ...a, [o.id]: e.target.value }))} aria-label={`${o.item_name} 실제 도착 수량`} /> {o.stock_unit}</td>
           <td><label className="iv-check"><input type="checkbox" checked={!!invoice[`o${o.id}`]} onChange={e => setInvoice(v => ({ ...v, [`o${o.id}`]: e.target.checked }))} /> 받음</label></td>
           <td className="num"><button type="button" className="sf-btn is-primary" disabled={busy === `o${o.id}`} onClick={() => void run(`o${o.id}`, () => invSend('POST', '/receive', { order_id: o.id, actual_qty: Number(actual[o.id] ?? o.qty + o.bonus_qty), date, invoice: invoice[`o${o.id}`] }), '입고확정했어요. 병원재고에 반영됐어요.')}>{busy === `o${o.id}` && <SavingMark />}입고확정</button></td></tr>)}</tbody></table>}
-      <p className="sf-hint">실제로 들어온 수량만 병원재고에 더해요(증정 포함). 결제금액은 주문한 구매조건 그대로예요.</p>
     </section>
     {prepaidItems.length > 0 && <section className="iv-sec"><h3>선결제 반입</h3>
       <div className="iv-row">
@@ -444,7 +440,6 @@ function Receive({ state, notify }: { state: InvState; notify: (m: string) => vo
         <button type="button" className="sf-btn is-primary" disabled={!ppItem || !(ppQty > 0) || busy === 'pp'} onClick={async () => { if (await run('pp', () => invSend('POST', '/receive', { from_prepaid: true, item_id: ppItem!.id, actual_qty: ppQty, date, invoice: invoice.pp }), '입고확정했어요. 선결제 잔량을 차감했어요.')) setPp({ item: pp.item, qty: '' }); }}>{busy === 'pp' && <SavingMark />}입고확정</button>
       </div>
       {ppItem && <div className="iv-calc"><span>선결제 잔량 <b>{withUnit(ppItem.vendor_stock, ppItem.stock_unit)}</b></span><span>→ 남는 잔량 <b className={ppQty > ppItem.vendor_stock ? 'is-warn' : ''}>{withUnit(Math.round((ppItem.vendor_stock - ppQty) * 1000) / 1000, ppItem.stock_unit)}</b></span><span>병원재고 {withUnit(ppItem.hospital_stock, ppItem.stock_unit)} → <b>{withUnit(ppItem.hospital_stock + ppQty, ppItem.stock_unit)}</b></span></div>}
-      <p className="sf-hint">반입은 구매가 아니라 재고 이동이에요: 입고확정 때 선결제 잔량에서 빼고 병원재고에 더해요. 추가 결제·금액 재계산 없음.{ppItem?.unit_cost != null ? ` 개당원가 ${ppItem.unit_cost.toLocaleString('ko-KR')}원(최근 구매금액 ÷ 증정 포함 수량).` : ''}</p>
     </section>}
     <section className="iv-sec"><h3>주문 없이 받은 것</h3>
       <div className="iv-row">
@@ -478,7 +473,6 @@ function OutForm({ state, notify }: { state: InvState; notify: (m: string) => vo
       }}>{busy && <SavingMark />}출고</button>
     </div>
     {item && <div className="iv-calc"><span>병원재고 {withUnit(item.hospital_stock, item.stock_unit)} → <b className={item.hospital_stock - qty < 0 ? 'is-warn' : ''}>{withUnit(Math.round((item.hospital_stock - qty) * 1000) / 1000, item.stock_unit)}</b></span></div>}
-    <p className="sf-hint">병원재고만 재고단위로 빼요. 구매금액·선결제 잔량은 바뀌지 않아요. 팩류 일일 사용은 재고체크 → 일일 재고에서 마감하면 자동으로 출고돼요.</p>
   </section>;
 }
 

@@ -1766,7 +1766,10 @@ a:hover > .download-mark .download-arrow, a:focus-visible > .download-mark .down
 .lv-sum .lv-rest b { color: var(--cv); }
 
 /* 성과 탭: 가로로 길게 늘어나지 않게 '날짜별 입력 | 월 성과' 두 칸(2026-11-08 사용자 요청), 좁은 화면은 위아래 */
-.sf-perf { display: grid; grid-template-columns: minmax(280px, 330px) minmax(0, 1fr); gap: 20px; align-items: stretch; } /* 두 칸 아래 끝을 맞춤 */
+.sf-wrap:has(> .sf-perf), .sf-wrap:has(.sf-perf) { container-type: inline-size; container-name: perf; }
+.sf-perf { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; align-items: start; }
+/* 두 칸이 다 들어갈 폭일 때만 나란히(표가 잘리지 않게), 아래 끝 맞춤 */
+@container perf (min-width: 820px) { .sf-perf { grid-template-columns: minmax(320px, 0.85fr) minmax(0, 1.25fr); align-items: stretch; } } /* 두 칸 아래 끝을 맞춤 */
 .sf-perf > section { display: flex; flex-direction: column; gap: 12px; min-width: 0; background: #fff; border: 1px solid #ece8e1; border-radius: 16px; padding: 20px 20px 22px; }
 .sf-perf .sf-perf-title { margin: 0; }
 .sf-perf-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
@@ -1777,7 +1780,8 @@ a:hover > .download-mark .download-arrow, a:focus-visible > .download-mark .down
 .sf-perf .sf-table th { font-size: 12px; line-height: 16px; vertical-align: bottom; }
 .sf-perf-in .sf-table td:first-child { white-space: normal; }
 .sf-perf-in .sf-num { width: 56px; }
-@media (max-width: 900px) {
-  .sf-perf { grid-template-columns: minmax(0, 1fr); align-items: start; }
-  .sf-perf > section { max-width: 640px; }
-}
+
+
+/* 성과 입력 칸: 이름·상태 한 줄, 머리글 줄바꿈 없이 */
+.sf-perf-in .sf-table td:first-child { white-space: nowrap; }
+.sf-perf-in .sf-table th { white-space: nowrap; }

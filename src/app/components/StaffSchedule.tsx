@@ -58,7 +58,6 @@ function useStaffMonth(month: string) {
 export function StaffUnavailable({ message, unavailable, detail }: { message: string; unavailable: boolean; detail?: string }) {
   return <div className="pending-screen"><strong>{unavailable ? '직원 자료 연결 전' : '불러오지 못했어요'}</strong>
     <p>{message}</p>
-    {unavailable && <small>예전 재고관리 앱의 데이터베이스를 이 사이트에 연결하면 바로 보여요.</small>}
     {detail && <pre className="sf-detail">{detail}</pre>}</div>;
 }
 
@@ -304,16 +303,6 @@ function Performance({ month, data, notify }: { month: string; data: Data; notif
     try { await staffPost('/attendance', payloadFor(s, date, r, { [field]: val })); setSaved(s.id); await data.reload(true); void loadPerf(); }
     catch (e) { notify(e instanceof Error ? e.message : '저장 실패'); }
   };
-  const leaderRec = staff.find(x => x.is_leader) ? recOf(staff.find(x => x.is_leader)!.id) : null;
-  const fullConsult = leaderRec?.attendance === '상담'; // 풀상담일: 관리 실적 제외
-  // 성과는 팀장 기준(팀장만 관리): 그날 팀장 상태를 입력 위에 보여 준다
-  const leaderSt = leaderRec ? stateOf(leaderRec) : null;
-  const anyStaffRec = staff.some(x => !x.is_leader && recOf(x.id));
-  const leaderNote = fullConsult ? null
-    : !leaderRec ? !anyStaffRec ? null : '팀장 근태 미입력 — 성과는 팀장 기준이라, 팀장 근태를 넣기 전까지 이 날 직원 근무시간·관리수는 0으로 처리돼요. 지정 환자 수는 지정 수에만 따로 표시돼요.'
-    : leaderSt === '정상근무' ? null
-    : leaderSt === '2출' || leaderSt === '출퇴근 기타' ? `팀장 ${leaderSt} (${leaderRec.start_time || '?'}–${leaderRec.end_time || '?'}) — 직원 근무시간은 팀장이 실제로 근무한 시간과 겹친 만큼만 인정해요.`
-    : `팀장 ${leaderSt} — 성과는 팀장 기준이라 이 날 직원 근무시간·관리수는 0으로 처리돼요. 지정 환자 수는 관리수에 더하지 않고 지정 수에만 따로 표시돼요.`;
   const can = (r: AttendanceRecord, field: string) => field === 'managed_count' ? (r.attendance === '정상근무' || isTimeEtc(r)) : !((r.attendance === '기타' && r.etc_type === 'unpaid') || r.attendance === '병원휴무');
   const n = daysInMonth(month);
   const dash = (v: unknown, unit = '') => (v == null || v === '' ? '-' : `${v}${unit}`);
@@ -323,8 +312,6 @@ function Performance({ month, data, notify }: { month: string; data: Data; notif
       <select className="sf-select" value={date} aria-label="날짜" onChange={e => setDate(e.target.value)}>
         {Array.from({ length: n }, (_, i) => { const d = dateIn(month, i + 1); return <option key={d} value={d}>{dayLabelKo(d)}</option>; })}
       </select></div>
-    {leaderNote && <p className="sf-ask">{leaderNote}</p>}
-    {fullConsult && <p className="sf-ask">풀상담일 · 관리실적 제외 — 이 날 관리 인원과 지정 환자 수는 기록만 하고 성과·평균·시간당 관리수에는 넣지 않아요.</p>}
     <table className="sf-table">
       <thead><tr><th>직원</th><th className="num">관리 인원</th><th className="num">지정 환자 수</th><th /></tr></thead>
       <tbody>{list.map(s => { const r = recOf(s.id); return <tr key={s.id}>
