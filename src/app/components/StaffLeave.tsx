@@ -45,7 +45,7 @@ export default function StaffLeave() {
   useEffect(() => { void load(); const on = () => void load(); window.addEventListener('staff-data-changed', on); return () => window.removeEventListener('staff-data-changed', on); }, [load]);
   if (state.loading && !staff.length) return <LoadingBox />;
   if (state.error) return <StaffUnavailable message={state.error} unavailable={state.unavailable} detail={state.detail} />;
-  const today = todayLocal(), n = daysInMonth(month), lead = weekdayOf(`${month}-01`);
+  const today = todayLocal(), n = daysInMonth(month), lead = weekdayOf(`${month}-01`); // 달력은 늘 6줄(42칸)로 그려 달마다 카드 높이가 같게
   return <div className="sf-wrap sf-leave">
     <OldDataBanner />
     <div className="sf-bar">
@@ -80,6 +80,7 @@ export default function StaffLeave() {
             return <span key={date} className={`${on ? 'is-leave' : ''}${date === today ? ' is-today' : ''}${wd === 0 ? ' is-sun' : wd === 6 ? ' is-sat' : ''}`} title={on ? `${date} 연차 ${seq.split('/')[0]}번째` : undefined}>
               <b>{d + 1}</b>{on && <em>{seq.split('/')[0]}번째</em>}</span>;
           })}
+          {Array.from({ length: 42 - lead - n }, (_, i) => <span key={`a${i}`} aria-hidden="true" />)}
         </div>
         <div className="lv-list">
           <div className="lv-list-head"><p>{month.slice(0, 4)}년 사용 내역 <b>{all.length}일</b></p><button type="button" className="lv-link" onClick={() => setOpen(x)}>이력·수정</button></div>
