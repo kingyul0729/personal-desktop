@@ -4,7 +4,7 @@ import { OldDataBanner } from './Inventory';
 import { staffGet, staffPost, StaffApiError } from '../staffApi';
 import {
   type AttendanceRecord, type MonthData, type StaffMember, WEEKDAYS, WORK_STATES, ST_LEADER, ST_STAFF, calendarLines, dateIn, dayLabelKo, daysInMonth, diffMin,
-  isReadonly, isTimeEtc, leaveCumulative, monthLabel, optionsFor, payloadFor, shiftMonth, stateOf, statePatch, stdTime, todayLocal, weekdayOf,
+  isReadonly, isRedDay, isTimeEtc, leaveCumulative, monthLabel, optionsFor, payloadFor, shiftMonth, stateOf, statePatch, stdTime, todayLocal, weekdayOf,
 } from '../staffRules';
 
 // 직원스케줄/성과표 — 예전 재고관리 앱의 직원 달력(스케줄)과 성과 입력을 그대로 옮긴 화면.
@@ -101,7 +101,7 @@ function Schedule({ month, data, notify }: { month: string; data: Data; notify: 
   const leader = staff.find(s => s.is_leader);
   const dayStatus = all[staff[0]?.id]?.day_status || [];
   const clinicOff = (date: string) => dayStatus.some(r => r.work_date === date && r.status === 'clinic_off');
-  const isHoliday = (date: string) => clinicOff(date) || (!!leader && ['공휴일', '병원휴무'].includes(recOf(leader.id, date)?.attendance || ''));
+  const isHoliday = (date: string) => isRedDay(date) || clinicOff(date) || (!!leader && ['공휴일', '병원휴무'].includes(recOf(leader.id, date)?.attendance || ''));
 
   // 성과는 팀장 기준이라 팀장 근태를 바꾸면 그날 직원 성과도 바뀐다 — 직원 실적이 이미 있는 날이면 먼저 묻는다(2026-11-08 사용자 요청)
   const [pending, setPending] = useState<{ text: string; run: () => void } | null>(null);
@@ -134,7 +134,7 @@ function Schedule({ month, data, notify }: { month: string; data: Data; notify: 
         {Array.from({ length: lead }, (_, i) => <span key={`a${i}`} className="sf-day is-blank" />)}
         {Array.from({ length: n }, (_, i) => {
           const date = dateIn(month, i + 1), cell = calendarLines(date, staff, recOf, isHoliday(date), cum, today);
-          return <button key={date} type="button" className={`sf-day${date === sel ? ' is-sel' : ''}${date === today ? ' is-today' : ''}${weekdayOf(date) === 0 ? ' is-sun' : ''}`} aria-pressed={date === sel} onClick={() => { setSel(date); setConfirmClear(false); }}>
+          return <button key={date} type="button" className={`sf-day${date === sel ? ' is-sel' : ''}${date === today ? ' is-today' : ''}${isRedDay(date) ? ' is-sun' : ''}`} aria-pressed={date === sel} onClick={() => { setSel(date); setConfirmClear(false); }}>
             <span className="sf-dn">{i + 1}</span>
             {cell.all ? <span className="sf-ev is-hol">휴일</span> : cell.lines.map(l => <span key={l.sid} className={`sf-ev is-${l.kind}`}><b>{l.name}</b> {l.label}</span>)}
             {cell.none > 0 && <span className="sf-ev is-none">미입력 {cell.none}</span>}

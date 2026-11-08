@@ -4,7 +4,7 @@ import { LoadingBox, SavingMark } from './Feedback';
 import { OldDataBanner } from './Inventory';
 import { StaffUnavailable } from './StaffSchedule';
 import { staffGet, staffPost, StaffApiError } from '../staffApi';
-import { type StaffMember, WEEKDAYS, dateIn, daysInMonth, leaveSeq, monthLabel, shiftMonth, todayLocal, weekdayOf } from '../staffRules';
+import { type StaffMember, WEEKDAYS, dateIn, daysInMonth, isRedDay, leaveSeq, monthLabel, shiftMonth, todayLocal, weekdayOf } from '../staffRules';
 
 // 직원연차 — 직원마다 자기 달력에 연차 날짜(순번 n/총)를 표시하고, 위에 지급연차 / 사용연차 / 잔여연차(누적, 월별 아님)를 보인다(2026-11-08 사용자 지정).
 // 연차 사용/되돌림은 직원스케줄 달력에서 '연차'를 고르면 서버가 처리한다(예전 앱과 같음).
@@ -86,7 +86,7 @@ export default function StaffLeave() {
           {Array.from({ length: n }, (_, d) => {
             const date = dateIn(month, d + 1), on = mine.has(date), wd = weekdayOf(date);
             const seq = on ? memos[`${x.id}|${date}`] || `${leaveSeq(x, idx, date)}/${x.total_leave ?? '-'}` : '';
-            return <span key={date} className={`${on ? 'is-leave' : ''}${date === today ? ' is-today' : ''}${wd === 0 ? ' is-sun' : wd === 6 ? ' is-sat' : ''}`} title={on ? `${date} 연차 ${seq}` : undefined}>
+            return <span key={date} className={`${on ? 'is-leave' : ''}${date === today ? ' is-today' : ''}${isRedDay(date) ? ' is-sun' : wd === 6 ? ' is-sat' : ''}`} title={on ? `${date} 연차 ${seq}` : undefined}>
               <b>{d + 1}</b>{on && <em>{seq}</em>}</span>;
           })}
           {Array.from({ length: 42 - lead - n }, (_, i) => <span key={`a${i}`} aria-hidden="true" />)}

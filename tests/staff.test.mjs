@@ -164,3 +164,15 @@ test('leader off: staff managed is not taken, designated is; own day off closes 
   await post({ staff_id: 3, work_date: '2027-06-03', attendance: '연차', designated_count: 2 });
   assert.equal(row(3, '2027-06-03').designated_count, null);
 });
+
+test('red days (sundays and 2026 public holidays) are clinic holidays on the schedule', async () => {
+  const { build } = await import('esbuild');
+  const out = await build({ entryPoints: ['src/app/staffRules.ts'], bundle: true, write: false, format: 'esm', platform: 'node' });
+  const { isRedDay, calendarLines } = await import('data:text/javascript;base64,' + Buffer.from(out.outputFiles[0].text).toString('base64'));
+  for (const d of ['2026-06-03', '2026-06-06', '2026-08-17', '2026-10-05', '2026-11-08']) assert.ok(isRedDay(d), d);
+  assert.ok(!isRedDay('2026-11-09'));
+  // 빨간 날에 아무도 기록이 없으면 '휴일'로만 보이고 '미입력'으로 세지 않음
+  const staff = [{ id: 1, name: '김유리', is_leader: 1 }, { id: 2, name: '최윤희' }];
+  const cell = calendarLines('2026-06-03', staff, () => null, isRedDay('2026-06-03'), {}, '2026-11-08');
+  assert.deepEqual([cell.all, cell.none], ['휴일', 0]);
+});
