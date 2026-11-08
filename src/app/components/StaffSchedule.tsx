@@ -11,25 +11,43 @@ import {
 // 상태를 고르면 바로 저장한다(예전 앱과 같은 저장값, 서버 계산 그대로).
 type PerfRow = { id: number; name: string; status?: string; total_hours: number | null; total_managed: number | null; avg_managed: number | null; total_designated: number | null; remain_leave: number | null; consult_designated?: number | null; work_days?: number; leave_used?: number; exclusions?: { date: string; reason: string }[] };
 
+// 빨리 보이게(2026-11-08 사용자 '느려'): 달마다 받은 자료를 기억해 두고 다시 열면 바로 보여 준 뒤 뒤에서 새로 받는다.
+// 직원별 달 자료는 한꺼번에(동시에) 받고, 앞뒤 달은 미리 받아 둔다.
+type MonthBundle = { list: StaffMember[]; months: Record<number, MonthData>; cum: Record<string, Record<string, number>> };
+const monthCache = new Map<string, MonthBundle>();
+async function fetchMonth(month: string): Promise<MonthBundle> {
+  const [list, ld] = await Promise.all([
+    staffGet('/list', { include_retired: 0 }) as Promise<StaffMember[]>,
+    staffGet('/leave-dates', { year: month.slice(0, 4) }).catch(() => ({ leave_dates: {} })),
+  ]);
+  const rows = await Promise.all(list.map(s => staffGet('/month', { staff_id: s.id, month }) as Promise<MonthData>));
+  const months: Record<number, MonthData> = {};
+  list.forEach((s, i) => { months[s.id] = rows[i]; });
+  const b = { list, months, cum: leaveCumulative(ld.leave_dates || {}) };
+  monthCache.set(month, b);
+  return b;
+}
+function prefetch(month: string) { if (!monthCache.has(month)) void fetchMonth(month).catch(() => undefined); }
+if (typeof window !== 'undefined') window.addEventListener('staff-data-changed', () => monthCache.clear());
+
 function useStaffMonth(month: string) {
-  const [staff, setStaff] = useState<StaffMember[]>([]);
-  const [all, setAll] = useState<Record<number, MonthData>>({});
-  const [cum, setCum] = useState<Record<string, Record<string, number>>>({});
-  const [state, setState] = useState<{ loading: boolean; error: string; unavailable: boolean; detail?: string }>({ loading: true, error: '', unavailable: false });
+  const [staff, setStaff] = useState<StaffMember[]>(() => monthCache.get(month)?.list || []);
+  const [all, setAll] = useState<Record<number, MonthData>>(() => monthCache.get(month)?.months || {});
+  const [cum, setCum] = useState<Record<string, Record<string, number>>>(() => monthCache.get(month)?.cum || {});
+  const [state, setState] = useState<{ loading: boolean; error: string; unavailable: boolean; detail?: string }>(() => ({ loading: !monthCache.has(month), error: '', unavailable: false }));
   const seq = useRef(0);
   const load = useCallback(async (quiet = false) => {
     const n = ++seq.current;
-    if (!quiet) setState(s => ({ ...s, loading: true }));
+    const hit = monthCache.get(month);
+    if (hit && !quiet) { setStaff(hit.list); setAll(hit.months); setCum(hit.cum); setState({ loading: false, error: '', unavailable: false }); }
+    else if (!quiet) setState(s => ({ ...s, loading: true }));
     try {
-      const list: StaffMember[] = await staffGet('/list', { include_retired: 0 });
-      const months: Record<number, MonthData> = {};
-      for (const s of list) months[s.id] = await staffGet('/month', { staff_id: s.id, month }); // 예전 앱처럼 차례로 읽는다
-      let c = {};
-      try { c = leaveCumulative((await staffGet('/leave-dates', { year: month.slice(0, 4) })).leave_dates || {}); } catch { /* 누적 표기만 빠짐 */ }
+      const { list, months, cum: c } = await fetchMonth(month);
+      prefetch(shiftMonth(month, -1)); prefetch(shiftMonth(month, 1));
       if (n !== seq.current) return;
       setStaff(list); setAll(months); setCum(c); setState({ loading: false, error: '', unavailable: false });
     } catch (e) {
-      if (n !== seq.current) return;
+      if (n !== seq.current || (hit && !quiet)) return; // 기억해 둔 화면이 있으면 그대로 둔다
       setState({ loading: false, error: e instanceof Error ? e.message : '불러오지 못했어요.', unavailable: e instanceof StaffApiError && e.unavailable, detail: e instanceof StaffApiError ? e.detail : '' });
     }
   }, [month]);
@@ -262,6 +280,7 @@ function BulkDialog({ month, staff, all, onClose, onDone }: { month: string; sta
   </div>;
 }
 
+const perfCache = new Map<string, PerfRow[]>();
 function Performance({ month, data, notify }: { month: string; data: Data; notify: (m: string) => void }) {
   const today = todayLocal();
   const [date, setDate] = useState(() => (today.slice(0, 7) === month ? today : `${month}-01`));
@@ -269,8 +288,8 @@ function Performance({ month, data, notify }: { month: string; data: Data; notif
   const [rows, setRows] = useState<PerfRow[] | null>(null);
   const [detail, setDetail] = useState<PerfRow | null>(null);
   const [saved, setSaved] = useState<number | null>(null);
-  const loadPerf = useCallback(async () => { try { setRows(await staffGet('/performance', { month, include_retired: 0 })); } catch { setRows([]); } }, [month]);
-  useEffect(() => { setRows(null); void loadPerf(); }, [loadPerf]);
+  const loadPerf = useCallback(async () => { try { const r = await staffGet('/performance', { month, include_retired: 0 }); perfCache.set(month, r); setRows(r); } catch { setRows(perfCache.get(month) || []); } }, [month]);
+  useEffect(() => { setRows(perfCache.get(month) || null); void loadPerf(); }, [loadPerf, month]);
   // 다른 화면(직원연차 등)에서 바꾼 값도 성과표에 바로 반영
   useEffect(() => { const on = () => void loadPerf(); window.addEventListener('staff-data-changed', on); return () => window.removeEventListener('staff-data-changed', on); }, [loadPerf]);
   const { staff, all } = data;
