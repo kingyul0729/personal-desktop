@@ -6,7 +6,7 @@ import { StaffUnavailable } from './StaffSchedule';
 import { staffGet, staffPost, StaffApiError } from '../staffApi';
 import { type StaffMember, WEEKDAYS, dateIn, daysInMonth, leaveSeq, monthLabel, shiftMonth, todayLocal, weekdayOf } from '../staffRules';
 
-// 직원연차 — 직원마다 자기 달력에 연차 날짜(순번 n/총)를 표시하고, 위에 총 부여 / 총 사용 / 잔여(누적, 월별 아님)를 보인다(2026-11-08 사용자 지정).
+// 직원연차 — 직원마다 자기 달력에 연차 날짜(순번 n/총)를 표시하고, 위에 총 개수 / 총 사용 / 잔여(누적, 월별 아님)를 보인다(2026-11-08 사용자 지정).
 // 연차 사용/되돌림은 직원스케줄 달력에서 '연차'를 고르면 서버가 처리한다(예전 앱과 같음).
 // 직원별 고유 파스텔 색(id로 고정 배정 — 새로고침해도 같은 색). [진한 글자색, 연한 바탕, 상단 줄]
 const STAFF_TONES: [string, string, string][] = [
@@ -65,7 +65,7 @@ export default function StaffLeave() {
       return <section key={x.id} className="lv-card" style={{ '--c': ink, '--c-bg': tint, '--c-line': line } as React.CSSProperties}>
         <div className="lv-sum" aria-label={`${x.name} 연차`}>
           <strong className="lv-name" title={x.name}>{x.name.length >= 3 ? x.name.slice(1) : x.name}</strong>
-          <div><span>총 부여</span><b>{x.total_leave ?? '-'}</b></div>
+          <div><span>총 개수</span><b>{x.total_leave ?? '-'}</b></div>
           <div><span>총 사용</span><b>{x.used_leave ?? '-'}</b></div>
           <div className="lv-rest"><span>잔여</span><b className={remain < 0 ? 'is-warn' : ''}>{remain}</b></div>
         </div>

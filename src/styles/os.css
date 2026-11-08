@@ -1646,7 +1646,7 @@ a:hover > .download-mark .download-arrow, a:focus-visible > .download-mark .down
 
 .lv-list .lv-tags li button.is-here > span:first-child::before { content: none; }
 
-/* 직원연차 v4 (2026-11-08 사용자 지정): 상자 위 색 띠·아바타·이름 머리줄 없음. 요약 상자 = 이름 | 총 부여 | 총 사용 | 잔여.
+/* 직원연차 v4 (2026-11-08 사용자 지정): 상자 위 색 띠·아바타·이름 머리줄 없음. 요약 상자 = 이름 | 총 개수 | 총 사용 | 잔여.
    상자 위에 띠를 두르지 않는다(사용자: AI가 만든 티가 나는 특징). */
 .lv-sum { grid-template-columns: auto 1fr 1fr 1fr; align-items: center; column-gap: 0; }
 .lv-sum .lv-name { font-size: 17px; font-weight: 700; color: var(--c); padding-right: 18px; white-space: nowrap; letter-spacing: -.01em; }
