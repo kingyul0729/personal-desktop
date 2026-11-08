@@ -18,6 +18,16 @@ const STAFF_TONES: [string, string, string][] = [
   ['#8f6273', '#f6eff1', '#dcc6ce'], // 로즈
   ['#557a76', '#eef4f3', '#c2d8d5'], // 민트그린
 ];
+// 이름 타일·달력 날짜는 채도를 낮추기 전 색 그대로(2026-11-08 사용자 요청). [글자색, 연한 바탕, 테두리]
+const STAFF_TONES_VIVID: [string, string, string][] = [
+  ['#4f7f5f', '#e9f3ec', '#9cc9aa'], // 세이지
+  ['#6b58b8', '#efecfa', '#b9adeb'], // 라벤더
+  ['#b25d38', '#fcefe7', '#f0b393'], // 피치
+  ['#8a6a17', '#faf2db', '#e8cc79'], // 버터
+  ['#a84a6c', '#fbecf1', '#eaa6bf'], // 로즈
+  ['#2f7a73', '#e5f3f1', '#93cbc5'], // 민트그린
+];
+const vividOf = (id: number) => STAFF_TONES_VIVID[(id - 1 + STAFF_TONES_VIVID.length) % STAFF_TONES_VIVID.length];
 const toneOf = (id: number) => STAFF_TONES[(id - 1 + STAFF_TONES.length) % STAFF_TONES.length];
 
 const LEAVE_REASONS = ['포상 연차 지급', '재계약 연차 재세팅', '연차 촉진 초기화', '행정 오류 수정', '신입 연차 당겨쓰기', '직접 입력'];
@@ -62,8 +72,8 @@ export default function StaffLeave() {
       const idx: Record<string, number> = {}; all.forEach((d, i) => { idx[d] = i + 1; });
       const mine = new Set(all);
       const remain = x.remain_leave ?? (x.total_leave ?? 0) - (x.used_leave ?? 0);
-      const [ink, tint, line] = toneOf(x.id);
-      return <section key={x.id} className="lv-card" style={{ '--c': ink, '--c-bg': tint, '--c-line': line } as React.CSSProperties}>
+      const [ink, tint, line] = toneOf(x.id), [vInk, vTint, vLine] = vividOf(x.id);
+      return <section key={x.id} className="lv-card" style={{ '--c': ink, '--c-bg': tint, '--c-line': line, '--cv': vInk, '--cv-bg': vTint, '--cv-line': vLine } as React.CSSProperties}>
         <div className="lv-top">
           <strong className="lv-name" title={x.name}>{x.name.length >= 3 ? x.name.slice(1) : x.name}</strong>
           <div className="lv-sum" aria-label={`${x.name} 연차`}>
