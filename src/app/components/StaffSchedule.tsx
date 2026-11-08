@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { LoadingBox, SavingMark } from './Feedback';
-import { OldDataBanner, OldDataImport } from './Inventory';
+import { OldDataBanner } from './Inventory';
 import { staffGet, staffPost, StaffApiError } from '../staffApi';
 import {
   type AttendanceRecord, type MonthData, type StaffMember, WEEKDAYS, WORK_STATES, ST_LEADER, ST_STAFF, calendarLines, dateIn, dayLabelKo, daysInMonth, diffMin,
@@ -318,6 +318,7 @@ function Performance({ month, data, notify }: { month: string; data: Data; notif
   const n = daysInMonth(month);
   const dash = (v: unknown, unit = '') => (v == null || v === '' ? '-' : `${v}${unit}`);
   return <div className="sf-perf">
+    <section className="sf-perf-in">
     <div className="sf-perf-head"><h3>날짜별 입력</h3>
       <select className="sf-select" value={date} aria-label="날짜" onChange={e => setDate(e.target.value)}>
         {Array.from({ length: n }, (_, i) => { const d = dateIn(month, i + 1); return <option key={d} value={d}>{dayLabelKo(d)}</option>; })}
@@ -335,8 +336,9 @@ function Performance({ month, data, notify }: { month: string; data: Data; notif
         <td><small>{saved === s.id ? '저장됨' : ''}</small></td>
       </tr>; })}</tbody>
     </table>
+    </section>
+    <section className="sf-perf-out">
     <h3 className="sf-perf-title">{monthLabel(month)} 성과</h3>
-    <p className="sf-hint">성과는 팀장 기준이에요. 팀장이 근무한 날만 세고, 실근무시간은 팀장 근무시간과 겹친 만큼만 인정해요. 관리수 = 관리 인원 + 지정 환자 수(팀장이 근무하지 않은 날의 지정 환자 수는 지정 수에만). 시간당 관리수는 팀장이 일부만 근무한 날도 직원 본인 근무시간으로 나눠요.</p>
     {rows == null ? <LoadingBox /> : !rows.length ? <p className="sf-hint">해당 월 성과 데이터가 없습니다</p> :
       <table className="sf-table is-click">
         <thead><tr><th>직원</th><th className="num">실근무시간</th><th className="num">관리수<br /><small>지정 포함</small></th><th className="num">시간당 관리수</th><th className="num">지정 수</th>{rows.some(r => r.consult_designated != null) && <th className="num">풀상담 지정<br /><small>성과 제외</small></th>}<th className="num">잔여연차</th></tr></thead>
@@ -346,7 +348,7 @@ function Performance({ month, data, notify }: { month: string; data: Data; notif
           {rows.some(x => x.consult_designated != null) && <td className="num"><small>{dash(r.consult_designated, '명')}</small></td>}
           <td className={`num${(r.remain_leave ?? 0) < 0 ? ' is-warn' : ''}`}>{dash(r.remain_leave, '개')}</td></tr>)}</tbody>
       </table>}
-    <OldDataImport merge onDone={() => { void data.reload(true); void loadPerf(); }} />
+    </section>
     {detail && <div className="sf-modal" role="dialog" aria-modal="true" aria-label={`${detail.name} 세부 근태`}>
       <div className="sf-modal-back" onClick={() => setDetail(null)} />
       <div className="sf-modal-panel">

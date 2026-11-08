@@ -1764,3 +1764,20 @@ a:hover > .download-mark .download-arrow, a:focus-visible > .download-mark .down
 .lv-cal span.is-leave.is-today { box-shadow: inset 0 0 0 1.5px var(--cv); }
 .sf-leave { --lv-sun: #d9484d; --lv-sat: #3b74d6; }
 .lv-sum .lv-rest b { color: var(--cv); }
+
+/* 성과 탭: 가로로 길게 늘어나지 않게 '날짜별 입력 | 월 성과' 두 칸(2026-11-08 사용자 요청), 좁은 화면은 위아래 */
+.sf-perf { display: grid; grid-template-columns: minmax(280px, 330px) minmax(0, 1fr); gap: 20px; align-items: start; }
+.sf-perf > section { display: flex; flex-direction: column; gap: 12px; min-width: 0; background: #fff; border: 1px solid #ece8e1; border-radius: 16px; padding: 20px 20px 22px; }
+.sf-perf .sf-perf-title { margin: 0; }
+.sf-perf-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.sf-perf-head h3 { margin: 0; }
+.sf-perf .sf-table { font-size: 13.5px; }
+.sf-perf .sf-table th, .sf-perf .sf-table td { padding: 11px 8px; word-break: keep-all; }
+.sf-perf .sf-table td { white-space: nowrap; }
+.sf-perf .sf-table th { font-size: 12px; line-height: 16px; vertical-align: bottom; }
+.sf-perf-in .sf-table td:first-child { white-space: normal; }
+.sf-perf-in .sf-num { width: 56px; }
+@media (max-width: 900px) {
+  .sf-perf { grid-template-columns: minmax(0, 1fr); }
+  .sf-perf > section { max-width: 640px; }
+}
