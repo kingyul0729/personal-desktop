@@ -64,11 +64,13 @@ export default function StaffLeave() {
       const remain = x.remain_leave ?? (x.total_leave ?? 0) - (x.used_leave ?? 0);
       const [ink, tint, line] = toneOf(x.id);
       return <section key={x.id} className="lv-card" style={{ '--c': ink, '--c-bg': tint, '--c-line': line } as React.CSSProperties}>
-        <div className="lv-sum" aria-label={`${x.name} 연차`}>
-          <strong className="lv-name" title={x.name}><i>{x.name.length >= 3 ? x.name.slice(1) : x.name}</i></strong>
-          <div><span>지급연차</span><b>{x.total_leave ?? '-'}</b></div>
-          <div><span>사용연차</span><b>{x.used_leave ?? '-'}</b></div>
-          <div className="lv-rest"><span>잔여연차</span><b className={remain < 0 ? 'is-warn' : ''}>{remain}</b></div>
+        <div className="lv-top">
+          <strong className="lv-name" title={x.name}>{x.name.length >= 3 ? x.name.slice(1) : x.name}</strong>
+          <div className="lv-sum" aria-label={`${x.name} 연차`}>
+            <div><span>지급연차</span><b>{x.total_leave ?? '-'}</b></div>
+            <div><span>사용연차</span><b>{x.used_leave ?? '-'}</b></div>
+            <div className="lv-rest"><span>잔여연차</span><b className={remain < 0 ? 'is-warn' : ''}>{remain}</b></div>
+          </div>
         </div>
         <div className="lv-cal">{WEEKDAYS.map((w, k) => <i key={w} className={k === 0 ? 'is-sun' : k === 6 ? 'is-sat' : ''}>{w}</i>)}
           {Array.from({ length: lead }, (_, i) => <span key={`b${i}`} />)}
