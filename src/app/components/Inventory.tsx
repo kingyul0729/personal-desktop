@@ -215,33 +215,64 @@ export function StockOrder() {
   const { state, error, reload } = useInventory();
   const [toast, setToast] = useToast();
   const [tab, setTab] = useState<'order' | 'items'>('order');
+  const [q, setQ] = useState('');
   if (error) return <Problem error={error} />;
   if (!state) return <LoadingBox />;
   return <Shell toast={toast}>
-    <div className="sf-bar"><Seg label="보기" value={tab} onChange={setTab} options={[['order', '주문하기'], ['items', '품목·구매조건']]} /></div>
-    {tab === 'order' ? <OrderBoard state={state} notify={setToast} /> : <ItemEditor state={state} notify={setToast} onChange={reload} />}
+    <div className="sf-bar iv-obar"><Seg label="보기" value={tab} onChange={setTab} options={[['order', '주문하기'], ['items', '품목·구매조건']]} />
+      {tab === 'order' && <input className="iv-search" type="search" placeholder="품목·거래처 검색" aria-label="품목·거래처 검색" value={q} onChange={e => setQ(e.target.value)} />}</div>
+    {tab === 'order' ? <OrderBoard state={state} q={q} notify={setToast} /> : <ItemEditor state={state} notify={setToast} onChange={reload} />}
   </Shell>;
 }
 
-function OrderBoard({ state, notify }: { state: InvState; notify: (m: string) => void }) {
-  const [q, setQ] = useState('');
+// 주문하기 = 2분할 고정(2026-11-08 사용자 지정): 왼쪽 품목 목록(이름 + 부족 표시만), 오른쪽 고른 품목의 재고·구매조건·받기 전 주문.
+function OrderBoard({ state, q, notify }: { state: InvState; q: string; notify: (m: string) => void }) {
+  const [pickId, setPickId] = useState<number | null>(null);
   const [pick, setPick] = useState<{ item: InvItem; opt: InvOption } | null>(null);
   const list = state.items.filter(it => it.options.length && (!q || it.name.includes(q) || (it.vendor_name || '').includes(q)));
   const sorted = [...list].sort((a, b) => Number(lowOf(b)) - Number(lowOf(a)));
+  const item = sorted.find(it => it.id === pickId) ?? sorted[0];
+  const waiting = (id: number) => state.orders.filter(o => o.item_id === id);
   const cancel = async (id: number) => { try { await invSend('POST', `/orders/${id}/cancel`); notify('주문을 취소했어요.'); announceInventory(); } catch (e) { notify(errText(e)); } };
   return <>
-    {state.orders.length > 0 && <section className="iv-sec"><h3>받기 전 주문 {state.orders.length}건</h3>
-      <table className="sf-table"><thead><tr><th>주문일</th><th>품목</th><th className="num">수량(증정)</th><th className="num">결제금액</th><th /></tr></thead>
-        <tbody>{state.orders.map(o => <tr key={o.id}><td>{o.ordered_at.slice(5).replace('-', '/')}</td><td><b>{o.item_name}</b> <small>{o.option_label}</small></td>
-          <td className="num">{fmtQty(o.qty)}{o.bonus_qty ? ` (+${fmtQty(o.bonus_qty)})` : ''} {o.stock_unit}</td><td className="num">{fmtWon(o.amount)}</td>
-          <td className="num"><button type="button" className="sf-btn" onClick={() => void cancel(o.id)}>취소</button></td></tr>)}</tbody></table></section>}
-    <section className="iv-sec"><div className="iv-head"><h3>품목</h3><input className="iv-search" type="search" placeholder="품목·거래처 검색" value={q} onChange={e => setQ(e.target.value)} /></div>
-      <div className="iv-olist">{sorted.map(it => <div key={it.id} className={`iv-oitem${lowOf(it) ? ' is-low' : ''}`}>
-        <div className="iv-oname"><b>{it.name}</b><small>{it.vendor_name || '—'} · 병원재고 {withUnit(it.hospital_stock, it.stock_unit)}{it.prepaid ? ` · 선결제 잔량 ${withUnit(it.vendor_stock, it.stock_unit)}` : ''}{lowOf(it) ? ' · 부족' : ''}</small></div>
-        <div className="sf-pills">{it.options.map(o => <button key={o.id} type="button" onClick={() => setPick({ item: it, opt: o })}>{o.label || `${fmtQty(o.qty)} ${it.stock_unit}`} · {fmtWon(o.amount)}{o.bonus_qty ? ` · 증정 ${fmtQty(o.bonus_qty)}` : ''}{o.prepaid ? ' · 선결제' : ''}</button>)}</div>
-      </div>)}</div>
-      <p className="sf-hint">구매조건이 없는 품목(단가 미확인 등)은 '품목·구매조건'에서 조건을 먼저 등록하면 주문할 수 있어요.</p>
-    </section>
+    <div className="iv-split">
+      <nav className="iv-split-list" aria-label="품목">
+        <p className="iv-split-count">품목 {sorted.length}{state.orders.length > 0 && <span>받기 전 주문 {state.orders.length}건</span>}</p>
+        {sorted.length ? <ul>{sorted.map(it => { const w = waiting(it.id).length; return <li key={it.id}>
+          <button type="button" aria-current={item?.id === it.id ? 'true' : undefined} onClick={() => setPickId(it.id)}>
+            <span className="iv-split-name">{it.name}</span>
+            {w > 0 && <span className="iv-tag is-wait">주문 중</span>}{lowOf(it) && <span className="iv-tag is-low">부족</span>}
+          </button></li>; })}</ul>
+          : <p className="iv-split-empty">찾는 품목이 없어요</p>}
+      </nav>
+      <section className="iv-split-detail" aria-label="품목 상세">
+        {item ? <>
+          <header className="iv-d-head">
+            <div><h3>{item.name}{lowOf(item) && <span className="iv-tag is-low">부족</span>}</h3><p>{item.vendor_name || '거래처 없음'}{item.category ? ` · ${item.category}` : ''}</p></div>
+          </header>
+          <dl className="iv-d-stats">
+            <div><dt>병원재고</dt><dd className={lowOf(item) ? 'is-low' : ''}>{withUnit(item.hospital_stock, item.stock_unit)}</dd></div>
+            {item.prepaid ? <div><dt>선결제 잔량</dt><dd>{withUnit(item.vendor_stock, item.stock_unit)}</dd></div> : null}
+            <div><dt>최소재고</dt><dd>{item.min_stock > 0 ? withUnit(item.min_stock, item.stock_unit) : '—'}</dd></div>
+            <div><dt>{item.prepaid ? '개당원가' : '구매단가'}</dt><dd>{item.prepaid ? (item.unit_cost != null ? `${item.unit_cost.toLocaleString('ko-KR')}원` : '—') : fmtWon(item.price)}</dd></div>
+          </dl>
+          <div className="iv-d-sec"><h4>구매조건</h4>
+            <ul className="iv-d-opts">{item.options.map(o => <li key={o.id}>
+              <div className="iv-d-opt-main"><b>{o.label || `${fmtQty(o.qty)} ${item.stock_unit}`}</b>
+                <span>{fmtQty(o.qty)} {item.stock_unit}{o.bonus_qty ? ` + 증정 ${fmtQty(o.bonus_qty)}` : ''}{o.prepaid ? <em className="iv-tag">선결제</em> : null}</span></div>
+              <div className="iv-d-opt-price"><b>{fmtWon(o.amount)}</b>{o.amount != null && o.amount >= 10000 && <small>{readWon(o.amount)}</small>}</div>
+              <button type="button" className="sf-btn is-primary" onClick={() => setPick({ item, opt: o })}>{o.prepaid ? '선결제' : '주문'}</button>
+            </li>)}</ul>
+          </div>
+          {waiting(item.id).length > 0 && <div className="iv-d-sec"><h4>받기 전 주문</h4>
+            <ul className="iv-d-wait">{waiting(item.id).map(o => <li key={o.id}>
+              <span>{o.ordered_at.slice(5).replace('-', '/')}</span><span>{o.option_label || '—'}</span>
+              <span className="num">{fmtQty(o.qty)}{o.bonus_qty ? ` (+${fmtQty(o.bonus_qty)})` : ''} {o.stock_unit}</span><span className="num">{fmtWon(o.amount)}</span>
+              <button type="button" className="sf-btn" onClick={() => void cancel(o.id)}>취소</button></li>)}</ul></div>}
+        </> : <p className="iv-split-empty">왼쪽에서 품목을 고르세요</p>}
+      </section>
+    </div>
+    <p className="sf-hint">구매조건이 없는 품목(단가 미확인 등)은 '품목·구매조건'에서 조건을 먼저 등록하면 주문할 수 있어요.</p>
     {pick && <OrderDialog item={pick.item} opt={pick.opt} today={state.today} onClose={() => setPick(null)} onDone={msg => { notify(msg); setPick(null); announceInventory(); }} />}
   </>;
 }
