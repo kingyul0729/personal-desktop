@@ -1785,3 +1785,6 @@ a:hover > .download-mark .download-arrow, a:focus-visible > .download-mark .down
 /* 성과 입력 칸: 이름·상태 한 줄, 머리글 줄바꿈 없이 */
 .sf-perf-in .sf-table td:first-child { white-space: nowrap; }
 .sf-perf-in .sf-table th { white-space: nowrap; }
+/* 일일재고: 팀장 출근일이 아니면 칸을 닫고 상태 태그만 */
+.iv-daily.is-off .iv-dcard { opacity: .55; }
+.iv-off-tag { align-self: flex-end; height: 36px; padding: 0 14px; font-size: 13px; }

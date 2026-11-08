@@ -169,10 +169,24 @@ test('red days (sundays and 2026 public holidays) are clinic holidays on the sch
   const { build } = await import('esbuild');
   const out = await build({ entryPoints: ['src/app/staffRules.ts'], bundle: true, write: false, format: 'esm', platform: 'node' });
   const { isRedDay, calendarLines } = await import('data:text/javascript;base64,' + Buffer.from(out.outputFiles[0].text).toString('base64'));
-  for (const d of ['2026-06-03', '2026-06-06', '2026-08-17', '2026-10-05', '2026-11-08']) assert.ok(isRedDay(d), d);
+  for (const d of ['2026-05-01', '2026-06-03', '2026-06-06', '2026-08-17', '2026-10-05', '2026-11-08']) assert.ok(isRedDay(d), d);
   assert.ok(!isRedDay('2026-11-09'));
   // 빨간 날에 아무도 기록이 없으면 '휴일'로만 보이고 '미입력'으로 세지 않음
   const staff = [{ id: 1, name: '김유리', is_leader: 1 }, { id: 2, name: '최윤희' }];
   const cell = calendarLines('2026-06-03', staff, () => null, isRedDay('2026-06-03'), {}, '2026-11-08');
   assert.deepEqual([cell.all, cell.none], ['휴일', 0]);
+});
+
+test('daily stock check is only open on leader work days', async () => {
+  const e = env(); await call(e, '/api/staff/list');
+  const daily = async d => (await call(e, `/api/inventory/daily?date=${d}`)).data;
+  assert.deepEqual((await daily('2027-08-02')).check, { ok: false, label: '팀장 근태 미입력' });
+  await call(e, '/api/staff/attendance', { method: 'POST', body: { staff_id: 1, work_date: '2027-08-02', attendance: '휴무' } });
+  assert.deepEqual((await daily('2027-08-02')).check, { ok: false, label: '팀장 휴무' });
+  const r = await call(e, '/api/inventory/daily', { method: 'POST', body: { date: '2027-08-02', patients: 5, used: {} } });
+  assert.equal(r.status, 400);
+  await call(e, '/api/staff/attendance', { method: 'POST', body: { staff_id: 1, work_date: '2027-08-03', attendance: '기타', etc_type: 'time', start_time: '14:00', end_time: '19:30' } });
+  assert.equal((await daily('2027-08-03')).check.ok, true);
+  assert.equal((await call(e, '/api/inventory/daily', { method: 'POST', body: { date: '2027-08-03', patients: 5, used: {} } })).status, 200);
+  assert.equal((await daily('2026-05-01')).check.label, '휴일');
 });

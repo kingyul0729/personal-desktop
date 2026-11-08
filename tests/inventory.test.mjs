@@ -112,6 +112,8 @@ test('out reduces only hospital stock, deleting it restores; daily close replace
   await call(e, `/tx/${out.id}`, 'DELETE');
   assert.equal(item(e, '카프리가스').hospital_stock, it.hospital_stock);
   const pack = item(e, '더마 하이드로 팩');
+  // 일일재고는 팀장 출근일에만(2026-11-08 규칙)
+  e.inv.prepare(`INSERT INTO staff_attendance (staff_id, work_date, attendance, start_time, end_time) VALUES (1, '2026-11-09', '정상근무', '10:00', '19:30')`).run();
   await call(e, '/daily', 'POST', { date: '2026-11-09', patients: 15, used: { [pack.id]: 3 } });
   await call(e, '/daily', 'POST', { date: '2026-11-09', patients: 16, used: { [pack.id]: 1 } }); // 고쳐 저장
   assert.equal(item(e, '더마 하이드로 팩').hospital_stock, pack.hospital_stock - 1);

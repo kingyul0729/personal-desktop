@@ -11,6 +11,7 @@
 // - 단위는 숫자만 비교하지 않고 품목에 등록된 구성수량(pack_qty: 주문단위 1개 = 재고단위 몇 개)으로 환산.
 // - 입고·출고 기록 삭제 = 그 기록이 바꾼 병원재고·업체재고를 정확히 되돌림(기록마다 증감값을 저장해 둠).
 // - 단가 미확인 품목은 price=null 그대로(0원으로 바꾸지 않음).
+import { isRedDay } from './redDays.js';
 import { ensureInvSchema, INV_TABLES } from './invSchema.js';
 
 const json = (body, status = 200) => Response.json(body, { status, headers: { 'cache-control': 'no-store' } });
@@ -61,6 +62,16 @@ async function loadItem(db, id) {
 function optionUnits(item, o) {
   // 구매조건의 수량·증정은 재고단위로 저장돼 있다(입력 화면에서 주문단위 × 구성수량으로 환산해 저장).
   return { qty: Number(o.qty) || 0, bonus: Number(o.bonus_qty) || 0, amount: o.amount == null ? null : Number(o.amount) };
+}
+
+// 일일재고는 팀장이 출근한 날에만 한다(사용자 지정 2026-11-08). 팀장 휴무·연차·상담(풀상담)·미입력·빨간 날은 마감 없음,
+// 그날 못 센 재고 차이는 따로 표시하지 않는다.
+async function dailyCheck(db, date) {
+  const lead = await db.prepare(`SELECT a.attendance, a.etc_type FROM staff s LEFT JOIN staff_attendance a ON a.staff_id = s.id AND a.work_date = ? WHERE s.is_leader = 1 ORDER BY s.status = 'retired', s.id LIMIT 1`).bind(date).first().catch(() => null);
+  const att = lead?.attendance || null;
+  const works = att === '정상근무' || (att === '기타' && lead?.etc_type === 'time');
+  const label = works ? null : att ? (att === '상담' ? '풀상담일' : att === '공휴일' ? '휴일' : att === '기타' ? '무급' : `팀장 ${att}`) : isRedDay(date) ? '휴일' : '팀장 근태 미입력';
+  return { ok: works, label };
 }
 
 export async function handleInventory(request, env, url, user) {
@@ -314,10 +325,11 @@ export async function handleInventory(request, env, url, user) {
       const used = await all(db, `SELECT item_id, qty, id FROM inv_tx WHERE deleted_at IS NULL AND daily_date = ? AND kind = 'out'`, date);
       const since = new Date(Date.parse(date) - 14 * 864e5).toISOString().slice(0, 10);
       const recent = await all(db, `SELECT item_id, sum(qty) AS q FROM inv_tx WHERE deleted_at IS NULL AND kind = 'out' AND daily_date BETWEEN ? AND ? GROUP BY item_id`, since, date);
-      return json({ date, day: day ? { ...day, extra: day.extra ? JSON.parse(day.extra) : {} } : null, items: items.map(it => ({ ...it, used: used.find(u => u.item_id === it.id)?.qty ?? null, used15: recent.find(r => r.item_id === it.id)?.q ?? 0 })) });
+      return json({ date, check: await dailyCheck(db, date), day: day ? { ...day, extra: day.extra ? JSON.parse(day.extra) : {} } : null, items: items.map(it => ({ ...it, used: used.find(u => u.item_id === it.id)?.qty ?? null, used15: recent.find(r => r.item_id === it.id)?.q ?? 0 })) });
     }
     if (m === 'POST' && path === '/daily') {
       const date = okDate(body.date) ? body.date : null;
+      if (date && !(await dailyCheck(db, date)).ok) return bad('팀장 근무일에만 일일재고를 마감할 수 있어요.');
       if (!date) return bad('날짜를 확인해 주세요.');
       const patients = num(body.patients);
       if (patients != null && (patients < 0 || !Number.isInteger(patients))) return bad('피부관리 인원은 0 이상의 정수예요.');

@@ -105,14 +105,8 @@ export function leaveSeq(s: StaffMember, idx: Record<string, number> | undefined
   return (s.used_leave ?? 0) - later;
 }
 
-// 빨간 날 = 병원 휴일(사용자 지정 2026-11-08: 일요일·공휴일·대체공휴일은 병원도 쉬어서 근태를 따로 적지 않는다).
-// 2026년 공휴일은 한국천문연구원 월력요항 기준(선거일 6/3 포함). 새해 공휴일은 해마다 여기에 더한다.
-export const KR_RED_DAYS = new Set([
-  '2026-01-01', '2026-02-16', '2026-02-17', '2026-02-18', '2026-03-01', '2026-03-02', '2026-05-05', '2026-05-24', '2026-05-25',
-  '2026-06-03', '2026-06-06', '2026-07-17', '2026-08-15', '2026-08-17', '2026-09-24', '2026-09-25', '2026-09-26',
-  '2026-10-03', '2026-10-05', '2026-10-09', '2026-12-25',
-]);
-export const isRedDay = (date: string) => weekdayOf(date) === 0 || KR_RED_DAYS.has(date);
+// 빨간 날(병원 휴일) 목록은 서버와 같이 쓴다
+export { KR_RED_DAYS, isRedDay } from '../../worker/redDays.js';
 
 export const isReadonly = (s: StaffMember, date: string) => s.status === 'retired' && !!s.retire_date && date > s.retire_date;
 

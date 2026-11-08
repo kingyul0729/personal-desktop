@@ -80,7 +80,7 @@ function AdjustDialog({ item, today, onClose, onDone }: { item: InvItem; today: 
 type DailyItem = { id: number; name: string; stock_unit: string; hospital_stock: number; daily_mode: 'usage' | 'count'; used: number | null; used15: number };
 function DailyClose({ today, notify, onSaved }: { items: InvItem[]; today: string; notify: (m: string) => void; onSaved: () => void }) {
   const [date, setDate] = useState(today);
-  const [data, setData] = useState<{ day: { patients: number | null; status: string | null; extra: Record<string, unknown> } | null; items: DailyItem[] } | null>(null);
+  const [data, setData] = useState<{ check?: { ok: boolean; label: string | null }; day: { patients: number | null; status: string | null; extra: Record<string, unknown> } | null; items: DailyItem[] } | null>(null);
   const [patients, setPatients] = useState(''), [status, setStatus] = useState(''), [vals, setVals] = useState<Record<number, string>>({}), [people, setPeople] = useState('');
   const [busy, setBusy] = useState(false);
   const load = useCallback(async () => {
@@ -109,12 +109,15 @@ function DailyClose({ today, notify, onSaved }: { items: InvItem[]; today: strin
     try { await invSend('POST', '/daily', { date, patients: patients === '' ? null : Number(patients), status: status || null, extra: { modeling_people: people === '' ? null : Number(people) }, used }); notify('마감을 저장했어요.'); announceInventory(); onSaved(); await load(); }
     catch (e) { notify(errText(e)); } finally { setBusy(false); }
   };
-  return <div className="iv-daily">
+  // 팀장이 출근한 날만 마감(팀장 휴무·상담·빨간 날은 칸을 닫고 상태만 표시)
+  const off = data.check ? !data.check.ok : false;
+  return <div className={`iv-daily${off ? ' is-off' : ''}`}>
     <div className="iv-row">
       <label className="sf-input"><span>마감일</span><input type="date" value={date} onChange={e => setDate(e.target.value)} /></label>
-      <label className="sf-input"><span>총 피부관리 인원</span><input type="number" min={0} inputMode="numeric" value={patients} onChange={e => setPatients(e.target.value)} placeholder="명" /></label>
-      <label className="sf-input"><span>메모(휴무 등)</span><input type="text" value={status} onChange={e => setStatus(e.target.value)} placeholder="선택" /></label>
-      <button type="button" className="sf-btn is-primary" disabled={busy} onClick={() => void save()}>{busy && <SavingMark />}저장</button>
+      <label className="sf-input"><span>총 피부관리 인원</span><input type="number" min={0} inputMode="numeric" value={patients} disabled={off} onChange={e => setPatients(e.target.value)} placeholder="명" /></label>
+      <label className="sf-input"><span>메모(휴무 등)</span><input type="text" value={status} disabled={off} onChange={e => setStatus(e.target.value)} placeholder="선택" /></label>
+      {off ? <span className="iv-tag iv-off-tag">{data.check?.label}</span>
+        : <button type="button" className="sf-btn is-primary" disabled={busy} onClick={() => void save()}>{busy && <SavingMark />}저장</button>}
     </div>
     <div className="iv-grid">{data.items.map(it => {
       const u = usedOf(it), before = it.hospital_stock + (it.used || 0);
@@ -122,8 +125,8 @@ function DailyClose({ today, notify, onSaved }: { items: InvItem[]; today: strin
         <b>{it.name}</b>
         <dl><dt>마감 전 재고</dt><dd>{withUnit(before, it.stock_unit)}</dd></dl>
         <label className="sf-input"><span>{it.daily_mode === 'usage' ? '당일 사용량' : '남은 수량(미개봉)'}</span>
-          <input type="number" min={0} inputMode="decimal" value={vals[it.id] ?? ''} onChange={e => setVals(v => ({ ...v, [it.id]: e.target.value }))} placeholder={it.stock_unit} /></label>
-        {it.name.includes('모델링') && <label className="sf-input"><span>사용 인원</span><input type="number" min={0} inputMode="numeric" value={people} onChange={e => setPeople(e.target.value)} placeholder="명" /></label>}
+          <input type="number" min={0} inputMode="decimal" value={vals[it.id] ?? ''} disabled={off} onChange={e => setVals(v => ({ ...v, [it.id]: e.target.value }))} placeholder={it.stock_unit} /></label>
+        {it.name.includes('모델링') && <label className="sf-input"><span>사용 인원</span><input type="number" min={0} inputMode="numeric" value={people} disabled={off} onChange={e => setPeople(e.target.value)} placeholder="명" /></label>}
         <dl><dt>마감재고</dt><dd>{u == null ? '—' : withUnit(before - u, it.stock_unit)}</dd><dt>최근 15일 사용</dt><dd>{withUnit(it.used15, it.stock_unit)}</dd></dl>
       </div>;
     })}</div>
@@ -345,7 +348,8 @@ function ItemForm({ item, state, notify, onSaved, onDeleted }: { item: InvItem |
     <div className="sf-modal-foot">{item && (askDel ? <span className="iv-inline">이 품목을 목록에서 뺄까요? 기록은 남아요.
       <button type="button" className="sf-btn" onClick={() => setAskDel(false)}>취소</button><button type="button" className="sf-btn is-danger" onClick={async () => { try { await invSend('DELETE', `/items/${item.id}`); notify('품목을 뺐어요.'); onDeleted(); } catch (e) { notify(errText(e)); } }}>빼기</button></span>
       : <button type="button" className="sf-btn" onClick={() => setAskDel(true)}>품목 빼기</button>)}
-      <button type="button" className="sf-btn is-primary" disabled={busy} onClick={() => void save()}>{busy && <SavingMark />}저장</button></div>
+      {off ? <span className="iv-tag iv-off-tag">{data.check?.label}</span>
+        : <button type="button" className="sf-btn is-primary" disabled={busy} onClick={() => void save()}>{busy && <SavingMark />}저장</button>}</div>
     {item && <Options item={item} notify={notify} onSaved={onSaved} />}
   </div>;
 }
