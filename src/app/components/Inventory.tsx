@@ -658,7 +658,7 @@ function InvoiceDialog({ tx, rows, notify, onClose, onChange }: { tx: InvTx; row
 const splitMemo = (memo?: string | null) => {
   const parts = (memo || '').split(' · ').map(x => x.trim()).filter(Boolean);
   const team = parts.length && /(팀|구매)$/.test(parts[0]) ? parts.shift()! : '';
-  return { team, reason: parts.join(' · ') };
+  return { team, reason: parts.join(' · ').replace('선결제 잔량', '업체 보관 잔량') };
 };
 const KIND_TONE: Record<string, string> = { in: 'in', out: 'out', prepaid_buy: 'pp', prepaid_in: 'pp', adjust: 'adj' };
 function TxLog({ notify }: { notify: (m: string) => void }) {
@@ -678,20 +678,22 @@ function TxLog({ notify }: { notify: (m: string) => void }) {
   return <>
     <div className="sf-bar"><div className="sf-month"><button type="button" aria-label="이전 달" onClick={() => setMonth(m => shiftMonth(m, -1))}><ChevronLeft size={18} strokeWidth={2} /></button><strong>{month.slice(0, 4)}년 {Number(month.slice(5))}월</strong><button type="button" aria-label="다음 달" onClick={() => setMonth(m => shiftMonth(m, 1))}><ChevronRight size={18} strokeWidth={2} /></button></div>
       <Seg label="종류" value={kind} onChange={setKind} options={[['all', '전체'], ['in', <><i className="iv-dot is-in" aria-hidden="true" />입고</>], ['out', <><i className="iv-dot is-out" aria-hidden="true" />출고</>]]} /></div>
-    {rows == null ? <LoadingBox /> : !rows.length ? <p className="sf-hint">이 달 기록이 없어요.</p> : <div className="iv-txwrap"><table className="sf-table iv-txlog">
-      <thead><tr><th className="c-date">날짜</th><th>품목</th><th className="c-kind">구분</th><th className="num c-qty">수량</th><th className="num c-amt">금액</th><th className="num c-after"><span className="t-long">기록 후 </span>병원재고</th><th className="c-inv">명세서</th><th className="c-act" aria-label="수정·삭제" /></tr></thead>
-      <tbody>{rows.map(t => <tr key={t.id}><td className="c-date">{Number(t.date.slice(5, 7))}.{Number(t.date.slice(8))}</td>
-        <td>{(() => { const m = splitMemo(t.memo); const who = [t.vendor_name, m.team].filter(Boolean).join(', ');
-          return <div className="iv-tx-item"><b>{t.item_name}</b>{who && <small>{who}</small>}{m.reason && <small className="iv-tx-reason">{m.reason}</small>}</div>; })()}</td>
-        <td className="c-kind"><span className="iv-kind-dot"><i className={`iv-dot is-${KIND_TONE[t.kind] || 'adj'}`} aria-hidden="true" />{KIND_LABEL[t.kind]}</span>{t.daily_date ? <small className="iv-kind-sub">일일 마감</small> : null}</td>
-        <td className="num c-qty">{fmtQty(t.qty)}{t.bonus_qty ? <small> +{fmtQty(t.bonus_qty)}</small> : null}<small className="iv-unit-t"> {t.stock_unit}</small></td>
-        <td className="num c-amt">{t.kind === 'out' || t.kind === 'prepaid_in' || t.kind === 'adjust' ? <span className="iv-muted">—</span> : fmtWon(t.amount)}</td>
-        <td className="num c-after">{fmtQty(t.hospital_after)}</td>
-        <td className="c-inv">{INVOICE_KINDS.includes(t.kind) ? <button type="button" className={`iv-inv-btn is-${invoiceState(t)}`} onClick={() => setInv(t.id)} aria-label={`명세서 ${INVOICE_LABEL[invoiceState(t)](t)}`}>
-          {invoiceState(t) === 'photo' ? <><Camera size={14} strokeWidth={2} />{photosOf(t).length}</> : INVOICE_LABEL[invoiceState(t)](t)}</button> : null}</td>
-        <td className="c-act"><span className="iv-row-btns">
+    {rows == null ? <LoadingBox /> : !rows.length ? <p className="sf-hint">이 달 기록이 없어요.</p> : <div className="iv-txwrap"><div className="iv-txgrid" role="table" aria-label="입출고 내역">
+      <div className="iv-txrow is-head" role="row"><span role="columnheader">날짜</span><span role="columnheader">품목</span><span role="columnheader">구분</span><span role="columnheader" className="num">수량</span><span role="columnheader" className="num">금액</span><span role="columnheader" className="num">병원재고</span><span role="columnheader" className="mid">명세서</span><span role="columnheader" aria-label="수정·삭제" /></div>
+      {rows.map(t => { const m = splitMemo(t.memo); const sub = [m.team, m.reason].filter(Boolean).join(' · ');
+        return <div key={t.id} className="iv-txrow" role="row">
+        <span role="cell" className="c-date">{Number(t.date.slice(5, 7))}.{Number(t.date.slice(8))}</span>
+        <span role="cell" className="iv-tx-item"><span className="iv-tx-l1"><b>{t.item_name}</b>{t.vendor_name && <em>{t.vendor_name}</em>}</span><small>{sub || ' '}</small></span>
+        <span role="cell"><span className={`iv-pill is-${KIND_TONE[t.kind] || 'adj'}`}>{KIND_LABEL[t.kind]}</span>{t.daily_date ? <small className="iv-pill-sub">일일</small> : null}</span>
+        <span role="cell" className="num">{fmtQty(t.qty)}{t.bonus_qty ? <small> +{fmtQty(t.bonus_qty)}</small> : null}<small className="iv-unit-t"> {t.stock_unit}</small></span>
+        <span role="cell" className="num">{t.kind === 'out' || t.kind === 'prepaid_in' || t.kind === 'adjust' ? <span className="iv-muted">—</span> : fmtWon(t.amount)}</span>
+        <span role="cell" className="num">{fmtQty(t.hospital_after)}</span>
+        <span role="cell" className="mid">{INVOICE_KINDS.includes(t.kind) ? <button type="button" className={`iv-inv-mini is-${invoiceState(t)}`} onClick={() => setInv(t.id)} aria-label={`명세서 ${INVOICE_LABEL[invoiceState(t)](t)}`}>
+          {invoiceState(t) === 'photo' ? <><Camera size={13} strokeWidth={2} />{photosOf(t).length}</> : INVOICE_LABEL[invoiceState(t)](t)}</button> : null}</span>
+        <span role="cell" className="iv-row-btns">
           {editable(t) ? <button type="button" className="iv-icon-btn" aria-label="수정" title="수정" onClick={() => setEdit({ tx: t, v: String(Math.abs(t.hospital_delta)) })}><Pencil size={16} strokeWidth={1.8} /></button> : <span className="iv-icon-btn is-empty" aria-hidden="true" />}
-          <button type="button" className="iv-icon-btn is-danger" aria-label="삭제" title="삭제" onClick={() => setAsk(t)}><Trash2 size={16} strokeWidth={1.8} /></button></span></td></tr>)}</tbody></table></div>}
+          <button type="button" className="iv-icon-btn is-danger" aria-label="삭제" title="삭제" onClick={() => setAsk(t)}><Trash2 size={16} strokeWidth={1.8} /></button></span>
+      </div>; })}</div></div>}
     {edit && <Modal title="수량 수정" onClose={() => setEdit(null)}>
       <p>{Number(edit.tx.date.slice(5, 7))}월 {Number(edit.tx.date.slice(8))}일 {edit.tx.item_name} {KIND_LABEL[edit.tx.kind]}</p>
       <label className="sf-input"><span>{edit.tx.kind === 'out' ? '출고 수량' : '받은 수량'}{edit.tx.bonus_qty ? ' (증정 포함)' : ''} ({edit.tx.stock_unit})</span><input type="number" min={0} inputMode="decimal" value={edit.v} onChange={e => setEdit({ ...edit, v: e.target.value })} /></label>
