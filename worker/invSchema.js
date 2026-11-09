@@ -114,6 +114,26 @@ export async function ensureInvSchema(db) {
       await db.prepare(`INSERT OR REPLACE INTO inv_meta (key, value) VALUES ('fixes', ?)`).bind(`${fixes} guard1`.trim()).run();
       fixes = `${fixes} guard1`.trim();
     }
+    if (!fixes.includes('negfix1')) {
+      // 2026-11-09 사용자 '일단 고쳐줘': 결제 기록이 지워져 선결제 잔량이 마이너스가 된 품목(보관용 3종 시트팩 −300)을 한 번 바로잡는다.
+      // 지운 선결제 구매 기록 중 그 마이너스를 정확히 메우는 것이 있으면 되살리고(지출도 돌아옴), 없으면 잔량만 0으로 맞추는 기록을 남긴다.
+      const neg = (await db.prepare('SELECT id, vendor_stock, hospital_stock FROM inv_items WHERE vendor_stock < -0.0005').all()).results || [];
+      for (const it of neg) {
+        const gap = Math.round(-it.vendor_stock * 1000) / 1000;
+        const del = await db.prepare(`SELECT id FROM inv_tx WHERE item_id = ? AND kind = 'prepaid_buy' AND deleted_at IS NOT NULL AND abs(vendor_delta - ?) < 0.0005 ORDER BY deleted_at DESC LIMIT 1`).bind(it.id, gap).first();
+        if (del) await db.batch([
+          db.prepare('UPDATE inv_tx SET deleted_at = NULL, deleted_by = NULL, memo = trim(coalesce(memo, \'\') || \' (지운 기록 되살림)\') WHERE id = ?').bind(del.id),
+          db.prepare('UPDATE inv_items SET vendor_stock = 0, updated_at = ? WHERE id = ?').bind(Date.now(), it.id),
+        ]);
+        else await db.batch([
+          db.prepare(`INSERT INTO inv_tx (date, kind, item_id, qty, bonus_qty, amount, hospital_delta, vendor_delta, hospital_after, vendor_after, memo, created_by, created_at)
+            VALUES (date('now', '+9 hours'), 'adjust', ?, ?, 0, NULL, 0, ?, ?, 0, '선결제 잔량 고치기', 'system', ?)`).bind(it.id, gap, gap, it.hospital_stock, Date.now()),
+          db.prepare('UPDATE inv_items SET vendor_stock = 0, updated_at = ? WHERE id = ?').bind(Date.now(), it.id),
+        ]);
+      }
+      await db.prepare(`INSERT OR REPLACE INTO inv_meta (key, value) VALUES ('fixes', ?)`).bind(`${fixes} negfix1`.trim()).run();
+      fixes = `${fixes} negfix1`.trim();
+    }
   }
   ready = db;
 }

@@ -504,3 +504,30 @@ test('daily count after skipped days: the counted number becomes hospital stock,
   await call(e, '/daily', 'POST', { date: '2026-11-07', closing: { [pp.id]: 30 } });
   assert.deepEqual([item(e, '보관용 3종 시트팩').hospital_stock, item(e, '보관용 3종 시트팩').vendor_stock], [130, 100]);
 });
+
+test('one-time fix: a negative prepaid balance from a deleted purchase is restored, otherwise set to 0', async () => {
+  const e = env(); await call(e, '/state');
+  const pp = item(e, '보관용 3종 시트팩');
+  const o300 = e.inv.prepare('SELECT id, amount FROM inv_options WHERE item_id = ? AND prepaid = 1 AND qty = 300').get(pp.id);
+  await call(e, '/prepaid-order', 'POST', { item_id: pp.id, qty: 300, option_id: o300.id, date: '2026-11-06' });
+  const pend = (await call(e, '/state')).data.orders.find(o => o.item_id === pp.id && o.prepaid);
+  await call(e, '/receive', 'POST', { order_id: pend.id, actual_qty: 300, date: '2026-11-09' });
+  // 실제 사이트처럼 결제 기록이 지워져 −300이 된 상태를 만든다(지금은 화면으로는 못 지움)
+  const buy = e.inv.prepare(`SELECT id FROM inv_tx WHERE kind = 'prepaid_buy' AND item_id = ?`).get(pp.id);
+  e.inv.exec('DROP TRIGGER inv_items_no_negative');
+  e.inv.prepare('UPDATE inv_tx SET deleted_at = 1, deleted_by = ? WHERE id = ?').run('u1', buy.id);
+  e.inv.prepare('UPDATE inv_items SET vendor_stock = -300 WHERE id = ?').run(pp.id);
+  const ga = item(e, 'GA20%'); e.inv.prepare('UPDATE inv_items SET vendor_stock = -5 WHERE id = ?').run(ga.id);
+  e.inv.prepare(`UPDATE inv_meta SET value = replace(value, 'negfix1', '') WHERE key = 'fixes'`).run();
+  const e2 = { ...e, INV_DB: d1(e.inv) }; // 다음 접속(새 연결)
+  const h = item(e, '보관용 3종 시트팩').hospital_stock;
+  await call(e2, '/state');
+  assert.deepEqual([item(e, '보관용 3종 시트팩').vendor_stock, item(e, '보관용 3종 시트팩').hospital_stock], [0, h]);
+  assert.equal(e.inv.prepare('SELECT deleted_at FROM inv_tx WHERE id = ?').get(buy.id).deleted_at, null); // 결제 기록 되살림
+  assert.equal((await call(e2, '/report?month=2026-11')).data.spend_prepaid, o300.amount);
+  assert.equal(item(e, 'GA20%').vendor_stock, 0); // 메울 기록이 없으면 0으로 맞춤
+  // 한 번만
+  e.inv.prepare('UPDATE inv_items SET vendor_stock = -1 WHERE id = ?').run(ga.id);
+  await call({ ...e, INV_DB: d1(e.inv) }, '/state');
+  assert.equal(item(e, 'GA20%').vendor_stock, -1);
+});
