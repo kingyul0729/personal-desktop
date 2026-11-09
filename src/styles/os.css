@@ -2153,3 +2153,52 @@ input[type="date"]::-webkit-date-and-time-value, input[type="month"]::-webkit-da
 .iv-recv-note { margin: 10px 0 0; font-size: 12.5px; line-height: 1.6; color: #7D838B; }
 .iv-pp-optwrap { display: flex; flex-direction: column; gap: 6px; }
 .iv-pp-optlabel { font-size: 12px; color: #7D838B; }
+
+/* 재고입출고 내역 표 정돈(2026-11-09 사용자): 넉넉한 행, 품목명/부가설명 2단, 구분은 점 + 글자, 아이콘 버튼, 은은한 줄무늬 */
+.iv-txwrap { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; border: 1px solid #e3e9f0; border-radius: 12px; background: #fff; }
+.sf-wrap .iv-txlog { width: 100%; min-width: 0; border-collapse: collapse; border: 0; table-layout: fixed; }
+.sf-wrap .iv-txlog thead th { padding: 12px 14px; font-size: 12px; font-weight: 600; color: #8d9197; background: #f7f9fb; border-bottom: 1px solid #e3e9f0; white-space: nowrap; text-align: left; }
+.sf-wrap .iv-txlog thead th.num { text-align: right; }
+.sf-wrap .iv-txlog tbody td { padding: 16px 14px; vertical-align: middle; border-bottom: 1px solid #eef2f6; font-size: 14px; color: #2D3136; white-space: nowrap; }
+.sf-wrap .iv-txlog tbody tr:nth-child(even) td { background: #fafbfd; }
+.sf-wrap .iv-txlog tbody tr:last-child td { border-bottom: 0; }
+.sf-wrap .iv-txlog tbody tr:hover td { background: #f3f6f9; }
+.iv-txlog .c-date { width: 56px; font-variant-numeric: tabular-nums; color: #5d646d; }
+.iv-txlog .c-kind { width: 118px; }
+.iv-txlog .c-qty { width: 104px; }
+.iv-txlog .c-amt { width: 112px; }
+.iv-txlog .c-after { width: 120px; }
+.iv-txlog .c-inv { width: 92px; }
+.iv-txlog .c-act { width: 92px; text-align: right; }
+.iv-txlog td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.iv-tx-item { display: flex; flex-direction: column; gap: 3px; min-width: 0; white-space: normal; }
+.iv-tx-item b { font-size: 14.5px; font-weight: 700; line-height: 1.35; color: #2D3136; }
+.iv-tx-item small { font-size: 12px; line-height: 1.4; color: #8d9197; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.iv-kind-dot { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; color: #44494f; }
+.iv-kind-sub { display: block; margin: 2px 0 0 15px; font-size: 11.5px; color: #9aa0a7; }
+.iv-dot { flex: none; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #c3cad3; vertical-align: middle; }
+.iv-dot.is-in { background: #557591; }
+.iv-dot.is-out { background: #d9736e; }
+.iv-dot.is-pp { background: transparent; box-shadow: inset 0 0 0 1.5px #8a96a3; }
+.sf-seg .iv-dot { margin-right: 6px; }
+.iv-unit-t, .iv-txlog td.num small { font-size: 12px; color: #8d9197; }
+.iv-muted { color: #c0c5cc; }
+.iv-inv-btn { display: inline-flex; align-items: center; gap: 5px; }
+.iv-row-btns { display: inline-flex; gap: 4px; justify-content: flex-end; align-items: center; }
+.iv-icon-btn { width: 34px; height: 34px; display: inline-grid; place-items: center; border: 1px solid transparent; border-radius: 8px; background: transparent; color: #6b7480; cursor: pointer; padding: 0; }
+.iv-icon-btn:hover { background: #eef2f6; color: #2D3136; }
+.iv-icon-btn:focus-visible { outline: 2px solid #557591; outline-offset: 0; }
+.iv-icon-btn.is-danger:hover { background: #fbeceb; color: #c2504a; }
+.iv-icon-btn.is-empty { pointer-events: none; }
+@media (pointer: coarse) { .iv-icon-btn { width: 40px; height: 40px; } .iv-txlog .c-act { width: 100px; } }
+.sf-month button svg { display: block; }
+
+@container sfw (max-width: 900px) {
+  .sf-wrap .iv-txlog thead th, .sf-wrap .iv-txlog tbody td { padding-left: 10px; padding-right: 10px; }
+  .iv-txlog .c-date { width: 46px; } .iv-txlog .c-kind { width: 100px; } .iv-txlog .c-qty { width: 86px; } .iv-txlog .c-amt { width: 98px; }
+  .iv-txlog .c-after { width: 72px; } .iv-txlog .c-inv { width: 76px; } .iv-txlog .c-act { width: 84px; }
+  .iv-txlog .t-long { display: none; }
+}
+@container sfw (max-width: 600px) {
+  .sf-wrap .iv-txlog { min-width: 700px; } /* 휴대폰: 칸을 줄이지 않고 표만 옆으로 밀기 */
+}
