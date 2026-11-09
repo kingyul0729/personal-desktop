@@ -2012,3 +2012,39 @@ input[type="date"]::-webkit-date-and-time-value, input[type="month"]::-webkit-da
 .iv-tag.is-bringing, .iv-tag.is-wait { background: #ecf1f6; color: #44617c; }
 .sf-table td .iv-tag { margin-left: 6px; vertical-align: 1px; }
 .iv-split-detail h3 .iv-tag { margin-left: 8px; vertical-align: 3px; }
+
+/* ===== 가로로 긴 칸·버튼 없애기 (2026-11-09 사용자: '세로로 볼 때 가로로 긴 탭이 없으면 좋겠어') =====
+   좁아져도 버튼은 글자 길이만큼(늘리지 않음), 입력 칸은 2~3칸 격자로 나눠 한 칸이 화면 폭 전체를 차지하지 않게. */
+.sf-wrap .sf-btn { width: auto; }
+@container sfw (max-width: 760px) {
+  .sf-wrap .iv-daybar { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .sf-wrap .iv-daybar > label:nth-child(3) { grid-column: auto; }
+  .iv-row-acts { grid-column: 1 / -1; justify-content: flex-end; }
+  .iv-row-acts .sf-btn.is-primary { flex: none; min-width: 120px; }
+  .iv-d-opts li { grid-template-columns: minmax(0, 1fr) auto auto; }
+  .iv-d-opts .sf-btn { grid-column: auto; width: auto; }
+}
+@container sfw (max-width: 520px) {
+  .sf-wrap .iv-daybar { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .sf-wrap .iv-daybar > label:nth-child(3) { grid-column: 1 / -1; }
+  .sf-wrap .iv-sec > .iv-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .sf-wrap .iv-row > .sf-btn { justify-self: end; grid-column: 1 / -1; }
+  .iv-d-opts li { grid-template-columns: minmax(0, 1fr) auto; }
+  .iv-d-opts .sf-btn { grid-column: 2; justify-self: end; }
+}
+/* 재고주문: 아이패드 세로에서도 2분할 유지(목록·상세가 화면 폭 전체로 길게 늘어나지 않게), 휴대폰 폭만 위아래 */
+@container sfw (max-width: 720px) {
+  .iv-split { grid-template-columns: minmax(200px, 36%) minmax(0, 1fr); gap: 12px; }
+  .iv-split-list { position: sticky; max-height: none; }
+  .iv-split-detail { padding: 18px 16px; gap: 18px; }
+  .iv-d-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 14px; }
+  .iv-d-stats > div:nth-child(3) { border-left: 0; }
+}
+@container sfw (max-width: 560px) {
+  .iv-split { grid-template-columns: minmax(0, 1fr); }
+  .iv-split-list { position: static; max-height: 260px; }
+}
+@container sfw (max-width: 720px) {
+  .iv-d-stats { grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); }
+  .iv-d-stats > div:nth-child(3) { border-left: 1px solid #d6dde5; }
+}
