@@ -603,3 +603,17 @@ test('check: a prepaid order links its payment and planned delivery in one step'
   const pend = e.inv.prepare(`SELECT memo FROM inv_orders WHERE status = 'ordered'`).get();
   assert.equal(buy.order_id, paid.id); assert.equal(pend.memo, `from:${paid.id}`);
 });
+
+test('check: replacing a big earlier correction never dips stock below 0 midway, and an exact count still marks the day', async () => {
+  const e = env(); await call(e, '/state');
+  const it = item(e, '보관용 3종 시트팩');
+  await call(e, '/adjust', 'POST', { item_id: it.id, hospital_stock: 4, date: '2026-11-01' });
+  await call(e, '/out', 'POST', { item_id: it.id, qty: 4, date: '2026-11-05' }); // 지금 0, 11/3 장부 4
+  await call(e, '/daily', 'POST', { date: '2026-11-09', closing: { [it.id]: 0 } }); // 장부와 같음 → 0 표시만
+  assert.equal(e.inv.prepare(`SELECT count(*) n FROM inv_tx WHERE daily_date = '2026-11-09' AND deleted_at IS NULL`).get().n, 1);
+  assert.equal((await call(e, '/daily', 'POST', { date: '2026-11-03', closing: { [it.id]: 40 } })).status, 200); // +36
+  assert.equal((await call(e, '/daily', 'POST', { date: '2026-11-03', closing: { [it.id]: 2 } })).status, 200); // 큰 + 기록을 바꿔도 막히지 않음
+  const at = d => call(e, `/daily?date=${d}`).then(r => r.data.items.find(x => x.id === it.id).stock_at);
+  assert.deepEqual([await at('2026-11-03'), await at('2026-11-09'), item(e, '보관용 3종 시트팩').hospital_stock], [2, 0, 0]);
+  assert.equal((await call(e, '/tx?from=2026-11-01&to=2026-11-30')).data.rows.some(r => r.daily_date === '2026-11-09'), true); // 11/9 기록이 0이 아니면 보임
+});
