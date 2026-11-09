@@ -476,10 +476,10 @@ function Receive({ state, notify }: { state: InvState; notify: (m: string) => vo
     </section>}
     <section className="iv-sec"><h3>주문 없이 받은 것</h3>
       <div className="iv-row">
-        <label className="sf-input"><span>품목</span><ItemSelect items={state.items.filter(i => !i.prepaid)} value={free.item} onChange={v => setFree(x => ({ ...x, item: v }))} /></label>
+        <label className="sf-input"><span>품목</span><ItemSelect items={state.items} value={free.item} onChange={v => setFree(x => { const it = state.items.find(i => String(i.id) === v); return { ...x, item: v, amount: it?.prepaid ? '0' : x.amount === '0' ? '' : x.amount, memo: it?.prepaid && !x.memo ? '증정' : x.memo }; })} /></label>
         <QtyInput item={freeItem} label="실제 도착 수량(증정 포함)" value={free.qty} onChange={v => setFree(x => ({ ...x, qty: v }))} />
         <label className="sf-input"><span>그중 증정</span><input type="number" min={0} value={free.bonus} onChange={e => setFree(x => ({ ...x, bonus: e.target.value }))} placeholder={freeItem?.stock_unit || '0'} /></label>
-        <label className="sf-input"><span>결제금액(원)</span><input type="number" min={0} value={free.amount} onChange={e => setFree(x => ({ ...x, amount: e.target.value }))}
+        <label className="sf-input"><span>결제금액(원)</span><input type="number" min={0} value={free.amount} readOnly={!!freeItem?.prepaid} onChange={e => setFree(x => ({ ...x, amount: e.target.value }))}
           placeholder={freeItem && freeItem.price != null && Number(free.qty) > 0 ? `단가로 ${Math.round(freeItem.price * ((Number(free.qty) - (Number(free.bonus) || 0)) / (freeItem.pack_qty || 1))).toLocaleString('ko-KR')}` : freeItem && freeItem.price == null ? '단가 미확인 · 직접 입력' : '비우면 구매단가로 계산'} /></label>
         <label className="sf-input"><span>메모</span><input value={free.memo} onChange={e => setFree(x => ({ ...x, memo: e.target.value }))} /></label>
         <button type="button" className="sf-btn is-primary" disabled={!freeItem || !(Number(free.qty) > 0) || busy === 'free'} onClick={async () => { if (await run('free', () => invSend('POST', '/receive', { item_id: freeItem!.id, actual_qty: Number(free.qty), bonus_qty: free.bonus === '' ? 0 : Number(free.bonus), amount: free.amount === '' ? null : Number(free.amount), memo: free.memo, date }), '입고했어요.')) setFree({ item: '', qty: '', bonus: '', amount: '', memo: '' }); }}>{busy === 'free' && <SavingMark />}입고</button>

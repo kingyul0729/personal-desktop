@@ -123,6 +123,19 @@ test('out reduces only hospital stock, deleting it restores; daily close replace
   assert.equal(d.data.items.find(i => i.id === pack.id).used, 1);
 });
 
+test('prepaid items accept a free (0 won) arrival, but not a paid one', async () => {
+  const e = env(); await call(e, '/state');
+  const it = item(e, '보관용 모델링팩');
+  assert.equal(it.prepaid, 1);
+  assert.equal((await call(e, '/receive', 'POST', { item_id: it.id, actual_qty: 5, date: '2026-11-05' })).status, 400);
+  assert.equal((await call(e, '/receive', 'POST', { item_id: it.id, actual_qty: 5, amount: 1000, date: '2026-11-05' })).status, 400);
+  const r = await call(e, '/receive', 'POST', { item_id: it.id, actual_qty: 5, amount: 0, memo: '증정', date: '2026-11-05' });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  const after = item(e, '보관용 모델링팩');
+  assert.deepEqual([after.hospital_stock, after.vendor_stock], [it.hospital_stock + 5, it.vendor_stock]); // 업체재고는 그대로
+  assert.equal(e.inv.prepare(`SELECT amount FROM inv_tx WHERE kind = 'in' ORDER BY id DESC`).get().amount, 0);
+});
+
 test('split arrivals: each arrival keeps its own date, the payment is counted once', async () => {
   const e = env(); await call(e, '/state');
   const it = item(e, 'GA20%');
