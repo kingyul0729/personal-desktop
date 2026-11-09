@@ -306,7 +306,7 @@ async function inventoryRoute(request, env, url, user, db, path, m) {
       if (!item) return bad('품목을 찾을 수 없어요.', 404);
       if (!item.prepaid) return bad('선결제 품목이 아니에요.');
       const qty = num(body.qty);
-      if (!(qty > 0)) return bad('주문수량을 입력해 주세요.');
+      if (!(qty > 0)) return bad('병원 입고 수량을 입력해 주세요.');
       const date = okDate(body.date) ? body.date : kstToday();
       const pend = await one(db, `SELECT coalesce(sum(qty), 0) AS q FROM inv_orders WHERE item_id = ? AND prepaid = 1 AND status = 'ordered'`, item.id);
       const keep = round((item.vendor_stock || 0) - (pend?.q || 0));

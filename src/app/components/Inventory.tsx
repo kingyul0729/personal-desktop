@@ -365,7 +365,7 @@ function ReceiveHere({ item, orders, today, notify }: { item: InvItem; orders: I
     <div className="iv-recv-head"><h4><i className="iv-step">2</i>받기</h4>
       <label className="sf-input iv-recv-date"><span>입고일</span><input type="date" value={date} onChange={e => setDate(e.target.value)} /></label></div>
     {orders.length ? <ul className="iv-recv-list">{orders.map(o => <li key={o.id}>
-      <div className="iv-recv-what"><b>{o.ordered_at.slice(5).replace('-', '/')} 주문 · {fmtQty(o.qty)}{o.bonus_qty ? ` + 증정 ${fmtQty(o.bonus_qty)}` : ''} {u}</b>
+      <div className="iv-recv-what"><b>{o.ordered_at.slice(5).replace('-', '/')} 주문 · {o.prepaid ? '병원 입고 ' : ''}{fmtQty(o.qty)}{o.bonus_qty ? ` + 증정 ${fmtQty(o.bonus_qty)}` : ''} {u}</b>
         <small>{o.prepaid ? (o.contract_qty ? `선결제 계약 ${fmtQty(o.contract_qty)} ${u} · ${fmtWon(o.contract_amount ?? null)}` : '업체 보관 잔량에서') : `${o.option_label || ''} · ${fmtWon(o.amount)}`}{(o.received_qty || 0) > 0 ? ` · 받음 ${fmtQty(o.received_qty || 0)} · 남음 ${fmtQty(left(o))}` : ''}</small></div>
       <label className="sf-input"><span>실제 입고 수량 ({u})</span><input type="number" min={0} inputMode="decimal" value={actual[o.id] ?? String(left(o))} onChange={e => setActual(a => ({ ...a, [o.id]: e.target.value }))} /></label>
       <PhotoPick file={photo[`o${o.id}`]} onPick={f => setPhoto(v => ({ ...v, [`o${o.id}`]: f }))} />
@@ -428,14 +428,14 @@ function PrepaidOrder({ item, orders, today, notify }: { item: InvItem; orders: 
   return <div className="iv-d-sec iv-pp">
     <h4><i className="iv-step">1</i>주문</h4>
     <div className="iv-pp-inputs">
-      <label className="sf-input"><span>주문 수량 ({u})</span><input type="number" min={0} inputMode="decimal" value={qty} onChange={e => setQty(e.target.value)} /></label>
+      <label className="sf-input"><span>병원 입고 수량 ({u})</span><input type="number" min={0} inputMode="decimal" value={qty} onChange={e => setQty(e.target.value)} /></label>
       <label className="sf-input"><span>주문일</span><input type="date" value={date} onChange={e => setDate(e.target.value)} /></label>
     </div>
     {short > 0 && <div className="iv-pp-optwrap"><span className="iv-pp-optlabel">주문 구성</span>
       <div className="iv-pp-opts" role="radiogroup" aria-label="주문 구성">{opts.map(o => <button key={o.id} type="button" role="radio" aria-checked={optId === o.id} className={optId === o.id ? 'is-on' : ''} onClick={() => setOptId(o.id)}>
       <b>{fmtQty(o.qty + (o.bonus_qty || 0))} {u}</b><span>{fmtWon(o.amount)}</span></button>)}</div></div>}
     <dl className="iv-pp-sum">
-      <div><dt>주문 수량</dt><dd>{fmtQty(n)} {u}</dd></div>
+      <div><dt>병원 입고 수량</dt><dd>{fmtQty(n)} {u}</dd></div>
       <div><dt>주문 구성</dt><dd>{opt ? `${fmtQty(newQty)} ${u}` : '-'}</dd></div>
       <div><dt>현재 업체 보관 잔량</dt><dd>{fmtQty(keep)} {u}</dd></div>
       <div><dt>이번 선결제 금액</dt><dd>{fmtWon(opt?.amount ?? 0)}</dd></div>
