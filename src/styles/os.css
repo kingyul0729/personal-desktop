@@ -2110,3 +2110,34 @@ input[type="date"]::-webkit-date-and-time-value, input[type="month"]::-webkit-da
 .iv-dmode button { white-space: nowrap; }
 .iv-dmode button { font: inherit; font-size: 12px; height: 26px; padding: 0 10px; border-radius: 999px; border: 1px solid transparent; background: transparent; color: #7D838B; cursor: pointer; }
 .iv-dmode button.is-on { background: #ecf1f6; border-color: #c9d6e3; color: #44617c; font-weight: 600; }
+
+/* 재고주문 '주문·받기' 한 곳(2026-11-09 사용자 '제품마다 구분, 한곳에 모아서') */
+.iv-split-group + .iv-split-group { border-top: 1px solid #e3e9f0; }
+.iv-split-gtitle { margin: 0; padding: 12px 20px 4px; font-size: 12px; font-weight: 700; color: #44617c; }
+.iv-wait-filter { font: inherit; font-size: 12px; font-weight: 600; height: 26px; padding: 0 10px; border-radius: 999px; border: 1px solid #c9d6e3; background: #fff; color: #44617c; cursor: pointer; white-space: nowrap; }
+.iv-wait-filter.is-on { background: #ecf1f6; }
+.iv-kind { margin-left: 8px; font-size: 12px; font-weight: 600; padding: 2px 9px; border-radius: 999px; border: 1px solid #e1e4e8; color: #7D838B; vertical-align: middle; }
+.iv-kind.is-pp { color: #44617c; background: #ecf1f6; border-color: #c9d6e3; }
+.iv-step { display: inline-grid; place-items: center; width: 22px; height: 22px; margin-right: 8px; border-radius: 999px; background: #557591; color: #fff; font-style: normal; font-size: 12px; font-weight: 700; vertical-align: 1px; }
+.iv-recv-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
+.iv-recv-date { width: 180px; flex: none; }
+.iv-recv-list { list-style: none; margin: 12px 0 0; padding: 0; border: 1px solid #e0e6ed; border-radius: 12px; }
+.iv-recv-list li { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 120px) auto auto; align-items: end; gap: 12px; padding: 12px 16px; }
+.iv-recv-list li + li { border-top: 1px solid #e3e9f0; }
+.iv-recv-what { display: flex; flex-direction: column; gap: 2px; align-self: center; min-width: 0; }
+.iv-recv-what b { font-size: 14px; }
+.iv-recv-what small { font-size: 12px; color: #7D838B; }
+.iv-recv-acts { display: flex; gap: 8px; justify-content: flex-end; }
+.iv-recv-none { margin: 12px 0 0; font-size: 13px; color: #7D838B; }
+.iv-recv-more { display: flex; justify-content: flex-end; margin-top: 12px; }
+.iv-recv-more .sf-btn.is-on { background: #ecf1f6; border-color: #c9d6e3; }
+.iv-recv-extra { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; align-items: end; margin-top: 12px; padding: 16px; border: 1px solid #e0e6ed; border-radius: 12px; }
+.iv-recv-extra .iv-calc { grid-column: 1 / -1; }
+@container sfw (max-width: 760px) {
+  .iv-recv-list li { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .iv-recv-what { grid-column: 1 / -1; }
+  .iv-recv-acts { grid-column: 1 / -1; }
+  .iv-recv-extra { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+.iv-d-opts:empty { display: none; }
+.iv-kind { display: inline-block; line-height: 18px; padding: 1px 8px; font-size: 11px; }
