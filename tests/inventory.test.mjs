@@ -162,6 +162,23 @@ test('prepaid order rule (user spec 2026-11-09): use keep first, new prepaid onl
   assert.equal((await call(e, '/report?month=2026-11')).data.spend_prepaid, 500000 + o300.amount);
 });
 
+test('gifts and promotions: bought + bonus quantities, price from bought only unless a promo price is typed', async () => {
+  const e = env(); await call(e, '/state');
+  const it = item(e, 'GA20%'); // 40,000원 / 1개
+  const h0 = it.hospital_stock;
+  // 10+10: 산 10 + 증정 10 → 20개, 금액은 산 10개만큼
+  let r = await call(e, '/receive', 'POST', { item_id: it.id, actual_qty: 20, bonus_qty: 10, date: '2026-11-09', memo: '10+10' });
+  assert.equal(r.data.amount, 400000);
+  // 5+2 행사가(직접 입력) → 7개, 금액은 입력한 값
+  r = await call(e, '/receive', 'POST', { item_id: it.id, actual_qty: 7, bonus_qty: 2, amount: 180000, date: '2026-11-09', memo: '5+2 행사' });
+  assert.equal(r.data.amount, 180000);
+  // 증정만 3개 → 0원
+  r = await call(e, '/receive', 'POST', { item_id: it.id, actual_qty: 3, bonus_qty: 3, date: '2026-11-09', memo: '증정' });
+  assert.equal(r.data.amount, 0);
+  assert.equal(item(e, 'GA20%').hospital_stock, h0 + 30);
+  assert.equal((await call(e, '/report?month=2026-11')).data.spend_general, 580000);
+});
+
 test('split arrivals: each arrival keeps its own date, the payment is counted once', async () => {
   const e = env(); await call(e, '/state');
   const it = item(e, 'GA20%');
