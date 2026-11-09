@@ -673,7 +673,7 @@ staff.get("/performance", async (c) => {
     const isLeaderSelf = s.is_leader === 1;
     let workDays = 0, totalMin = 0, totalMgSum = 0, totalMgCnt = 0, dgSum = 0, dgCnt = 0, leaveUsed = 0;
 
-    let consultCount = 0, consultDgSum = 0, consultDgCnt = 0;
+    let consultCount = 0;
     const exclusions = [];
     let satOffCount = 0;
     let earlyLeaveCount = 0;
@@ -729,21 +729,14 @@ staff.get("/performance", async (c) => {
         }
       }
       const ownWork = r.attendance === "\uC815\uC0C1\uADFC\uBB34" || r.attendance === "\uAE30\uD0C0" && r.etc_type === "time";
-      // 관리수 = 관리 인원 + 지정 환자 수(사용자 지정 2026-11-08). 팀장이 근무한 날만(팀장 기준).
-      // 팀장 휴무·연차·미입력 등으로 빠지는 날의 지정 환자 수는 관리수에 더하지 않고 '지정 수'에만 따로 셈(아래).
-      if (eligible && ownWork && !isFullConsultDay(r.work_date)) {
-        if (r.managed_count != null || r.designated_count != null) {
-          totalMgSum += (r.managed_count || 0) + (r.designated_count || 0);
-          totalMgCnt++;
-        }
+      // 관리수 = 관리 인원(일반 + 본인 지정 환자 모두 포함, 사용자 지정 2026-11-10). 팀장이 근무한 날만(팀장 기준).
+      // 지정 환자 수는 관리수에 이미 들어 있는 환자 중 본인 지정만 따로 적는 원장님 확인용 숫자 — 관리수·시간당·평균에 더하지 않는다.
+      if (eligible && ownWork && !isFullConsultDay(r.work_date) && r.managed_count != null) {
+        totalMgSum += r.managed_count;
+        totalMgCnt++;
       }
-      // 풀상담일(팀장 '상담') 원칙(사용자 지정 2026-11-08): 그날은 관리인원·지정환자수 모두 성과값으로 쓰지 않는다.
-      // 지정환자수는 따로 모아 보여 주기만 한다(consult_designated).
-      if (isFullConsultDay(r.work_date)) {
-        if (r.designated_count != null) { consultDgSum += r.designated_count; consultDgCnt++; }
-        continue;
-      }
-      // 휴무·연차·휴일·병원휴무·미기록·무급 날의 보존된 값은 성과에 넣지 않는다
+      // 지정 환자 수 월 합계(원장님 확인용): 본인이 근무(정상근무·출퇴근 기타)했거나 상담한 날의 값. 풀상담일 값도 같은 칸에 합친다(2026-11-10 '풀상담 지정' 열 없앰).
+      // 휴무·연차·휴일·병원휴무·미기록·무급 날의 보존된 값은 넣지 않는다
       const dgCounts = ownWork || r.attendance === "\uC0C1\uB2F4";
       if (dgCounts && r.designated_count != null) {
         dgSum += r.designated_count;
@@ -763,13 +756,11 @@ staff.get("/performance", async (c) => {
       // 시간당 관리수 = 관리수 합계 ÷ 실근무시간(팀장 근무시간과 겹친 시간). 팀장 2출 날은 관리 인원도 2시 이후만 적는다(사용자 지정 2026-11-08).
       //   관리인원 기록 일수(totalMgCnt)로 나누지 않는다(2026-08 확정) — 총근무시간이 0이면 계산하지 않음.
       avg_managed: totalMgCnt > 0 && totalMin > 0 ? Math.round(totalMgSum / (totalMin / 60) * 10) / 10 : null,
-      // 관리수 = 관리 인원 + 지정 환자 수(팀장 근무일만). 지정 환자 수는 별도 컬럼으로도 표시.
+      // 관리수(지정 포함) = 관리 인원 합계(팀장 근무일만)
       total_managed: totalMgCnt > 0 ? totalMgSum : null,
-      // 지정 환자 수(별도 컬럼)
+      // 지정 환자 수 월 합계(원장님 확인용, 성과 계산과 무관)
       total_designated: dgCnt > 0 ? dgSum : null,
       avg_designated: dgCnt > 0 ? Math.round(dgSum / dgCnt * 10) / 10 : null,
-      // 풀상담일 지정 환자 수(기록·조회용, 성과 계산 제외)
-      consult_designated: consultDgCnt > 0 ? consultDgSum : null,
       leave_used: leaveUsed,
       remain_leave: remainLeave(s.total_leave, s.used_leave),
       // 지급연차(화면 '지급연차' 표시용)

@@ -10,7 +10,7 @@ import {
 
 // 직원스케줄/성과표 — 예전 재고관리 앱의 직원 달력(스케줄)과 성과 입력을 그대로 옮긴 화면.
 // 상태를 고르면 바로 저장한다(예전 앱과 같은 저장값, 서버 계산 그대로).
-type PerfRow = { id: number; name: string; status?: string; total_hours: number | null; total_managed: number | null; avg_managed: number | null; total_designated: number | null; remain_leave: number | null; consult_designated?: number | null; work_days?: number; leave_used?: number; exclusions?: { date: string; reason: string }[] };
+type PerfRow = { id: number; name: string; status?: string; total_hours: number | null; total_managed: number | null; avg_managed: number | null; total_designated: number | null; remain_leave: number | null; work_days?: number; leave_used?: number; exclusions?: { date: string; reason: string }[] };
 
 // 빨리 보이게(2026-11-08 사용자 '느려'): 달마다 받은 자료를 기억해 두고 다시 열면 바로 보여 준 뒤 뒤에서 새로 받는다.
 // 직원별 달 자료는 한꺼번에(동시에) 받고, 앞뒤 달은 미리 받아 둔다.
@@ -387,11 +387,11 @@ function Performance({ month, data, notify }: { month: string; data: Data; notif
         {Array.from({ length: n }, (_, i) => { const d = dateIn(month, i + 1); return <option key={d} value={d}>{dayLabelKo(d)}</option>; })}
       </select></div>
     <table className="sf-table">
-      <thead><tr><th>직원</th><th className="num">관리 인원</th><th className="num">지정 환자 수</th><th /></tr></thead>
+      <thead><tr><th>직원</th><th className="num">관리수<br /><small>지정 포함</small></th><th className="num">지정 환자 수</th><th /></tr></thead>
       <tbody>{list.map(s => { const r = recOf(s.id); return <tr key={s.id}>
         <td><b>{s.name}</b> <small>{r ? stateOf(r) : '스케줄 없음'}</small></td>
         {(['managed_count', 'designated_count'] as const).map(f => <td key={f} className="num">{r && can(r, f, s)
-          ? <input key={`${date}-${r[f]}`} type="number" min={0} inputMode="numeric" className="sf-num" defaultValue={r[f] ?? ''} aria-label={`${s.name} ${f === 'managed_count' ? '관리 인원' : '지정 환자 수'}`}
+          ? <input key={`${date}-${r[f]}`} type="number" min={0} inputMode="numeric" className="sf-num" defaultValue={r[f] ?? ''} aria-label={`${s.name} ${f === 'managed_count' ? '관리수' : '지정 환자 수'}`}
             onBlur={e => void saveCell(s, f, e.target.value)} onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }} />
           : <small>{f === 'managed_count' && r && fullConsult && (s.is_leader || r.attendance === '정상근무' || isTimeEtc(r)) ? '풀상담일 · 관리실적 제외' : '—'}</small>}</td>)}
         <td><small>{saved === s.id ? '저장됨' : ''}</small></td>
@@ -402,11 +402,10 @@ function Performance({ month, data, notify }: { month: string; data: Data; notif
     <h3 className="sf-perf-title">{monthLabel(month)} 성과</h3>
     {rows == null ? <LoadingBox /> : !rows.length ? <p className="sf-hint">해당 월 성과 데이터가 없습니다</p> :
       <table className="sf-table is-click">
-        <thead><tr><th>직원</th><th className="num">실근무시간</th><th className="num">관리수<br /><small>지정 포함</small></th><th className="num">시간당 관리수</th><th className="num">지정 수</th>{rows.some(r => r.consult_designated != null) && <th className="num">풀상담 지정<br /><small>성과 제외</small></th>}<th className="num">잔여연차</th></tr></thead>
+        <thead><tr><th>직원</th><th className="num">실근무시간</th><th className="num">관리수<br /><small>지정 포함</small></th><th className="num">시간당 관리수</th><th className="num">지정 환자 수</th><th className="num">잔여연차</th></tr></thead>
         <tbody>{rows.map(r => <tr key={r.id} onClick={() => setDetail(r)} tabIndex={0} onKeyDown={e => { if (e.key === 'Enter') setDetail(r); }}>
           <td><b>{r.name}</b></td><td className="num">{dash(r.total_hours, '시간')}</td><td className="num">{dash(r.total_managed, '명')}</td>
           <td className="num">{dash(r.avg_managed, '명')}</td><td className="num">{dash(r.total_designated, '명')}</td>
-          {rows.some(x => x.consult_designated != null) && <td className="num"><small>{dash(r.consult_designated, '명')}</small></td>}
           <td className={`num${(r.remain_leave ?? 0) < 0 ? ' is-warn' : ''}`}>{dash(r.remain_leave, '개')}</td></tr>)}</tbody>
       </table>}
     </section>

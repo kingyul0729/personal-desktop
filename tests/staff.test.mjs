@@ -78,8 +78,8 @@ test('full consultation day: leader managed stays empty, designated is recorded 
   await post({ staff_id: 2, work_date: '2026-10-06', attendance: '정상근무', start_time: '10:00', end_time: '19:30', managed_count: 4, designated_count: 1 });
   const perf = (await call(e, '/api/staff/performance?month=2026-10')).data;
   const kim = perf.find(r => r.id === 1), yoon = perf.find(r => r.id === 2);
-  assert.deepEqual([kim.total_managed, kim.total_designated, kim.consult_designated], [7, 1, 3]); // 관리수 = 관리 6 + 지정 1
-  assert.deepEqual([yoon.total_managed, yoon.total_designated, yoon.consult_designated], [5, 1, 2]);
+  assert.deepEqual([kim.total_managed, kim.total_designated, kim.consult_designated], [6, 4, undefined]); // 관리수 = 관리 인원(지정 포함), 지정은 풀상담일 3 + 1
+  assert.deepEqual([yoon.total_managed, yoon.total_designated, yoon.consult_designated], [4, 3, undefined]);
   assert.equal(yoon.total_hours, 9.5); // 풀상담일 근무시간도 빠짐
 });
 
@@ -111,7 +111,7 @@ test('leave set and cleared on the schedule shows up the same on the leave scree
   assert.ok(!(await has('2026-11-12')));
 });
 
-test('performance follows the leader: designated adds to managed only on leader work days; partial leader day counts leader hours only', async () => {
+test('performance follows the leader: designated is counted apart and never added to managed; partial leader day counts leader hours only', async () => {
   const e = env(); await call(e, '/api/staff/list');
   const post = body => call(e, '/api/staff/attendance', { method: 'POST', body });
   const perf = async () => (await call(e, '/api/staff/performance?month=2027-04')).data.find(x => x.id === 2);
@@ -126,18 +126,19 @@ test('performance follows the leader: designated adds to managed only on leader 
   p = await perf();
   assert.deepEqual([p.total_hours, p.total_managed, p.total_designated], [null, null, 2]);
   assert.match(p.exclusions[0].reason, /팀장 연차/);
-  // 팀장 정상근무 → 관리수 = 6 + 2
+  // 팀장 정상근무 → 관리수 6(지정 2는 이미 포함, 더하지 않음)
   await post({ staff_id: 1, work_date: '2027-04-01', attendance: '정상근무', start_time: '10:00', end_time: '19:30' });
   p = await perf();
-  assert.deepEqual([p.total_hours, p.total_managed, p.total_designated], [9.5, 8, 2]);
+  assert.deepEqual([p.total_hours, p.total_managed, p.total_designated], [9.5, 6, 2]);
   // 팀장 2출(14:00~19:30) → 직원 근무시간은 팀장 근무시간과 겹친 5.5시간만
   await staffDay('2027-04-02');
   await post({ staff_id: 1, work_date: '2027-04-02', attendance: '기타', etc_type: 'time', etc_detail: '2시 출근', start_time: '14:00', end_time: '19:30' });
   p = await perf();
   assert.equal(p.total_hours, 15);
-  assert.equal(p.total_managed, 16);
-  // 팀장 2출 날은 관리 인원도 2시 이후만 적으므로 시간당 = 관리수 ÷ 실근무시간: 16 ÷ 15 = 1.1
-  assert.equal(p.avg_managed, 1.1);
+  assert.equal(p.total_managed, 12);
+  assert.equal(p.total_designated, 4);
+  // 시간당 = 관리수 ÷ 실근무시간: 12 ÷ 15 = 0.8 (지정 환자 수는 안 더함)
+  assert.equal(p.avg_managed, 0.8);
   assert.ok(p.exclusions.some(x => /팀장 2출 · 팀장 근무시간만 인정/.test(x.reason)));
 });
 
