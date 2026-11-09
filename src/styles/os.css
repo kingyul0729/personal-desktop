@@ -2095,3 +2095,7 @@ input[type="date"]::-webkit-date-and-time-value, input[type="month"]::-webkit-da
 .iv-pp-sum .is-total dd { color: #44617c; }
 .iv-pp-foot { display: flex; justify-content: flex-end; }
 @container sfw (max-width: 520px) { .iv-pp-sum { grid-template-columns: repeat(2, minmax(0, 1fr)); } .iv-pp-sum > div { border-right: 1px solid #edf0f4 !important; border-bottom: 1px solid #edf0f4 !important; } }
+/* 명세서 사진 고르기(입고확정과 함께) */
+.iv-photo-pick { position: relative; display: inline-flex; align-items: center; height: var(--ui-h, 36px); padding: 0 12px; border: 1px dashed #c9d6e3; border-radius: 8px; background: #fff; color: #557591; font-size: 13px; font-weight: 600; white-space: nowrap; cursor: pointer; overflow: hidden; }
+.iv-photo-pick.is-on { border-style: solid; border-color: #557591; background: #ecf1f6; color: #44617c; }
+.iv-photo-pick input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }

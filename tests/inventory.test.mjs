@@ -196,7 +196,12 @@ test('invoice photos: one photo on several same-day rows; 0-won rows are not cou
   e.BUCKET = { async put(k, v) { objects.set(k, v); }, async get(k) { return objects.has(k) ? { body: objects.get(k) } : null; }, async delete(k) { objects.delete(k); } };
   await call(e, '/state');
   const a = item(e, 'GA20%'), b = item(e, 'GA30%');
-  await call(e, '/receive', 'POST', { item_id: a.id, actual_qty: 1, amount: 40000, date: '2026-11-04' });
+  const ra = await call(e, '/receive', 'POST', { item_id: a.id, actual_qty: 1, amount: 40000, date: '2026-11-04', invoice: true });
+  assert.ok(ra.data.tx_id > 0);
+  // 받음 체크만으로는 '명세서 받음'이 안 됨(사진을 올려야만)
+  assert.equal(e.inv.prepare('SELECT invoice FROM inv_tx WHERE id = ?').get(ra.data.tx_id).invoice, 0);
+  assert.equal((await call(e, `/tx/${ra.data.tx_id}`, 'PATCH', { invoice: true })).status, 200);
+  assert.equal(e.inv.prepare('SELECT invoice FROM inv_tx WHERE id = ?').get(ra.data.tx_id).invoice, 0);
   await call(e, '/receive', 'POST', { item_id: b.id, actual_qty: 1, amount: 0, date: '2026-11-04', memo: '교환' });
   const [ta, tb] = e.inv.prepare(`SELECT id FROM inv_tx WHERE kind = 'in' ORDER BY id`).all();
   // 돈이 나간 기록 1건만 미등록(0원 교환은 안 셈)
@@ -209,6 +214,7 @@ test('invoice photos: one photo on several same-day rows; 0-won rows are not cou
   const rows = (await call(e, '/tx?from=2026-11-01&to=2026-11-30')).data.rows;
   assert.deepEqual(rows.filter(r => r.invoice_ids).map(r => r.invoice_ids).sort(), [String(id), String(id)]);
   assert.equal((await call(e, '/report?month=2026-11')).data.no_invoice, 0);
+  assert.equal(e.inv.prepare('SELECT invoice FROM inv_tx WHERE id = ?').get(ta.id).invoice, 1); // 사진이 올라가서 받음
   const file = await handleApi(new Request(`https://site.test/api/inventory/invoices/${id}/file`, { headers: authH() }), e);
   assert.equal(file.status, 200); assert.equal(file.headers.get('content-type'), 'image/jpeg');
   // 사진이 아닌 파일은 막음
@@ -217,6 +223,7 @@ test('invoice photos: one photo on several same-day rows; 0-won rows are not cou
   // 사진 지우기 → 파일도 지움, 다시 미등록 1
   await call(e, `/invoices/${id}`, 'DELETE');
   assert.equal(objects.size, 0);
+  assert.equal(e.inv.prepare('SELECT invoice FROM inv_tx WHERE id = ?').get(ta.id).invoice, 0); // 사진을 지우면 받음도 풀림
   assert.equal((await call(e, '/report?month=2026-11')).data.no_invoice, 1);
 });
 

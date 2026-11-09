@@ -117,7 +117,8 @@ async function uploadInvoice(request, env, db, user) {
   try {
     await db.prepare('INSERT INTO inv_invoices (object_key, mime, size, created_by, created_at) VALUES (?, ?, ?, ?, ?)').bind(key, mime, bytes.byteLength, user, Date.now()).run();
     const inv = await one(db, 'SELECT id FROM inv_invoices WHERE object_key = ?', key);
-    await db.batch(ids.map(id => db.prepare('INSERT OR IGNORE INTO inv_invoice_links (invoice_id, tx_id) VALUES (?, ?)').bind(inv.id, id)));
+    await db.batch([...ids.map(id => db.prepare('INSERT OR IGNORE INTO inv_invoice_links (invoice_id, tx_id) VALUES (?, ?)').bind(inv.id, id)),
+      ...ids.map(id => db.prepare('UPDATE inv_tx SET invoice = 1 WHERE id = ?').bind(id))]); // 사진이 올라가야 '명세서 받음'
     return json({ ok: true, id: inv.id });
   } catch (e) { await env.BUCKET.delete(key).catch(() => {}); throw e; }
 }
@@ -315,7 +316,7 @@ export async function handleInventory(request, env, url, user) {
         if (!isNum(ship) || ship < 0 || ship > qty + bonus) return bad(`병원 입고 수량은 0 ~ ${round(qty + bonus)} ${item.stock_unit} 사이로 적어 주세요.`);
         const stmts = [db.prepare(`INSERT INTO inv_orders (item_id, option_id, option_label, ordered_at, qty, bonus_qty, amount, prepaid, status, memo, created_by, created_at) VALUES (?,?,?,?,?,?,?,1,'paid',?,?,?)`)
           .bind(item.id, opt.id, opt.label, date, qty, bonus, amount, body.memo || null, user, Date.now()),
-        ...txStatements(db, item, { date, kind: 'prepaid_buy', qty, bonus_qty: bonus, amount, vendor_delta: qty + bonus, memo: body.memo || opt.label, by: user, invoice: body.invoice })];
+        ...txStatements(db, item, { date, kind: 'prepaid_buy', qty, bonus_qty: bonus, amount, vendor_delta: qty + bonus, memo: body.memo || opt.label, by: user, invoice: 0 })];
         await db.batch(stmts);
         await db.prepare(`UPDATE inv_tx SET order_id = (SELECT max(id) FROM inv_orders) WHERE id = (SELECT max(id) FROM inv_tx)`).run();
         if (ship > 0) {
@@ -352,8 +353,8 @@ export async function handleInventory(request, env, url, user) {
         if (actual > round(item.vendor_stock || 0)) return bad(`선결제 잔량(${round(item.vendor_stock || 0)} ${item.stock_unit})보다 많이 받을 수 없어요.`);
         // 같은 물건을 두 번 받지 않게: 받기 전 반입 예정이 있으면 그 줄에서 입고확정
         if (await one(db, `SELECT id FROM inv_orders WHERE item_id = ? AND prepaid = 1 AND status = 'ordered'`, item.id)) return bad('받기 전 반입 예정이 있어요. 위 주문한 것 받기에서 입고확정해 주세요.', 409);
-        await db.batch(txStatements(db, item, { date, kind: 'prepaid_in', qty: actual, amount: 0, hospital_delta: actual, vendor_delta: -actual, memo: body.memo, by: user, invoice: body.invoice }));
-        return json({ ok: true, item: await loadItem(db, item.id) });
+        await db.batch(txStatements(db, item, { date, kind: 'prepaid_in', qty: actual, amount: 0, hospital_delta: actual, vendor_delta: -actual, memo: body.memo, by: user, invoice: 0 }));
+        return json({ ok: true, item: await loadItem(db, item.id), tx_id: (await one(db, 'SELECT max(id) AS id FROM inv_tx')).id });
       }
       if (body.order_id) {
         const order = await one(db, `SELECT * FROM inv_orders WHERE id = ? AND status = 'ordered'`, Number(body.order_id));
@@ -364,9 +365,9 @@ export async function handleInventory(request, env, url, user) {
           if (actual > round(item.vendor_stock || 0)) return bad(`선결제 잔량(${round(item.vendor_stock || 0)} ${item.stock_unit})보다 많이 받을 수 없어요.`);
           await db.batch([
             db.prepare(`UPDATE inv_orders SET status = 'received', received_at = ? WHERE id = ? AND status = 'ordered'`).bind(date, order.id),
-            ...txStatements(db, item, { date, kind: 'prepaid_in', qty: actual, amount: 0, hospital_delta: actual, vendor_delta: -actual, order_id: order.id, memo: body.memo, by: user, invoice: body.invoice }),
+            ...txStatements(db, item, { date, kind: 'prepaid_in', qty: actual, amount: 0, hospital_delta: actual, vendor_delta: -actual, order_id: order.id, memo: body.memo, by: user, invoice: 0 }),
           ]);
-          return json({ ok: true });
+          return json({ ok: true, tx_id: (await one(db, 'SELECT max(id) AS id FROM inv_tx')).id });
         }
         // 나눠서 도착(2026-11-09 사용자 지정): 도착할 때마다 그날 날짜로 따로 기록. 결제금액은 처음 받은 기록에 한 번만,
         // 다음 도착분은 0원. 주문 수량을 다 받을 때까지 주문은 '받기 전'에 남는다(남은 것이 안 오면 주문 줄에서 '마감').
@@ -378,9 +379,9 @@ export async function handleInventory(request, env, url, user) {
         await db.batch([
           ...(done ? [db.prepare(`UPDATE inv_orders SET status = 'received', received_at = ? WHERE id = ? AND status = 'ordered'`).bind(date, order.id)] : []),
           ...txStatements(db, item, { date, kind: 'in', qty: actual, bonus_qty: 0, amount: first ? order.amount : 0, hospital_delta: actual, order_id: order.id,
-            memo: body.memo || (first && done ? order.option_label : `${order.option_label || '주문'} · 나눠 받음 ${nth}차`), by: user, invoice: body.invoice }),
+            memo: body.memo || (first && done ? order.option_label : `${order.option_label || '주문'} · 나눠 받음 ${nth}차`), by: user, invoice: 0 }),
         ]);
-        return json({ ok: true, left: done ? 0 : round(left - actual) });
+        return json({ ok: true, left: done ? 0 : round(left - actual), tx_id: (await one(db, 'SELECT max(id) AS id FROM inv_tx')).id });
       }
       // 주문 없이 바로 받은 일반 입고: 금액을 안 넣으면 등록된 구매단가 × 수량(주문단위는 구성수량으로 환산). 단가 미확인이면 금액 없음.
       const item = await loadItem(db, body.item_id);
@@ -391,8 +392,8 @@ export async function handleInventory(request, env, url, user) {
       let amount = num(body.amount);
       if (amount != null && amount < 0) return bad('금액은 0 이상이어야 해요.');
       if (amount == null) amount = priceFor(item, actual - bonus);
-      await db.batch(txStatements(db, item, { date, kind: 'in', qty: actual - bonus, bonus_qty: bonus, amount, hospital_delta: actual, memo: body.memo, by: user, invoice: body.invoice }));
-      return json({ ok: true, amount });
+      await db.batch(txStatements(db, item, { date, kind: 'in', qty: actual - bonus, bonus_qty: bonus, amount, hospital_delta: actual, memo: body.memo, by: user, invoice: 0 }));
+      return json({ ok: true, amount, tx_id: (await one(db, 'SELECT max(id) AS id FROM inv_tx')).id });
     }
 
     // ── 출고: 병원재고만 재고단위로 차감 ──
@@ -443,7 +444,10 @@ export async function handleInventory(request, env, url, user) {
     if (m === 'DELETE' && /^\/invoices\/\d+$/.test(path)) {
       // 명세서 사진 지우기(걸린 기록 모두에서 빠짐)
       const id = Number(path.split('/')[2]);
+      const linked = await all(db, 'SELECT tx_id FROM inv_invoice_links WHERE invoice_id = ?', id);
       await db.prepare('DELETE FROM inv_invoice_links WHERE invoice_id = ?').bind(id).run();
+      // 사진이 하나도 안 남은 기록은 '명세서 받음'도 풀림
+      if (linked.length) await db.batch(linked.map(l => db.prepare('UPDATE inv_tx SET invoice = 0 WHERE id = ? AND NOT EXISTS (SELECT 1 FROM inv_invoice_links WHERE tx_id = ?)').bind(l.tx_id, l.tx_id)));
       await dropOrphanInvoices(env, db);
       return json({ ok: true });
     }
@@ -452,14 +456,15 @@ export async function handleInventory(request, env, url, user) {
       const id = Number(path.split('/')[2]);
       const ids = (Array.isArray(body.tx_ids) ? body.tx_ids : []).map(Number).filter(n => n > 0);
       if (!ids.length) return bad('기록을 골라 주세요.');
-      await db.batch(ids.map(t => db.prepare(`INSERT OR IGNORE INTO inv_invoice_links (invoice_id, tx_id) SELECT ?, id FROM inv_tx WHERE id = ? AND deleted_at IS NULL AND kind IN ('in','prepaid_buy','prepaid_in')`).bind(id, t)));
+      await db.batch([...ids.map(t => db.prepare(`INSERT OR IGNORE INTO inv_invoice_links (invoice_id, tx_id) SELECT ?, id FROM inv_tx WHERE id = ? AND deleted_at IS NULL AND kind IN ('in','prepaid_buy','prepaid_in')`).bind(id, t)),
+        ...ids.map(t => db.prepare('UPDATE inv_tx SET invoice = 1 WHERE id = ? AND EXISTS (SELECT 1 FROM inv_invoice_links WHERE tx_id = ?)').bind(t, t))]);
       return json({ ok: true });
     }
     if (m === 'PATCH' && path.startsWith('/tx/')) {
       // 거래명세서 등록 여부·메모만 고친다(수량을 고치려면 지우고 다시 기록)
       const id = Number(path.split('/')[2]);
       await db.prepare('UPDATE inv_tx SET invoice = coalesce(?, invoice), memo = coalesce(?, memo) WHERE id = ? AND deleted_at IS NULL')
-        .bind(body.invoice == null ? null : body.invoice ? 1 : 0, body.memo ?? null, id).run();
+        .bind(null, body.memo ?? null, id).run(); // 명세서 받음은 사진을 올려야만(2026-11-09 사용자)
       return json({ ok: true });
     }
     if (m === 'GET' && path === '/tx') {
