@@ -554,6 +554,7 @@ async function inventoryRoute(request, env, url, user, db, path, m) {
       const items = await all(db, `SELECT id, name, stock_unit, hospital_stock, daily_mode, vendor_id FROM inv_items WHERE active = 1 AND daily_mode IS NOT NULL ORDER BY sort, id`);
       // 그날 일일재고가 바꾼 병원재고(소모 −, 실사가 더 많아 늘린 것 +)를 합친 순 사용량
       const used = await all(db, `SELECT item_id, round(sum(-hospital_delta), 3) AS qty FROM inv_tx WHERE deleted_at IS NULL AND daily_date = ? AND kind IN ('out', 'adjust') GROUP BY item_id`, date);
+      const fixes = await all(db, `SELECT item_id, round(sum(hospital_delta), 3) AS q FROM inv_tx WHERE deleted_at IS NULL AND daily_date = ? AND kind = 'adjust' AND memo LIKE '마감 전 재고 고침%' GROUP BY item_id`, date);
       const since = new Date(Date.parse(date) - 14 * 864e5).toISOString().slice(0, 10);
       const recent = await all(db, `SELECT item_id, sum(qty) AS q FROM inv_tx WHERE deleted_at IS NULL AND kind = 'out' AND daily_date BETWEEN ? AND ? GROUP BY item_id`, since, date);
       const later = await stockAtDates(db, date);
@@ -565,7 +566,7 @@ async function inventoryRoute(request, env, url, user, db, path, m) {
         first_at: log[0]?.created_at ?? day?.updated_at ?? null, first_by: log[0]?.created_by ?? day?.updated_by ?? null,
         last_at: log.length ? log[log.length - 1].created_at : day?.updated_at ?? null, last_by: log.length ? log[log.length - 1].created_by : day?.updated_by ?? null,
         log: log.map(l => ({ at: l.created_at, by: l.created_by, ...JSON.parse(l.data || '{}') })) };
-      return json({ date, record, check, patients_auto: await dailyPatientsAuto(db, date), day: day ? { ...day, extra: day.extra ? JSON.parse(day.extra) : {} } : null, items: items.map(it => ({ ...it, stock_at: round(it.hospital_stock - (later.get(it.id) || 0)), used: used.find(u => u.item_id === it.id)?.qty ?? null, used15: recent.find(r => r.item_id === it.id)?.q ?? 0 })) });
+      return json({ date, record, check, patients_auto: await dailyPatientsAuto(db, date), day: day ? { ...day, extra: day.extra ? JSON.parse(day.extra) : {} } : null, items: items.map(it => ({ ...it, stock_at: round(it.hospital_stock - (later.get(it.id) || 0)), used: used.find(u => u.item_id === it.id)?.qty ?? null, open_fix: fixes.find(f => f.item_id === it.id)?.q ?? null, used15: recent.find(r => r.item_id === it.id)?.q ?? 0 })) });
     }
     if (m === 'POST' && path === '/daily') {
       const date = okDate(body.date) ? body.date : null;
@@ -582,6 +583,9 @@ async function inventoryRoute(request, env, url, user, db, path, m) {
       // 업체재고(선결제 잔량)는 바꾸지 않는다.
       const used = { ...(body.used || {}) };
       const closing = Object.entries(body.closing || {}).filter(([, v]) => v !== '' && v != null);
+      // 마감 전 재고 고침(2026-11-09 사용자 '월말 보고서 사용량까지 정확하게'): 그 날 시작 재고를 직접 적으면
+      // '마감 전 재고 고침'(조정) + 사용량 = 고친 마감 전 재고 − 마감재고(출고)로 나눠 기록. 병원재고 결과는 같고(센 마감재고), 월말 사용량만 정확해진다.
+      const openOf = {}, ledgerOf = {};
       if (closing.length) {
         const later = await stockAtDates(db, date);
         for (const [id, raw] of closing) {
@@ -592,6 +596,13 @@ async function inventoryRoute(request, env, url, user, db, path, m) {
           const prev = await one(db, `SELECT coalesce(sum(-hospital_delta), 0) AS q FROM inv_tx WHERE deleted_at IS NULL AND daily_date = ? AND item_id = ? AND kind IN ('out', 'adjust')`, date, it.id);
           const before = round(it.hospital_stock - (later.get(it.id) || 0) + (prev?.q || 0));
           used[id] = round(before - left); // 음수면 센 수량이 장부보다 많음 → 그만큼 늘림
+          const rawOpen = body.opening?.[id];
+          if (rawOpen !== undefined && rawOpen !== '' && rawOpen !== null) {
+            const op = num(rawOpen);
+            if (!isNum(op) || op < 0) return bad('마감 전 재고는 0 이상이어야 해요.');
+            if (left > op) return bad(`${it.name}: 마감재고가 마감 전 재고(${op} ${it.stock_unit})보다 많아요.`);
+            openOf[it.id] = op; ledgerOf[it.id] = before;
+          }
         }
       }
       // 품목별 당일 사용량: 이전 마감 출고를 되돌리고 새 값으로 다시 기록(같은 batch)
@@ -614,10 +625,17 @@ async function inventoryRoute(request, env, url, user, db, path, m) {
         if (change) dS.push(db.prepare('UPDATE inv_items SET hospital_stock = round(hospital_stock + ?, 3), updated_at = ? WHERE id = ?').bind(change, Date.now(), item.id));
         const dItem = { ...item, hospital_stock: round(start + back) }; // 기록의 '기록 후 병원재고' = 시작 + 되돌림 − 새 소모
         // 센 마감재고는 메모에 '마감재고'를 붙여 둔다(뒤에 앞 날짜를 고쳐도 이 날 센 수량이 그대로 남게 하는 표시)
-        if (qty > 0) dS.push(rowOnly(dItem, { date, kind: 'out', qty, hospital_delta: -qty, daily_date: date, memo: counted ? '일일 마감 소모 · 마감재고' : '일일 마감 소모', by: user }));
-        if (qty < 0) dS.push(rowOnly(dItem, { date, kind: 'adjust', qty: -qty, hospital_delta: -qty, daily_date: date, memo: '일일 마감재고 확인', by: user }));
+        const op = counted ? openOf[item.id] : undefined;
+        if (op !== undefined) {
+          const fix = round(op - ledgerOf[item.id]), use = round(qty + fix); // 사용량 = 고친 마감 전 재고 − 마감재고
+          if (fix) dS.push(rowOnly(dItem, { date, kind: 'adjust', qty: Math.abs(fix), hospital_delta: fix, daily_date: date, memo: '마감 전 재고 고침 · 마감재고', by: user }));
+          if (use > 0) dS.push(rowOnly({ ...dItem, hospital_stock: round(dItem.hospital_stock + fix) }, { date, kind: 'out', qty: use, hospital_delta: -use, daily_date: date, memo: '일일 마감 소모 · 마감재고', by: user }));
+          if (!fix && !(use > 0)) dS.push(rowOnly(dItem, { date, kind: 'adjust', qty: 0, hospital_delta: 0, daily_date: date, memo: '일일 마감재고 확인', by: user }));
+        }
+        if (op === undefined && qty > 0) dS.push(rowOnly(dItem, { date, kind: 'out', qty, hospital_delta: -qty, daily_date: date, memo: counted ? '일일 마감 소모 · 마감재고' : '일일 마감 소모', by: user }));
+        if (op === undefined && qty < 0) dS.push(rowOnly(dItem, { date, kind: 'adjust', qty: -qty, hospital_delta: -qty, daily_date: date, memo: '일일 마감재고 확인', by: user }));
         // 센 수량이 장부와 같아 바뀐 게 없어도 '이 날 셌음' 표시를 남긴다(0 기록, 입출고 내역에는 안 보임) — 앞 날짜를 고칠 때 이 날 수량을 지키는 기준
-        if (qty === 0 && (counted || item.daily_mode === 'count')) dS.push(rowOnly(dItem, { date, kind: 'adjust', qty: 0, hospital_delta: 0, daily_date: date, memo: '일일 마감재고 확인', by: user }));
+        if (op === undefined && qty === 0 && (counted || item.daily_mode === 'count')) dS.push(rowOnly(dItem, { date, kind: 'adjust', qty: 0, hospital_delta: 0, daily_date: date, memo: '일일 마감재고 확인', by: user }));
         // 앞 날짜를 나중에 적거나 고쳐도, 그 뒤 날짜에 이미 센 마감재고는 그대로(2026-11-09 점검): 바로 다음 '센 날'의 기록을 같은 양만큼 반대로 고친다.
         const lS = [];
         if (change) {

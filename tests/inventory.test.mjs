@@ -617,3 +617,29 @@ test('check: replacing a big earlier correction never dips stock below 0 midway,
   assert.deepEqual([await at('2026-11-03'), await at('2026-11-09'), item(e, '보관용 3종 시트팩').hospital_stock], [2, 0, 0]);
   assert.equal((await call(e, '/tx?from=2026-11-01&to=2026-11-30')).data.rows.some(r => r.daily_date === '2026-11-09'), true); // 11/9 기록이 0이 아니면 보임
 });
+
+test('daily: correcting 마감 전 재고 makes the month usage right; hospital stock is still the counted number', async () => {
+  const e = env(); await call(e, '/state');
+  const it = item(e, '일회용해면');
+  await call(e, '/adjust', 'POST', { item_id: it.id, hospital_stock: 10, date: '2026-11-01' });
+  const usage = async () => ((await call(e, '/report?month=2026-11')).data.usage.find(u => u.id === it.id)?.used) ?? 0;
+  // 장부 10, 실제 시작 20, 센 마감재고 16 → 병원재고 16, 사용량 4
+  assert.equal((await call(e, '/daily', 'POST', { date: '2026-11-04', closing: { [it.id]: 16 }, opening: { [it.id]: 20 } })).status, 200);
+  assert.equal(item(e, '일회용해면').hospital_stock, 16);
+  assert.equal(await usage(), 4);
+  const g = (await call(e, '/daily?date=2026-11-04')).data.items.find(x => x.id === it.id);
+  assert.equal(g.stock_at + g.used + g.open_fix, 20); // 화면에 다시 열면 20
+  // 같은 내용 다시 저장 → 그대로
+  await call(e, '/daily', 'POST', { date: '2026-11-04', closing: { [it.id]: 16 }, opening: { [it.id]: 20 } });
+  assert.deepEqual([item(e, '일회용해면').hospital_stock, await usage()], [16, 4]);
+  // 마감 전 재고를 비우고 저장 → 장부 기준(10 → 16, 사용량 0)
+  await call(e, '/daily', 'POST', { date: '2026-11-04', closing: { [it.id]: 16 } });
+  assert.deepEqual([item(e, '일회용해면').hospital_stock, await usage()], [16, 0]);
+  // 마감재고가 고친 마감 전 재고보다 많으면 막음
+  assert.equal((await call(e, '/daily', 'POST', { date: '2026-11-04', closing: { [it.id]: 30 }, opening: { [it.id]: 20 } })).status, 400);
+  // 뒤 날짜 실사가 있을 때 앞 날짜의 마감 전 재고를 고쳐도 뒤 실사는 그대로
+  await call(e, '/daily', 'POST', { date: '2026-11-07', closing: { [it.id]: 12 } });
+  await call(e, '/daily', 'POST', { date: '2026-11-04', closing: { [it.id]: 15 }, opening: { [it.id]: 25 } });
+  const at = d => call(e, `/daily?date=${d}`).then(r => r.data.items.find(x => x.id === it.id).stock_at);
+  assert.deepEqual([await at('2026-11-04'), await at('2026-11-07'), item(e, '일회용해면').hospital_stock], [15, 12, 12]);
+});

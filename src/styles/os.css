@@ -2141,3 +2141,8 @@ input[type="date"]::-webkit-date-and-time-value, input[type="month"]::-webkit-da
 }
 .iv-d-opts:empty { display: none; }
 .iv-kind { display: inline-block; line-height: 18px; padding: 1px 8px; font-size: 11px; }
+/* 일일재고 마감 전 재고 고침 칸(비우면 앱 계산값) */
+.iv-open { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; color: #7D838B; }
+.iv-open input { width: 96px; height: 30px; text-align: right; font: inherit; font-size: 13px; color: #2D3136; border: 1px solid #e1e4e8; border-radius: 8px; padding: 0 8px; background: #fff; }
+.iv-open input::placeholder { color: #2D3136; opacity: 1; }
+.iv-open input:focus { outline: 2px solid #557591; outline-offset: -1px; }
