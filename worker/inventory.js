@@ -7,6 +7,9 @@
 // - 일반 품목: 등록된 구매조건(가격표·증정조건)이 있으면 그대로, 없으면 구매단가 × 수량. 업체재고·선결제 잔량은 건드리지 않음.
 // 핵심: 일반 품목은 기존 구매단가 기준으로 입고 처리하고, 선결제 품목은 최초 구매 시에만 결제 처리한다.
 //       이후 병원 반입은 업체재고에서 병원재고로 이동만 하며 구매금액은 다시 계산하지 않는다.
+// - 선결제 주문 때 '병원 입고 수량'을 정하면(2026-11-09 사용자 지정) 그 수량은 반입 예정(inv_orders prepaid=1, status 'ordered',
+//   memo 'from:<선결제 주문 id>')으로만 남고 업체재고(선결제 잔량)에 그대로 있다. 실제 도착을 '입고확정'할 때 도착 수량만
+//   업체재고 − / 병원재고 + (기존 반입과 같은 prepaid_in). 예정보다 적게 와도 그 예정은 끝나고 나머지는 업체재고에 남는다.
 // - 출고: 병원재고만 재고단위로 차감. 금액·업체재고는 건드리지 않음.
 // - 단위는 숫자만 비교하지 않고 품목에 등록된 구성수량(pack_qty: 주문단위 1개 = 재고단위 몇 개)으로 환산.
 // - 입고·출고 기록 삭제 = 그 기록이 바꾼 병원재고·업체재고를 정확히 되돌림(기록마다 증감값을 저장해 둠).
@@ -220,12 +223,19 @@ export async function handleInventory(request, env, url, user) {
       const qty = u.qty * count, bonus = u.bonus * count, amount = u.amount == null ? null : u.amount * count;
       if (opt.prepaid) {
         // 선결제: 결제와 동시에 업체재고(선결제 잔량) 생성. 병원재고는 반입(입고확정) 때 늘어난다.
+        const ship = num(body.ship_qty) ?? 0;
+        if (!isNum(ship) || ship < 0 || ship > qty + bonus) return bad(`병원 입고 수량은 0 ~ ${round(qty + bonus)} ${item.stock_unit} 사이로 적어 주세요.`);
         const stmts = [db.prepare(`INSERT INTO inv_orders (item_id, option_id, option_label, ordered_at, qty, bonus_qty, amount, prepaid, status, memo, created_by, created_at) VALUES (?,?,?,?,?,?,?,1,'paid',?,?,?)`)
           .bind(item.id, opt.id, opt.label, date, qty, bonus, amount, body.memo || null, user, Date.now()),
         ...txStatements(db, item, { date, kind: 'prepaid_buy', qty, bonus_qty: bonus, amount, vendor_delta: qty + bonus, memo: body.memo || opt.label, by: user, invoice: body.invoice })];
         await db.batch(stmts);
         await db.prepare(`UPDATE inv_tx SET order_id = (SELECT max(id) FROM inv_orders) WHERE id = (SELECT max(id) FROM inv_tx)`).run();
-        return json({ ok: true, prepaid: true });
+        if (ship > 0) {
+          const paid = await one(db, 'SELECT max(id) AS id FROM inv_orders');
+          await db.prepare(`INSERT INTO inv_orders (item_id, option_id, option_label, ordered_at, qty, bonus_qty, amount, prepaid, status, memo, created_by, created_at) VALUES (?,?,?,?,?,0,0,1,'ordered',?,?,?)`)
+            .bind(item.id, opt.id, '반입 예정', date, round(ship), `from:${paid.id}`, user, Date.now()).run();
+        }
+        return json({ ok: true, prepaid: true, ship });
       }
       await db.prepare(`INSERT INTO inv_orders (item_id, option_id, option_label, ordered_at, qty, bonus_qty, amount, prepaid, status, memo, created_by, created_at) VALUES (?,?,?,?,?,?,?,0,'ordered',?,?,?)`)
         .bind(item.id, opt.id, opt.label, date, qty, bonus, amount, body.memo || null, user, Date.now()).run();
@@ -248,6 +258,8 @@ export async function handleInventory(request, env, url, user) {
         const item = await loadItem(db, body.item_id);
         if (!item) return bad('품목을 찾을 수 없어요.', 404);
         if (actual > round(item.vendor_stock || 0)) return bad(`선결제 잔량(${round(item.vendor_stock || 0)} ${item.stock_unit})보다 많이 받을 수 없어요.`);
+        // 같은 물건을 두 번 받지 않게: 받기 전 반입 예정이 있으면 그 줄에서 입고확정
+        if (await one(db, `SELECT id FROM inv_orders WHERE item_id = ? AND prepaid = 1 AND status = 'ordered'`, item.id)) return bad('받기 전 반입 예정이 있어요. 위 주문한 것 받기에서 입고확정해 주세요.', 409);
         await db.batch(txStatements(db, item, { date, kind: 'prepaid_in', qty: actual, amount: 0, hospital_delta: actual, vendor_delta: -actual, memo: body.memo, by: user, invoice: body.invoice }));
         return json({ ok: true, item: await loadItem(db, item.id) });
       }
@@ -255,6 +267,15 @@ export async function handleInventory(request, env, url, user) {
         const order = await one(db, `SELECT * FROM inv_orders WHERE id = ? AND status = 'ordered'`, Number(body.order_id));
         if (!order) return bad('받을 주문을 찾을 수 없어요.', 404);
         const item = await loadItem(db, order.item_id);
+        if (order.prepaid) {
+          // 선결제 반입 예정: 실제 도착 수량만 업체재고 → 병원재고로 옮긴다(금액 없음)
+          if (actual > round(item.vendor_stock || 0)) return bad(`선결제 잔량(${round(item.vendor_stock || 0)} ${item.stock_unit})보다 많이 받을 수 없어요.`);
+          await db.batch([
+            db.prepare(`UPDATE inv_orders SET status = 'received', received_at = ? WHERE id = ? AND status = 'ordered'`).bind(date, order.id),
+            ...txStatements(db, item, { date, kind: 'prepaid_in', qty: actual, amount: 0, hospital_delta: actual, vendor_delta: -actual, order_id: order.id, memo: body.memo, by: user, invoice: body.invoice }),
+          ]);
+          return json({ ok: true });
+        }
         await db.batch([
           db.prepare(`UPDATE inv_orders SET status = 'received', received_at = ? WHERE id = ? AND status = 'ordered'`).bind(date, order.id),
           ...txStatements(db, item, { date, kind: 'in', qty: actual, bonus_qty: order.bonus_qty, amount: order.amount, hospital_delta: actual, order_id: order.id, memo: body.memo || order.option_label, by: user, invoice: body.invoice }),
@@ -305,8 +326,11 @@ export async function handleInventory(request, env, url, user) {
         db.prepare(`UPDATE inv_items SET hospital_stock = round(hospital_stock - ?, 3), vendor_stock = round(vendor_stock - ?, 3), updated_at = ? WHERE id = ?`).bind(tx.hospital_delta, tx.vendor_delta, Date.now(), tx.item_id),
         db.prepare('UPDATE inv_tx SET deleted_at = ?, deleted_by = ? WHERE id = ? AND deleted_at IS NULL').bind(Date.now(), user, tx.id),
       ];
-      if (tx.order_id && tx.kind === 'in') stmts.push(db.prepare(`UPDATE inv_orders SET status = 'ordered', received_at = NULL WHERE id = ?`).bind(tx.order_id));
-      if (tx.order_id && tx.kind === 'prepaid_buy') stmts.push(db.prepare(`UPDATE inv_orders SET status = 'cancelled' WHERE id = ?`).bind(tx.order_id));
+      if (tx.order_id && (tx.kind === 'in' || tx.kind === 'prepaid_in')) stmts.push(db.prepare(`UPDATE inv_orders SET status = 'ordered', received_at = NULL WHERE id = ?`).bind(tx.order_id));
+      if (tx.order_id && tx.kind === 'prepaid_buy') {
+        stmts.push(db.prepare(`UPDATE inv_orders SET status = 'cancelled' WHERE id = ?`).bind(tx.order_id));
+        stmts.push(db.prepare(`UPDATE inv_orders SET status = 'cancelled' WHERE memo = ? AND status = 'ordered'`).bind(`from:${tx.order_id}`)); // 받기 전 반입 예정도 함께 취소
+      }
       await db.batch(stmts);
       return json({ ok: true, item: await loadItem(db, tx.item_id) });
     }

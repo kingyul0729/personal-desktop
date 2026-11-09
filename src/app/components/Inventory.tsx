@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { LoadingBox, SavingMark } from './Feedback';
 import { readWon } from '../koreanAmount';
 import {
-  type InvItem, type InvOption, type InvState, type InvTx, InvError, KIND_LABEL, announceInventory, fmtQty, fmtWon, invGet, invSend, shiftMonth, todayLocal, unitHint, useInventory,
+  type InvItem, type InvOption, type InvOrder, type InvState, type InvTx, InvError, KIND_LABEL, announceInventory, fmtQty, fmtWon, invGet, invSend, shiftMonth, todayLocal, unitHint, useInventory,
 } from '../inventoryApi';
 
 // 재고 화면 4개(재고체크·재고주문·재고입출고·월말/연말보고서). 숫자는 예전 앱에서, 화면은 새로 만듦.
@@ -23,6 +23,18 @@ function Seg<T extends string>({ value, onChange, options, label }: { value: T; 
   return <div className="sf-seg" role="tablist" aria-label={label}>{options.map(([k, l]) => <button key={k} type="button" role="tab" aria-selected={value === k} onClick={() => onChange(k)}>{l}</button>)}</div>;
 }
 const lowOf = (it: InvItem) => it.min_stock > 0 && it.hospital_stock <= it.min_stock;
+// 재고 표시(2026-11-09 사용자 지정, 겹치지 않게 하나만): 받기 전 반입 예정 → '반입 중', 받기 전 주문 → '주문 중',
+// 병원재고가 기준 이하인데 선결제 잔량을 합치면 넘음 → '반입 필요', 합쳐도 기준 이하 → '부족'(새로 구매).
+type Flag = 'bringing' | 'wait' | 'bring' | 'low';
+const FLAG_LABEL: Record<Flag, string> = { bringing: '반입 중', wait: '주문 중', bring: '반입 필요', low: '부족' };
+const flagOf = (it: InvItem, orders: InvOrder[]): Flag | null => {
+  const pend = orders.filter(o => o.item_id === it.id);
+  if (pend.some(o => o.prepaid)) return 'bringing';
+  if (pend.length) return 'wait';
+  if (!lowOf(it)) return null;
+  return it.prepaid && it.hospital_stock + (it.vendor_stock || 0) > it.min_stock ? 'bring' : 'low';
+};
+const FlagTag = ({ flag }: { flag: Flag | null }) => (flag ? <span className={`iv-tag is-${flag}`}>{FLAG_LABEL[flag]}</span> : null);
 const withUnit = (v: number | null | undefined, unit: string) => (v == null ? '—' : `${fmtQty(v)} ${unit}`);
 
 /* ───────────── 재고체크 ───────────── */
@@ -33,12 +45,13 @@ export function StockCheck() {
   if (error) return <Problem error={error} />;
   if (!state) return <LoadingBox />;
   const prepaid = state.items.filter(it => it.prepaid);
-  const low = state.items.filter(lowOf);
+  const low = state.items.filter(it => flagOf(it, state.orders) === 'low');
+  const bring = state.items.filter(it => flagOf(it, state.orders) === 'bring');
   return <Shell toast={toast}>
     {!state.imported && <OldDataImport onDone={() => { announceInventory(); void reload(); }} />}
     <div className="iv-cards">
       {prepaid.map(it => <div key={it.id} className="iv-card"><span>선결제 잔량</span><b>{it.name}</b><strong>{withUnit(it.vendor_stock, it.stock_unit)}</strong><small>병원재고 {withUnit(it.hospital_stock, it.stock_unit)}{it.unit_cost != null ? ` · 개당원가 ${it.unit_cost.toLocaleString('ko-KR')}원` : ''}</small></div>)}
-      <div className={`iv-card${low.length ? ' is-warn' : ''}`}><span>위험 기준 이하</span><b>부족 품목</b><strong>{low.length}개</strong><small>{low.slice(0, 3).map(i => i.name).join(', ') || '없음'}</small></div>
+      <div className={`iv-card${low.length ? ' is-warn' : ''}`}><span>위험 기준 이하</span><b>부족 품목</b><strong>{low.length}개</strong><small>{low.slice(0, 3).map(i => i.name).join(', ') || '없음'}{bring.length > 0 && ` · 반입 필요 ${bring.length}개`}</small></div>
     </div>
     <div className="sf-bar"><Seg label="보기" value={tab} onChange={setTab} options={[['daily', '일일 재고'], ['all', '전체 재고']]} /></div>
     {tab === 'daily' ? <DailyClose key={state.imported || 'none'} items={state.items} today={state.today} notify={setToast} onSaved={reload} /> : <AllStock state={state} notify={setToast} />}
@@ -54,12 +67,12 @@ function AllStock({ state, notify }: { state: InvState; notify: (m: string) => v
     <div className="sf-pills">{cats.map(c => <button key={c} type="button" aria-pressed={cat === c} onClick={() => setCat(c)}>{c}</button>)}</div>
     <table className="sf-table">
       <thead><tr><th>품목</th><th>거래처</th><th className="num">병원재고</th><th className="num">선결제 잔량</th><th className="num">위험 기준</th><th /></tr></thead>
-      <tbody>{rows.map(it => <tr key={it.id} className={lowOf(it) ? 'is-low' : ''}>
-        <td><b>{it.name}</b>{unitHint(it) && <small> · {unitHint(it)}</small>}</td><td><small>{it.vendor_name || '—'}</small></td>
+      <tbody>{rows.map(it => { const fl = flagOf(it, state.orders); return <tr key={it.id} className={fl === 'low' ? 'is-low' : ''}>
+        <td><b>{it.name}</b>{unitHint(it) && <small> · {unitHint(it)}</small>} <FlagTag flag={fl} /></td><td><small>{it.vendor_name || '—'}</small></td>
         <td className={`num${it.hospital_stock < 0 ? ' is-warn' : ''}`}>{withUnit(it.hospital_stock, it.stock_unit)}</td>
         <td className="num">{it.prepaid ? withUnit(it.vendor_stock, it.stock_unit) : <small>—</small>}</td>
         <td className="num"><small>{it.min_stock ? withUnit(it.min_stock, it.stock_unit) : '—'}</small></td>
-        <td className="num"><button type="button" className="sf-btn" onClick={() => setAdj(it)}>맞추기</button></td></tr>)}</tbody>
+        <td className="num"><button type="button" className="sf-btn" onClick={() => setAdj(it)}>맞추기</button></td></tr>; })}</tbody>
     </table>
     {adj && <AdjustDialog item={adj} today={state.today} onClose={() => setAdj(null)} onDone={m => { notify(m); setAdj(null); announceInventory(); }} />}
   </>;
@@ -242,7 +255,9 @@ function OrderBoard({ state, q, notify }: { state: InvState; q: string; notify: 
   const [pickId, setPickId] = useState<number | null>(null);
   const [pick, setPick] = useState<{ item: InvItem; opt: InvOption } | null>(null);
   const list = state.items.filter(it => it.options.length && (!q || it.name.includes(q) || (it.vendor_name || '').includes(q)));
-  const sorted = [...list].sort((a, b) => Number(lowOf(b)) - Number(lowOf(a)));
+  const RANK: Record<Flag, number> = { low: 4, bring: 3, bringing: 2, wait: 1 };
+  const rank = (it: InvItem) => { const f = flagOf(it, state.orders); return f ? RANK[f] : 0; };
+  const sorted = [...list].sort((a, b) => rank(b) - rank(a));
   const item = sorted.find(it => it.id === pickId) ?? sorted[0];
   const waiting = (id: number) => state.orders.filter(o => o.item_id === id);
   const cancel = async (id: number) => { try { await invSend('POST', `/orders/${id}/cancel`); notify('주문을 취소했어요.'); announceInventory(); } catch (e) { notify(errText(e)); } };
@@ -250,20 +265,20 @@ function OrderBoard({ state, q, notify }: { state: InvState; q: string; notify: 
     <div className="iv-split">
       <nav className="iv-split-list" aria-label="품목">
         <p className="iv-split-count">품목 {sorted.length}{state.orders.length > 0 && <span>받기 전 주문 {state.orders.length}건</span>}</p>
-        {sorted.length ? <ul>{sorted.map(it => { const w = waiting(it.id).length; return <li key={it.id}>
+        {sorted.length ? <ul>{sorted.map(it => <li key={it.id}>
           <button type="button" aria-current={item?.id === it.id ? 'true' : undefined} onClick={() => setPickId(it.id)}>
             <span className="iv-split-name">{it.name}</span>
-            {w > 0 && <span className="iv-tag is-wait">주문 중</span>}{lowOf(it) && <span className="iv-tag is-low">부족</span>}
-          </button></li>; })}</ul>
+            <FlagTag flag={flagOf(it, state.orders)} />
+          </button></li>)}</ul>
           : <p className="iv-split-empty">찾는 품목이 없어요</p>}
       </nav>
       <section className="iv-split-detail" aria-label="품목 상세">
         {item ? <>
           <header className="iv-d-head">
-            <div><h3>{item.name}{lowOf(item) && <span className="iv-tag is-low">부족</span>}</h3><p>{item.vendor_name || '거래처 없음'}{item.category ? ` · ${item.category}` : ''}</p></div>
+            <div><h3>{item.name}<FlagTag flag={flagOf(item, state.orders)} /></h3><p>{item.vendor_name || '거래처 없음'}{item.category ? ` · ${item.category}` : ''}</p></div>
           </header>
           <dl className="iv-d-stats">
-            <div><dt>병원재고</dt><dd className={lowOf(item) ? 'is-low' : ''}>{withUnit(item.hospital_stock, item.stock_unit)}</dd></div>
+            <div><dt>병원재고</dt><dd className={flagOf(item, state.orders) === 'low' ? 'is-low' : ''}>{withUnit(item.hospital_stock, item.stock_unit)}</dd></div>
             {item.prepaid ? <div><dt>선결제 잔량</dt><dd>{withUnit(item.vendor_stock, item.stock_unit)}</dd></div> : null}
             <div><dt>최소재고</dt><dd>{item.min_stock > 0 ? withUnit(item.min_stock, item.stock_unit) : '—'}</dd></div>
             <div><dt>{item.prepaid ? '개당원가' : '구매단가'}</dt><dd>{item.prepaid ? (item.unit_cost != null ? `${item.unit_cost.toLocaleString('ko-KR')}원` : '—') : fmtWon(item.price)}</dd></div>
@@ -279,7 +294,7 @@ function OrderBoard({ state, q, notify }: { state: InvState; q: string; notify: 
           {waiting(item.id).length > 0 && <div className="iv-d-sec"><h4>받기 전 주문</h4>
             <ul className="iv-d-wait">{waiting(item.id).map(o => <li key={o.id}>
               <span>{o.ordered_at.slice(5).replace('-', '/')}</span><span>{o.option_label || '—'}</span>
-              <span className="num">{fmtQty(o.qty)}{o.bonus_qty ? ` (+${fmtQty(o.bonus_qty)})` : ''} {o.stock_unit}</span><span className="num">{fmtWon(o.amount)}</span>
+              <span className="num">{fmtQty(o.qty)}{o.bonus_qty ? ` (+${fmtQty(o.bonus_qty)})` : ''} {o.stock_unit}</span><span className="num">{o.prepaid ? '선결제' : fmtWon(o.amount)}</span>
               <button type="button" className="sf-btn" onClick={() => void cancel(o.id)}>취소</button></li>)}</ul></div>}
         </> : <p className="iv-split-empty">왼쪽에서 품목을 고르세요</p>}
       </section>
@@ -290,21 +305,25 @@ function OrderBoard({ state, q, notify }: { state: InvState; q: string; notify: 
 
 function OrderDialog({ item, opt, today, onClose, onDone }: { item: InvItem; opt: InvOption; today: string; onClose: () => void; onDone: (m: string) => void }) {
   const [count, setCount] = useState('1'), [date, setDate] = useState(today), [memo, setMemo] = useState(''), [busy, setBusy] = useState(false), [error, setError] = useState('');
+  const [ship, setShip] = useState('');
   const n = Number(count) || 0;
+  const totalQty = (opt.qty + (opt.bonus_qty || 0)) * n, shipQty = Number(ship) || 0;
   const submit = async () => {
     setBusy(true); setError('');
-    try { await invSend('POST', '/orders', { item_id: item.id, option_id: opt.id, count: n, date, memo }); onDone(opt.prepaid ? '선결제를 기록했어요. 선결제 잔량이 늘었어요.' : '주문했어요. 도착하면 재고입출고 → 받기에서 입고확정해 주세요.'); }
+    try { await invSend('POST', '/orders', { item_id: item.id, option_id: opt.id, count: n, date, memo, ship_qty: opt.prepaid ? shipQty : undefined }); onDone(opt.prepaid ? (shipQty > 0 ? `선결제를 기록했어요. 반입 예정 ${fmtQty(shipQty)} ${item.stock_unit}` : '선결제를 기록했어요.') : '주문했어요.'); }
     catch (e) { setError(errText(e)); setBusy(false); }
   };
   const total = opt.amount == null ? null : opt.amount * n;
   return <Modal title={`${item.name} 주문`} onClose={onClose}>
     <dl className="sf-dl"><dt>구매조건</dt><dd>{opt.label || '-'}</dd><dt>1회 수량</dt><dd>{fmtQty(opt.qty)} {item.stock_unit}{opt.bonus_qty ? ` + 증정 ${fmtQty(opt.bonus_qty)}` : ''}</dd><dt>1회 결제금액</dt><dd>{fmtWon(opt.amount)}</dd></dl>
     <label className="sf-input"><span>주문 개수</span><input type="number" min={1} step={1} inputMode="numeric" value={count} onChange={e => setCount(e.target.value)} /></label>
+    {opt.prepaid && <label className="sf-input"><span>병원 입고 수량 (전체 {fmtQty(totalQty)} {item.stock_unit} 중)</span><input type="number" min={0} max={totalQty} inputMode="decimal" value={ship} onChange={e => setShip(e.target.value)} placeholder="0" /></label>}
+    {opt.prepaid && shipQty > 0 && <div className="iv-calc"><span>병원 반입 예정 <b>{withUnit(shipQty, item.stock_unit)}</b></span><span>업체 보관 <b className={shipQty > totalQty ? 'is-warn' : ''}>{withUnit(Math.round((totalQty - shipQty) * 1000) / 1000, item.stock_unit)}</b></span></div>}
     <label className="sf-input"><span>{opt.prepaid ? '결제일' : '주문일'}</span><input type="date" value={date} onChange={e => setDate(e.target.value)} /></label>
     <label className="sf-input"><span>메모</span><input type="text" value={memo} onChange={e => setMemo(e.target.value)} placeholder="선택" /></label>
     <div className="iv-total"><span>{opt.prepaid ? '선결제 금액' : '결제금액'}</span><b>{fmtWon(total)}</b>{total != null && total >= 10000 && <small>{readWon(total)}</small>}</div>
     {error && <p className="sf-hint is-warn">{error}</p>}
-    <div className="sf-modal-foot"><button type="button" className="sf-btn" onClick={onClose}>닫기</button><button type="button" className="sf-btn is-primary" disabled={busy || n < 1} onClick={() => void submit()}>{busy && <SavingMark />}{opt.prepaid ? '선결제 기록' : '주문'}</button></div>
+    <div className="sf-modal-foot"><button type="button" className="sf-btn" onClick={onClose}>닫기</button><button type="button" className="sf-btn is-primary" disabled={busy || n < 1 || shipQty < 0 || shipQty > totalQty} onClick={() => void submit()}>{busy && <SavingMark />}{opt.prepaid ? '선결제 기록' : '주문'}</button></div>
   </Modal>;
 }
 
@@ -440,7 +459,7 @@ function Receive({ state, notify }: { state: InvState; notify: (m: string) => vo
     <section className="iv-sec"><h3>주문한 것 받기</h3>
       {!state.orders.length ? <p className="sf-hint">받기 전 주문이 없어요.</p> : <table className="sf-table">
         <thead><tr><th>주문</th><th className="num">주문 수량</th><th className="num">실제 도착</th><th>명세서</th><th /></tr></thead>
-        <tbody>{state.orders.map(o => <tr key={o.id}><td><b>{o.item_name}</b> <small>{o.ordered_at.slice(5).replace('-', '/')} · {o.option_label} · {fmtWon(o.amount)}</small></td>
+        <tbody>{state.orders.map(o => <tr key={o.id}><td><b>{o.item_name}</b> <small>{o.ordered_at.slice(5).replace('-', '/')} · {o.option_label} · {o.prepaid ? '선결제 잔량에서' : fmtWon(o.amount)}</small></td>
           <td className="num">{fmtQty(o.qty)}{o.bonus_qty ? ` + 증정 ${fmtQty(o.bonus_qty)}` : ''} {o.stock_unit}</td>
           <td className="num"><input className="sf-num" type="number" min={0} inputMode="decimal" value={actual[o.id] ?? String(o.qty + o.bonus_qty)} onChange={e => setActual(a => ({ ...a, [o.id]: e.target.value }))} aria-label={`${o.item_name} 실제 도착 수량`} /> {o.stock_unit}</td>
           <td><label className="iv-check"><input type="checkbox" checked={!!invoice[`o${o.id}`]} onChange={e => setInvoice(v => ({ ...v, [`o${o.id}`]: e.target.checked }))} /> 받음</label></td>
@@ -448,7 +467,7 @@ function Receive({ state, notify }: { state: InvState; notify: (m: string) => vo
     </section>
     {prepaidItems.length > 0 && <section className="iv-sec"><h3>선결제 반입</h3>
       <div className="iv-row">
-        <label className="sf-input"><span>품목</span><select value={pp.item} onChange={e => setPp({ item: e.target.value, qty: '' })}><option value="">선택</option>{prepaidItems.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}</select></label>
+        <label className="sf-input"><span>품목</span><select value={pp.item} onChange={e => setPp({ item: e.target.value, qty: '' })}><option value="">선택</option>{prepaidItems.map(i => { const pend = state.orders.some(o => o.item_id === i.id && o.prepaid); return <option key={i.id} value={i.id} disabled={pend}>{i.name}{pend ? ' (반입 중)' : ''}</option>; })}</select></label>
         <label className="sf-input"><span>실제 도착 수량</span><input type="number" min={0} inputMode="decimal" value={pp.qty} onChange={e => setPp(x => ({ ...x, qty: e.target.value }))} placeholder={ppItem?.stock_unit} /></label>
         <label className="iv-check"><input type="checkbox" checked={!!invoice.pp} onChange={e => setInvoice(v => ({ ...v, pp: e.target.checked }))} /> 명세서 받음</label>
         <button type="button" className="sf-btn is-primary" disabled={!ppItem || !(ppQty > 0) || busy === 'pp'} onClick={async () => { if (await run('pp', () => invSend('POST', '/receive', { from_prepaid: true, item_id: ppItem!.id, actual_qty: ppQty, date, invoice: invoice.pp }), '입고확정했어요. 선결제 잔량을 차감했어요.')) setPp({ item: pp.item, qty: '' }); }}>{busy === 'pp' && <SavingMark />}입고확정</button>

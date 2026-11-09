@@ -122,6 +122,37 @@ test('out reduces only hospital stock, deleting it restores; daily close replace
   assert.equal(d.data.items.find(i => i.id === pack.id).used, 1);
 });
 
+test('prepaid order with a hospital delivery amount: stays in keep stock until the arrival is confirmed', async () => {
+  const e = env(); await call(e, '/state');
+  const it = item(e, '보관용 3종 시트팩');
+  const opt = e.inv.prepare(`SELECT id FROM inv_options WHERE item_id = ? AND qty = 500`).get(it.id);
+  assert.equal((await call(e, '/orders', 'POST', { item_id: it.id, option_id: opt.id, count: 1, date: '2026-11-09', ship_qty: 9999 })).status, 400);
+  const r = await call(e, '/orders', 'POST', { item_id: it.id, option_id: opt.id, count: 1, date: '2026-11-09', ship_qty: 200 });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  // 주문 직후: 업체재고에 전부, 병원재고는 그대로, 반입 예정 200 한 줄
+  const v0 = it.vendor_stock;
+  assert.deepEqual([item(e, '보관용 3종 시트팩').vendor_stock, item(e, '보관용 3종 시트팩').hospital_stock], [v0 + 500, it.hospital_stock]);
+  const pend = (await call(e, '/state')).data.orders.filter(o => o.item_id === it.id);
+  assert.deepEqual(pend.map(o => [o.prepaid, o.qty, o.option_label]), [[1, 200, '반입 예정']]);
+  // 같은 물건을 선결제 반입으로 또 받는 건 막음
+  assert.equal((await call(e, '/receive', 'POST', { from_prepaid: true, item_id: it.id, actual_qty: 10 })).status, 409);
+  // 실제 180 도착 → 업체 −180, 병원 +180, 예정은 끝, 금액 없음
+  assert.equal((await call(e, '/receive', 'POST', { order_id: pend[0].id, actual_qty: 180, date: '2026-11-10' })).status, 200);
+  assert.deepEqual([item(e, '보관용 3종 시트팩').vendor_stock, item(e, '보관용 3종 시트팩').hospital_stock], [v0 + 320, it.hospital_stock + 180]);
+  assert.equal((await call(e, '/state')).data.orders.filter(o => o.item_id === it.id).length, 0);
+  const inTx = e.inv.prepare(`SELECT * FROM inv_tx WHERE kind = 'prepaid_in' ORDER BY id DESC`).get();
+  assert.equal(inTx.amount, 0);
+  // 입고확정 기록을 지우면 되돌리고 예정도 다시 받기 전으로
+  await call(e, `/tx/${inTx.id}`, 'DELETE');
+  assert.deepEqual([item(e, '보관용 3종 시트팩').vendor_stock, item(e, '보관용 3종 시트팩').hospital_stock], [v0 + 500, it.hospital_stock]);
+  assert.equal((await call(e, '/state')).data.orders.filter(o => o.item_id === it.id).length, 1);
+  // 선결제 결제 기록을 지우면 받기 전 반입 예정도 함께 취소
+  const buy = e.inv.prepare(`SELECT id FROM inv_tx WHERE kind = 'prepaid_buy' ORDER BY id DESC`).get();
+  await call(e, `/tx/${buy.id}`, 'DELETE');
+  assert.equal((await call(e, '/state')).data.orders.filter(o => o.item_id === it.id).length, 0);
+  assert.equal(item(e, '보관용 3종 시트팩').vendor_stock, v0);
+});
+
 test('daily close is computed by the chosen date, not by when it was typed in', async () => {
   const e = env(); await call(e, '/state');
   const pack = item(e, '더마 하이드로 팩');
