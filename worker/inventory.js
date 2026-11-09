@@ -536,7 +536,8 @@ async function inventoryRoute(request, env, url, user, db, path, m) {
       const date = okDate(url.searchParams.get('date')) ? url.searchParams.get('date') : kstToday();
       const day = await one(db, 'SELECT * FROM inv_daily WHERE date = ?', date);
       const items = await all(db, `SELECT id, name, stock_unit, hospital_stock, daily_mode, vendor_id FROM inv_items WHERE active = 1 AND daily_mode IS NOT NULL ORDER BY sort, id`);
-      const used = await all(db, `SELECT item_id, qty, id FROM inv_tx WHERE deleted_at IS NULL AND daily_date = ? AND kind = 'out'`, date);
+      // 그날 일일재고가 바꾼 병원재고(소모 −, 실사가 더 많아 늘린 것 +)를 합친 순 사용량
+      const used = await all(db, `SELECT item_id, round(sum(-hospital_delta), 3) AS qty FROM inv_tx WHERE deleted_at IS NULL AND daily_date = ? AND kind IN ('out', 'adjust') GROUP BY item_id`, date);
       const since = new Date(Date.parse(date) - 14 * 864e5).toISOString().slice(0, 10);
       const recent = await all(db, `SELECT item_id, sum(qty) AS q FROM inv_tx WHERE deleted_at IS NULL AND kind = 'out' AND daily_date BETWEEN ? AND ? GROUP BY item_id`, since, date);
       const later = await stockAtDates(db, date);
@@ -559,7 +560,10 @@ async function inventoryRoute(request, env, url, user, db, path, m) {
       const stmts = [db.prepare(`INSERT INTO inv_daily (date, patients, status, extra, updated_by, updated_at) VALUES (?,?,?,?,?,?)
         ON CONFLICT(date) DO UPDATE SET patients = excluded.patients, status = excluded.status, extra = excluded.extra, updated_by = excluded.updated_by, updated_at = excluded.updated_at`)
         .bind(date, patients, body.status || null, JSON.stringify(body.extra || {}), user, Date.now())];
-      // 마감재고로 적은 품목: 마감일 기준 마감 전 재고 − 마감재고 = 그날 사용량(서버가 날짜 기준으로 계산)
+      // 마감재고로 적은 품목(2026-11-09 사용자): 실제로 센 수량이 그 날짜의 병원재고가 된다.
+      // 마감 전 재고(마감일 기준 장부) − 마감재고 = 그날 바뀐 양. 못 적은 날(휴무·연차·상담 등)의 사용량을 나누거나 따로 빼지 않고,
+      // 그 사이 입고·출고 기록은 그대로 둔 채 차이만 한 번 반영. 같은 날을 다시 저장하면 앞서 반영한 것을 되돌리고 새 값으로(중복 차감 없음).
+      // 업체재고(선결제 잔량)는 바꾸지 않는다.
       const used = { ...(body.used || {}) };
       const closing = Object.entries(body.closing || {}).filter(([, v]) => v !== '' && v != null);
       if (closing.length) {
@@ -569,28 +573,30 @@ async function inventoryRoute(request, env, url, user, db, path, m) {
           if (!isNum(left) || left < 0) return bad('마감재고는 0 이상이어야 해요.');
           const it = await loadItem(db, id);
           if (!it) continue;
-          const prev = await one(db, `SELECT coalesce(sum(-hospital_delta), 0) AS q FROM inv_tx WHERE deleted_at IS NULL AND daily_date = ? AND item_id = ? AND kind = 'out'`, date, it.id);
+          const prev = await one(db, `SELECT coalesce(sum(-hospital_delta), 0) AS q FROM inv_tx WHERE deleted_at IS NULL AND daily_date = ? AND item_id = ? AND kind IN ('out', 'adjust')`, date, it.id);
           const before = round(it.hospital_stock - (later.get(it.id) || 0) + (prev?.q || 0));
-          if (left > before) return bad(`${it.name}: 마감재고가 마감 전 재고(${before} ${it.stock_unit})보다 많아요.`);
-          used[id] = round(before - left);
+          used[id] = round(before - left); // 음수면 센 수량이 장부보다 많음 → 그만큼 늘림
         }
       }
       // 품목별 당일 사용량: 이전 마감 출고를 되돌리고 새 값으로 다시 기록(같은 batch)
       const logUsed = {};
       for (const [id, raw] of Object.entries(used)) {
         const qty = num(raw);
-        if (qty != null && (qty < 0 || !Number.isFinite(qty))) return bad('사용량은 0 이상이어야 해요.');
+        const counted = closing.some(([cid]) => Number(cid) === Number(id));
+        if (qty == null) continue; // 비운 칸 = 이번에 안 셈 → 손대지 않음
+        if (!Number.isFinite(qty) || (qty < 0 && !counted)) return bad('사용량은 0 이상이어야 해요.');
         let item = await loadItem(db, id);
         if (!item) continue;
-        const old = await all(db, `SELECT * FROM inv_tx WHERE deleted_at IS NULL AND daily_date = ? AND item_id = ? AND kind = 'out'`, date, item.id);
+        const old = await all(db, `SELECT * FROM inv_tx WHERE deleted_at IS NULL AND daily_date = ? AND item_id = ? AND kind IN ('out', 'adjust')`, date, item.id);
         let back = 0;
         for (const t of old) {
           back += -t.hospital_delta;
           stmts.push(db.prepare('UPDATE inv_tx SET deleted_at = ?, deleted_by = ? WHERE id = ?').bind(Date.now(), user, t.id));
         }
         if (back) { stmts.push(db.prepare('UPDATE inv_items SET hospital_stock = round(hospital_stock + ?, 3) WHERE id = ?').bind(round(back), item.id)); item = { ...item, hospital_stock: round(item.hospital_stock + back) }; }
-        if (qty) stmts.push(...txStatements(db, item, { date, kind: 'out', qty, hospital_delta: -qty, daily_date: date, memo: '일일 마감 소모', by: user }));
-        if (qty || back || closing.some(([cid]) => Number(cid) === item.id)) logUsed[item.name] = { used: qty ?? 0, before: round(back), unit: item.stock_unit, ...(closing.some(([cid]) => Number(cid) === item.id) ? { left: num(Object.fromEntries(closing)[id]) } : {}) };
+        if (qty > 0) stmts.push(...txStatements(db, item, { date, kind: 'out', qty, hospital_delta: -qty, daily_date: date, memo: '일일 마감 소모', by: user }));
+        if (qty < 0) stmts.push(...txStatements(db, item, { date, kind: 'adjust', qty: -qty, hospital_delta: -qty, daily_date: date, memo: '일일 마감재고 확인', by: user }));
+        if (qty || back || counted) logUsed[item.name] = { used: qty, before: round(back), unit: item.stock_unit, ...(counted ? { left: num(Object.fromEntries(closing)[id]) } : {}) };
       }
       // 저장할 때마다 기록을 하나 더 남긴다(덮어쓰지 않음): 기록 기준일·작성자·작성일시·그때 적은 숫자(수정 전후 비교)
       stmts.push(db.prepare('INSERT INTO inv_daily_log (date, data, created_by, created_at) VALUES (?,?,?,?)')

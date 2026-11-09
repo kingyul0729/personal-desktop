@@ -295,8 +295,9 @@ test('daily close is computed by the chosen date, not by when it was typed in', 
   await call(e, '/daily', 'POST', { date: '2026-11-09', closing: { [pack.id]: 5 } });
   assert.equal(item(e, '더마 하이드로 팩').hospital_stock, 305);
   assert.equal((await call(e, '/daily?date=2026-11-09')).data.items.find(i => i.id === pack.id).stock_at, 5);
-  // 그날 재고보다 많이 적으면 막음(11/10 입고분은 11/9에 없었음)
-  assert.equal((await call(e, '/daily', 'POST', { date: '2026-11-09', closing: { [pack.id]: 50 } })).status, 400);
+  // 그날 장부보다 많이 세면 센 수량이 그날 재고가 됨(11/10 입고 300은 그대로 더해짐)
+  assert.equal((await call(e, '/daily', 'POST', { date: '2026-11-09', closing: { [pack.id]: 50 } })).status, 200);
+  assert.equal(item(e, '더마 하이드로 팩').hospital_stock, 350);
 });
 
 test('inventory needs login', async () => {
@@ -457,4 +458,49 @@ test('daily record: 작성제외 on leader days off, 미작성 on work days, eve
   assert.equal(d.state, 'done');
   assert.deepEqual(d.log.map(l => l.patients), [10, 12]);
   assert.ok(d.first_at && d.first_by);
+});
+
+// 2026-11-09 사용자: 휴무·연차·상담 날은 건너뛰고 다음 근무일에 센 마감재고가 병원재고가 된다(검증 기준 0~9)
+test('daily count after skipped days: the counted number becomes hospital stock, once, without touching vendor stock', async () => {
+  const e = env(); await call(e, '/state');
+  const it = item(e, '일회용해면');
+  const pp = item(e, '보관용 3종 시트팩');
+  await call(e, '/adjust', 'POST', { item_id: it.id, hospital_stock: 100, date: '2026-11-02' });
+  await call(e, '/adjust', 'POST', { item_id: pp.id, hospital_stock: 50, vendor_stock: 200, date: '2026-11-02' });
+  for (const [d, st] of [['2026-11-03', '미기록'], ['2026-11-04', '휴무'], ['2026-11-05', '연차'], ['2026-11-06', '상담']])
+    e.inv.prepare(`INSERT INTO staff_attendance (staff_id, work_date, attendance) VALUES (1, ?, ?)`).run(d, st);
+  e.inv.prepare(`INSERT INTO staff_attendance (staff_id, work_date, attendance, start_time, end_time) VALUES (1, '2026-11-07', '정상근무', '10:00', '19:30')`).run();
+  // 0~3: 미기록·휴무·연차·상담 날 미작성 → 변동 없음
+  for (const d of ['2026-11-03', '2026-11-04', '2026-11-05', '2026-11-06']) await call(e, `/daily?date=${d}`);
+  assert.equal(item(e, '일회용해면').hospital_stock, 100);
+  // 그 사이 입고 10은 그대로(9)
+  await call(e, '/receive', 'POST', { item_id: it.id, actual_qty: 10, date: '2026-11-05' });
+  assert.equal(item(e, '일회용해면').hospital_stock, 110);
+  // 4: 다음 근무일 마감재고 80 → 병원재고 80(차이 30만 한 번)
+  const r = await call(e, '/daily', 'POST', { date: '2026-11-07', closing: { [it.id]: 80 } });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.equal(item(e, '일회용해면').hospital_stock, 80);
+  // 5: 같은 기록 재저장 → 그대로 80
+  await call(e, '/daily', 'POST', { date: '2026-11-07', closing: { [it.id]: 80 } });
+  assert.equal(item(e, '일회용해면').hospital_stock, 80);
+  // 6: 마감재고 수정 75 → 75, 장부보다 많은 120으로 수정 → 120
+  await call(e, '/daily', 'POST', { date: '2026-11-07', closing: { [it.id]: 75 } });
+  assert.equal(item(e, '일회용해면').hospital_stock, 75);
+  await call(e, '/daily', 'POST', { date: '2026-11-07', closing: { [it.id]: 120 } });
+  assert.equal(item(e, '일회용해면').hospital_stock, 120);
+  // 비운 칸(이번에 안 셈)은 손대지 않음
+  await call(e, '/daily', 'POST', { date: '2026-11-07', patients: 9, used: {}, closing: {} });
+  assert.equal(item(e, '일회용해면').hospital_stock, 120);
+  // 9: 입고 기록은 한 번만, 일일재고 기록은 그날 한 줄만
+  assert.equal(e.inv.prepare(`SELECT count(*) AS n FROM inv_tx WHERE item_id = ? AND kind = 'in' AND deleted_at IS NULL`).get(it.id).n, 1);
+  assert.equal(e.inv.prepare(`SELECT count(*) AS n FROM inv_tx WHERE item_id = ? AND daily_date = '2026-11-07' AND deleted_at IS NULL`).get(it.id).n, 1);
+  // 8: 일일재고 입력은 업체재고(선결제 잔량)를 바꾸지 않음
+  await call(e, '/daily', 'POST', { date: '2026-11-07', closing: { [pp.id]: 30 } });
+  assert.deepEqual([item(e, '보관용 3종 시트팩').hospital_stock, item(e, '보관용 3종 시트팩').vendor_stock], [30, 200]);
+  // 7: 선결제 반입 → 업체재고 −, 병원재고 +
+  await call(e, '/receive', 'POST', { item_id: pp.id, from_prepaid: true, actual_qty: 100, date: '2026-11-08' });
+  assert.deepEqual([item(e, '보관용 3종 시트팩').hospital_stock, item(e, '보관용 3종 시트팩').vendor_stock], [130, 100]);
+  // 날짜 기준: 11/7 마감을 다시 저장해도 11/8 반입은 그대로
+  await call(e, '/daily', 'POST', { date: '2026-11-07', closing: { [pp.id]: 30 } });
+  assert.deepEqual([item(e, '보관용 3종 시트팩').hospital_stock, item(e, '보관용 3종 시트팩').vendor_stock], [130, 100]);
 });

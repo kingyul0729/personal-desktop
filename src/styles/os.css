@@ -2105,3 +2105,8 @@ input[type="date"]::-webkit-date-and-time-value, input[type="month"]::-webkit-da
 .iv-dstate { font-size: 12px; padding: 2px 10px; border-radius: 999px; border: 1px solid var(--line, #c9d6e3); color: #44617c; background: #ecf1f6; white-space: nowrap; }
 .iv-dstate.is-missing { color: #c2504a; background: #fbeceb; border-color: #f0cfcc; }
 .iv-dstate.is-skip { color: #7D838B; background: transparent; }
+/* 일일재고 사용량 품목의 입력 방식(사용량 | 마감재고) — 작은 알약 두 개 */
+.iv-dmode { display: flex; gap: 4px; margin: -2px 0 2px; }
+.iv-dmode button { white-space: nowrap; }
+.iv-dmode button { font: inherit; font-size: 12px; height: 26px; padding: 0 10px; border-radius: 999px; border: 1px solid transparent; background: transparent; color: #7D838B; cursor: pointer; }
+.iv-dmode button.is-on { background: #ecf1f6; border-color: #c9d6e3; color: #44617c; font-weight: 600; }
