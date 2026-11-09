@@ -32,6 +32,13 @@ const INV_STAFF_SCHEMA = [
  "CREATE INDEX IF NOT EXISTS idx_consult_team_managed_date ON consult_team_managed(work_date)"
 ];
 
+// 거래명세서 사진(2026-11-09): 사진 한 장을 여러 입고 기록에 걸 수 있다(같은 날 한 종이에 여러 건).
+const INV_INVOICE_SCHEMA = [
+  `CREATE TABLE IF NOT EXISTS inv_invoices (id INTEGER PRIMARY KEY, object_key TEXT NOT NULL, mime TEXT, size INTEGER, created_by TEXT, created_at INTEGER)`,
+  `CREATE TABLE IF NOT EXISTS inv_invoice_links (invoice_id INTEGER NOT NULL, tx_id INTEGER NOT NULL, PRIMARY KEY (invoice_id, tx_id))`,
+  `CREATE INDEX IF NOT EXISTS inv_invoice_links_tx ON inv_invoice_links(tx_id)`,
+];
+
 // 재고 표(2026-11-08 새로 설계). 기록(inv_tx)마다 병원재고·업체재고 증감을 저장해 삭제 때 정확히 되돌린다.
 const INV_STOCK_SCHEMA = [
   `CREATE TABLE IF NOT EXISTS inv_vendors (id INTEGER PRIMARY KEY, name TEXT NOT NULL, company TEXT, category TEXT, manager TEXT, payment_method TEXT, contact TEXT, bank TEXT, account TEXT, holder TEXT, memo TEXT, sort INTEGER DEFAULT 0, active INTEGER NOT NULL DEFAULT 1)`,
@@ -45,6 +52,7 @@ const INV_STOCK_SCHEMA = [
   `CREATE INDEX IF NOT EXISTS inv_tx_daily ON inv_tx(daily_date, item_id)`,
   `CREATE TABLE IF NOT EXISTS inv_daily (date TEXT PRIMARY KEY, patients INTEGER, status TEXT, extra TEXT, updated_by TEXT, updated_at INTEGER)`,
   `CREATE TABLE IF NOT EXISTS inv_meta (key TEXT PRIMARY KEY, value TEXT)`,
+  ...INV_INVOICE_SCHEMA,
 ];
 
 
@@ -76,7 +84,12 @@ export async function ensureInvSchema(db) {
   if (!ok) await db.exec(schemaSql());
   else {
     // 이미 만든 DB에 기준 자료 고침을 한 번씩 적용
-    const fixes = (await db.prepare(`SELECT value FROM inv_meta WHERE key = 'fixes'`).first())?.value || '';
+    let fixes = (await db.prepare(`SELECT value FROM inv_meta WHERE key = 'fixes'`).first())?.value || '';
+    if (!fixes.includes('invoice1')) {
+      // 이미 쓰던 DB에 명세서 사진 표만 더함(기존 자료는 그대로)
+      await db.batch([...INV_INVOICE_SCHEMA.map(q => db.prepare(q)), db.prepare(`INSERT OR REPLACE INTO inv_meta (key, value) VALUES ('fixes', ?)`).bind(`${fixes} invoice1`.trim())]);
+      fixes = `${fixes} invoice1`.trim();
+    }
     if (!fixes.includes('opt300')) {
       await db.batch([
         db.prepare(`UPDATE inv_options SET amount = 450000 WHERE item_id = 1010 AND qty = 300 AND prepaid = 1 AND amount = 360000`),

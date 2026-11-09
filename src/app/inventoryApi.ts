@@ -7,8 +7,8 @@ export type InvItem = {
   price: number | null; min_stock: number; hospital_stock: number; vendor_stock: number; daily_mode: 'usage' | 'count' | null; prepaid: number; is_pack: number; memo: string | null; options: InvOption[]; unit_cost?: number | null;
 };
 export type InvVendor = { id: number; name: string; company: string | null; category: string | null; manager: string | null; payment_method: string | null; contact: string | null; bank: string | null; account: string | null; holder: string | null; memo: string | null };
-export type InvOrder = { id: number; item_id: number; item_name: string; stock_unit: string; option_label: string | null; ordered_at: string; qty: number; bonus_qty: number; amount: number | null; prepaid: number; status: string; memo: string | null };
-export type InvTx = { id: number; date: string; kind: 'in' | 'out' | 'prepaid_buy' | 'prepaid_in' | 'adjust'; item_id: number; item_name: string; stock_unit: string; vendor_name: string | null; qty: number; bonus_qty: number; amount: number | null; hospital_delta: number; vendor_delta: number; hospital_after: number | null; vendor_after: number | null; invoice: number; memo: string | null; daily_date: string | null; source?: string | null };
+export type InvOrder = { id: number; item_id: number; item_name: string; stock_unit: string; option_label: string | null; ordered_at: string; qty: number; bonus_qty: number; amount: number | null; prepaid: number; status: string; memo: string | null; received_qty?: number };
+export type InvTx = { id: number; date: string; kind: 'in' | 'out' | 'prepaid_buy' | 'prepaid_in' | 'adjust'; item_id: number; item_name: string; stock_unit: string; vendor_name: string | null; qty: number; bonus_qty: number; amount: number | null; hospital_delta: number; vendor_delta: number; hospital_after: number | null; vendor_after: number | null; invoice: number; memo: string | null; daily_date: string | null; source?: string | null; invoice_ids?: string | null };
 export type InvState = { today: string; imported: string | null; vendors: InvVendor[]; items: InvItem[]; orders: InvOrder[] };
 
 export class InvError extends Error { detail = ''; unavailable = false; }
@@ -23,6 +23,13 @@ export const invGet = async (path: string, params: Record<string, string | numbe
 };
 export const invSend = async (method: 'POST' | 'DELETE' | 'PATCH', path: string, body?: unknown) =>
   parse(await fetch(`/api/inventory${path}`, { method, headers: { 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) }));
+
+// 거래명세서 사진 올리기(여러 기록에 한 장)
+export const invUploadInvoice = async (file: File, txIds: number[]) => {
+  const fd = new FormData(); fd.append('file', file); fd.append('tx_ids', txIds.join(','));
+  return parse(await fetch('/api/inventory/invoices', { method: 'POST', body: fd }));
+};
+export const invoiceSrc = (id: number | string) => `/api/inventory/invoices/${id}/file`;
 
 // 여러 화면이 같은 재고 상태를 보도록 저장 후 알림
 const listeners = new Set<() => void>();

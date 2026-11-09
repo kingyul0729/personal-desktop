@@ -86,12 +86,64 @@ async function dailyCheck(db, date) {
   return { ok: works, label };
 }
 
+// ── 거래명세서 사진(2026-11-09 사용자 지정) ──
+// 입고·선결제·반입 기록에 사진(또는 PDF)을 건다. 한 장을 같은 날 여러 기록에 걸 수 있고, 한 기록에 여러 장도 된다.
+// 파일은 가격표 이미지와 같은 저장소(BUCKET: R2 또는 D1 조각)에 'inventory-invoices/…'로, 로그인한 사람만 받는다.
+const INVOICE_KINDS = ['in', 'prepaid_buy', 'prepaid_in'];
+function fileType(bytes) {
+  const b = new Uint8Array(bytes.slice(0, 12));
+  if (b[0] === 0xff && b[1] === 0xd8) return 'image/jpeg';
+  if (b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) return 'image/png';
+  if (b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 && b[8] === 0x57 && b[9] === 0x45) return 'image/webp';
+  if (b[4] === 0x66 && b[5] === 0x74 && b[6] === 0x79 && b[7] === 0x70) return 'image/heic';
+  if (b[0] === 0x25 && b[1] === 0x50 && b[2] === 0x44 && b[3] === 0x46) return 'application/pdf';
+  return null;
+}
+async function uploadInvoice(request, env, db, user) {
+  if (!env.BUCKET) return bad('파일 저장소가 연결되지 않았어요.', 503);
+  const form = await request.formData().catch(() => null);
+  const file = form?.get('file');
+  const ids = String(form?.get('tx_ids') || '').split(',').map(Number).filter(n => n > 0);
+  if (!(file && typeof file.arrayBuffer === 'function') || !file.size) return bad('사진을 골라 주세요.');
+  if (file.size > 15 * 1024 * 1024) return bad('15MB 이하 파일만 올릴 수 있어요.');
+  if (!ids.length) return bad('명세서를 걸 기록을 골라 주세요.');
+  const txs = await all(db, `SELECT id, kind FROM inv_tx WHERE deleted_at IS NULL AND id IN (${ids.map(() => '?').join(',')})`, ...ids);
+  if (txs.length !== ids.length || txs.some(t => !INVOICE_KINDS.includes(t.kind))) return bad('입고·선결제·반입 기록에만 명세서를 걸 수 있어요.');
+  const bytes = await file.arrayBuffer();
+  const mime = fileType(bytes);
+  if (!mime) return bad('사진(JPG·PNG·HEIC) 또는 PDF만 올릴 수 있어요.');
+  const key = `inventory-invoices/${crypto.randomUUID()}`;
+  await env.BUCKET.put(key, bytes, { httpMetadata: { contentType: mime } });
+  try {
+    await db.prepare('INSERT INTO inv_invoices (object_key, mime, size, created_by, created_at) VALUES (?, ?, ?, ?, ?)').bind(key, mime, bytes.byteLength, user, Date.now()).run();
+    const inv = await one(db, 'SELECT id FROM inv_invoices WHERE object_key = ?', key);
+    await db.batch(ids.map(id => db.prepare('INSERT OR IGNORE INTO inv_invoice_links (invoice_id, tx_id) VALUES (?, ?)').bind(inv.id, id)));
+    return json({ ok: true, id: inv.id });
+  } catch (e) { await env.BUCKET.delete(key).catch(() => {}); throw e; }
+}
+async function invoiceFile(env, db, id) {
+  const row = await one(db, 'SELECT object_key, mime FROM inv_invoices WHERE id = ?', id);
+  const obj = row && env.BUCKET && await env.BUCKET.get(row.object_key);
+  if (!obj) return bad('파일을 찾을 수 없어요.', 404);
+  return new Response(obj.body, { headers: { 'content-type': row.mime || 'application/octet-stream', 'cache-control': 'private, max-age=86400' } });
+}
+// 사진이 더 이상 어느 기록에도 걸려 있지 않으면 파일까지 지운다
+async function dropOrphanInvoices(env, db) {
+  const orphans = await all(db, 'SELECT id, object_key FROM inv_invoices WHERE id NOT IN (SELECT invoice_id FROM inv_invoice_links l JOIN inv_tx t ON t.id = l.tx_id WHERE t.deleted_at IS NULL)');
+  for (const o of orphans) {
+    await db.batch([db.prepare('DELETE FROM inv_invoice_links WHERE invoice_id = ?').bind(o.id), db.prepare('DELETE FROM inv_invoices WHERE id = ?').bind(o.id)]);
+    if (env.BUCKET) await env.BUCKET.delete(o.object_key).catch(() => {});
+  }
+}
+
 export async function handleInventory(request, env, url, user) {
   const db = env.INV_DB;
   if (!db) return json({ error: '재고 데이터베이스가 연결되지 않았어요.', unavailable: true }, 503);
   await ensureInvSchema(db);
   const path = url.pathname.slice('/api/inventory'.length) || '/';
   const m = request.method;
+  if (m === 'POST' && path === '/invoices') return uploadInvoice(request, env, db, user);
+  if (m === 'GET' && /^\/invoices\/\d+\/file$/.test(path)) return invoiceFile(env, db, Number(path.split('/')[2]));
   const body = m === 'GET' ? {} : await request.json().catch(() => ({}));
   try {
     // ── 예전 자료 넣기: 사진에서 옮긴 직원·재고 숫자 파일(old-app-data.json)을 처음 한 번만 넣는다 ──
@@ -154,7 +206,7 @@ export async function handleInventory(request, env, url, user) {
       const [vendors, items, orders] = await Promise.all([
         all(db, 'SELECT * FROM inv_vendors WHERE active = 1 ORDER BY sort, id'),
         itemsWithOptions(db),
-        all(db, `SELECT o.*, i.name AS item_name, i.stock_unit FROM inv_orders o JOIN inv_items i ON i.id = o.item_id WHERE o.status = 'ordered' ORDER BY o.ordered_at, o.id`),
+        all(db, `SELECT o.*, i.name AS item_name, i.stock_unit, (SELECT coalesce(sum(t.qty + t.bonus_qty), 0) FROM inv_tx t WHERE t.order_id = o.id AND t.deleted_at IS NULL AND t.kind = 'in') AS received_qty FROM inv_orders o JOIN inv_items i ON i.id = o.item_id WHERE o.status = 'ordered' ORDER BY o.ordered_at, o.id`),
       ]);
       return json({ today: kstToday(), imported: imported?.value || null, vendors, items, orders });
     }
@@ -242,7 +294,11 @@ export async function handleInventory(request, env, url, user) {
       return json({ ok: true });
     }
     if (m === 'POST' && /^\/orders\/\d+\/cancel$/.test(path)) {
-      const r = await db.prepare(`UPDATE inv_orders SET status = 'cancelled' WHERE id = ? AND status = 'ordered'`).bind(Number(path.split('/')[2])).run();
+      // 일부라도 받은 주문은 '취소' 대신 받은 만큼으로 마감(나머지가 안 오는 경우)
+      const oid = Number(path.split('/')[2]);
+      const got = await one(db, `SELECT count(*) AS n FROM inv_tx WHERE deleted_at IS NULL AND order_id = ? AND kind IN ('in','prepaid_in')`, oid);
+      const r = await db.prepare(`UPDATE inv_orders SET status = ?, received_at = CASE WHEN ? = 'received' THEN ? ELSE received_at END WHERE id = ? AND status = 'ordered'`)
+        .bind(got?.n ? 'received' : 'cancelled', got?.n ? 'received' : 'cancelled', kstToday(), oid).run();
       if (!r.meta?.changes) return bad('취소할 주문을 찾을 수 없어요.', 404);
       return json({ ok: true });
     }
@@ -276,11 +332,19 @@ export async function handleInventory(request, env, url, user) {
           ]);
           return json({ ok: true });
         }
+        // 나눠서 도착(2026-11-09 사용자 지정): 도착할 때마다 그날 날짜로 따로 기록. 결제금액은 처음 받은 기록에 한 번만,
+        // 다음 도착분은 0원. 주문 수량을 다 받을 때까지 주문은 '받기 전'에 남는다(남은 것이 안 오면 주문 줄에서 '마감').
+        const got = await one(db, `SELECT coalesce(sum(qty + bonus_qty), 0) AS q, count(*) AS n FROM inv_tx WHERE deleted_at IS NULL AND order_id = ? AND kind = 'in'`, order.id);
+        const total = round(order.qty + (order.bonus_qty || 0)), left = round(total - (got?.q || 0));
+        const first = !(got?.n > 0);
+        const done = actual >= left;
+        const nth = (got?.n || 0) + 1;
         await db.batch([
-          db.prepare(`UPDATE inv_orders SET status = 'received', received_at = ? WHERE id = ? AND status = 'ordered'`).bind(date, order.id),
-          ...txStatements(db, item, { date, kind: 'in', qty: actual, bonus_qty: order.bonus_qty, amount: order.amount, hospital_delta: actual, order_id: order.id, memo: body.memo || order.option_label, by: user, invoice: body.invoice }),
+          ...(done ? [db.prepare(`UPDATE inv_orders SET status = 'received', received_at = ? WHERE id = ? AND status = 'ordered'`).bind(date, order.id)] : []),
+          ...txStatements(db, item, { date, kind: 'in', qty: actual, bonus_qty: 0, amount: first ? order.amount : 0, hospital_delta: actual, order_id: order.id,
+            memo: body.memo || (first && done ? order.option_label : `${order.option_label || '주문'} · 나눠 받음 ${nth}차`), by: user, invoice: body.invoice }),
         ]);
-        return json({ ok: true });
+        return json({ ok: true, left: done ? 0 : round(left - actual) });
       }
       // 주문 없이 바로 받은 일반 입고: 금액을 안 넣으면 등록된 구매단가 × 수량(주문단위는 구성수량으로 환산). 단가 미확인이면 금액 없음.
       const item = await loadItem(db, body.item_id);
@@ -326,13 +390,34 @@ export async function handleInventory(request, env, url, user) {
         db.prepare(`UPDATE inv_items SET hospital_stock = round(hospital_stock - ?, 3), vendor_stock = round(vendor_stock - ?, 3), updated_at = ? WHERE id = ?`).bind(tx.hospital_delta, tx.vendor_delta, Date.now(), tx.item_id),
         db.prepare('UPDATE inv_tx SET deleted_at = ?, deleted_by = ? WHERE id = ? AND deleted_at IS NULL').bind(Date.now(), user, tx.id),
       ];
+      if (tx.order_id && tx.kind === 'in' && tx.amount) {
+        // 나눠 받은 주문: 결제금액이 걸린 첫 기록은 뒤 도착분을 먼저 지워야 지울 수 있다(금액이 사라지지 않게)
+        const later = await one(db, `SELECT count(*) AS n FROM inv_tx WHERE deleted_at IS NULL AND order_id = ? AND kind = 'in' AND id <> ?`, tx.order_id, tx.id);
+        if (later?.n) return bad('같은 주문의 나중 도착 기록부터 지워 주세요.', 409);
+      }
       if (tx.order_id && (tx.kind === 'in' || tx.kind === 'prepaid_in')) stmts.push(db.prepare(`UPDATE inv_orders SET status = 'ordered', received_at = NULL WHERE id = ?`).bind(tx.order_id));
       if (tx.order_id && tx.kind === 'prepaid_buy') {
         stmts.push(db.prepare(`UPDATE inv_orders SET status = 'cancelled' WHERE id = ?`).bind(tx.order_id));
         stmts.push(db.prepare(`UPDATE inv_orders SET status = 'cancelled' WHERE memo = ? AND status = 'ordered'`).bind(`from:${tx.order_id}`)); // 받기 전 반입 예정도 함께 취소
       }
       await db.batch(stmts);
+      await dropOrphanInvoices(env, db);
       return json({ ok: true, item: await loadItem(db, tx.item_id) });
+    }
+    if (m === 'DELETE' && /^\/invoices\/\d+$/.test(path)) {
+      // 명세서 사진 지우기(걸린 기록 모두에서 빠짐)
+      const id = Number(path.split('/')[2]);
+      await db.prepare('DELETE FROM inv_invoice_links WHERE invoice_id = ?').bind(id).run();
+      await dropOrphanInvoices(env, db);
+      return json({ ok: true });
+    }
+    if (m === 'POST' && /^\/invoices\/\d+\/links$/.test(path)) {
+      // 이미 올린 사진을 같은 날 다른 기록에도 걸기
+      const id = Number(path.split('/')[2]);
+      const ids = (Array.isArray(body.tx_ids) ? body.tx_ids : []).map(Number).filter(n => n > 0);
+      if (!ids.length) return bad('기록을 골라 주세요.');
+      await db.batch(ids.map(t => db.prepare(`INSERT OR IGNORE INTO inv_invoice_links (invoice_id, tx_id) SELECT ?, id FROM inv_tx WHERE id = ? AND deleted_at IS NULL AND kind IN ('in','prepaid_buy','prepaid_in')`).bind(id, t)));
+      return json({ ok: true });
     }
     if (m === 'PATCH' && path.startsWith('/tx/')) {
       // 거래명세서 등록 여부·메모만 고친다(수량을 고치려면 지우고 다시 기록)
@@ -344,7 +429,7 @@ export async function handleInventory(request, env, url, user) {
     if (m === 'GET' && path === '/tx') {
       const from = url.searchParams.get('from') || '0000-01-01', to = url.searchParams.get('to') || '9999-12-31';
       const kind = url.searchParams.get('kind'), itemId = url.searchParams.get('item_id');
-      const rows = await all(db, `SELECT t.*, i.name AS item_name, i.stock_unit, v.name AS vendor_name FROM inv_tx t JOIN inv_items i ON i.id = t.item_id LEFT JOIN inv_vendors v ON v.id = i.vendor_id
+      const rows = await all(db, `SELECT t.*, i.name AS item_name, i.stock_unit, v.name AS vendor_name, (SELECT group_concat(l.invoice_id) FROM inv_invoice_links l WHERE l.tx_id = t.id) AS invoice_ids FROM inv_tx t JOIN inv_items i ON i.id = t.item_id LEFT JOIN inv_vendors v ON v.id = i.vendor_id
         WHERE t.deleted_at IS NULL AND t.date BETWEEN ? AND ? ${kind ? `AND t.kind IN (${kind.split(',').map(() => '?').join(',')})` : ''} ${itemId ? 'AND t.item_id = ?' : ''}
         ORDER BY t.date DESC, t.id DESC LIMIT 500`, from, to, ...(kind ? kind.split(',') : []), ...(itemId ? [Number(itemId)] : []));
       return json({ rows });
@@ -428,7 +513,7 @@ async function monthReport(db, month, brief = false) {
       coalesce(sum(CASE WHEN kind = 'in' THEN amount END), 0) AS general,
       coalesce(sum(CASE WHEN kind = 'prepaid_buy' THEN amount END), 0) AS prepaid,
       sum(CASE WHEN kind IN ('in','prepaid_in') THEN 1 ELSE 0 END) AS in_count,
-      sum(CASE WHEN kind IN ('in','prepaid_in','prepaid_buy') AND invoice = 0 THEN 1 ELSE 0 END) AS no_invoice,
+      sum(CASE WHEN kind IN ('in','prepaid_buy') AND amount > 0 AND invoice = 0 AND NOT EXISTS (SELECT 1 FROM inv_invoice_links l WHERE l.tx_id = inv_tx.id) THEN 1 ELSE 0 END) AS no_invoice,
       sum(CASE WHEN kind = 'in' AND amount IS NULL THEN 1 ELSE 0 END) AS no_amount
     FROM inv_tx WHERE deleted_at IS NULL AND date BETWEEN ? AND ?`, from, to);
   const days = await one(db, `SELECT coalesce(sum(patients), 0) AS patients, sum(CASE WHEN patients > 0 THEN 1 ELSE 0 END) AS open_days FROM inv_daily WHERE date BETWEEN ? AND ?`, from, to);

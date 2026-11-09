@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { LoadingBox, SavingMark } from './Feedback';
 import { readWon } from '../koreanAmount';
 import {
-  type InvItem, type InvOption, type InvOrder, type InvState, type InvTx, InvError, KIND_LABEL, announceInventory, fmtQty, fmtWon, invGet, invSend, shiftMonth, todayLocal, unitHint, useInventory,
+  type InvItem, type InvOption, type InvOrder, type InvState, type InvTx, InvError, KIND_LABEL, announceInventory, fmtQty, fmtWon, invGet, invSend, invUploadInvoice, invoiceSrc, shiftMonth, todayLocal, unitHint, useInventory,
 } from '../inventoryApi';
 
 // 재고 화면 4개(재고체크·재고주문·재고입출고·월말/연말보고서). 숫자는 예전 앱에서, 화면은 새로 만듦.
@@ -260,7 +260,7 @@ function OrderBoard({ state, q, notify }: { state: InvState; q: string; notify: 
   const sorted = [...list].sort((a, b) => rank(b) - rank(a));
   const item = sorted.find(it => it.id === pickId) ?? sorted[0];
   const waiting = (id: number) => state.orders.filter(o => o.item_id === id);
-  const cancel = async (id: number) => { try { await invSend('POST', `/orders/${id}/cancel`); notify('주문을 취소했어요.'); announceInventory(); } catch (e) { notify(errText(e)); } };
+  const cancel = async (id: number) => { try { await invSend('POST', `/orders/${id}/cancel`); notify('주문을 정리했어요.'); announceInventory(); } catch (e) { notify(errText(e)); } };
   return <>
     <div className="iv-split">
       <nav className="iv-split-list" aria-label="품목">
@@ -295,7 +295,7 @@ function OrderBoard({ state, q, notify }: { state: InvState; q: string; notify: 
             <ul className="iv-d-wait">{waiting(item.id).map(o => <li key={o.id}>
               <span>{o.ordered_at.slice(5).replace('-', '/')}</span><span>{o.option_label || '—'}</span>
               <span className="num">{fmtQty(o.qty)}{o.bonus_qty ? ` (+${fmtQty(o.bonus_qty)})` : ''} {o.stock_unit}</span><span className="num">{o.prepaid ? '선결제' : fmtWon(o.amount)}</span>
-              <button type="button" className="sf-btn" onClick={() => void cancel(o.id)}>취소</button></li>)}</ul></div>}
+              <button type="button" className="sf-btn" onClick={() => void cancel(o.id)}>{(o.received_qty || 0) > 0 ? '마감' : '취소'}</button></li>)}</ul></div>}
         </> : <p className="iv-split-empty">왼쪽에서 품목을 고르세요</p>}
       </section>
     </div>
@@ -460,10 +460,10 @@ function Receive({ state, notify }: { state: InvState; notify: (m: string) => vo
       {!state.orders.length ? <p className="sf-hint">받기 전 주문이 없어요.</p> : <table className="sf-table">
         <thead><tr><th>주문</th><th className="num">주문 수량</th><th className="num">실제 도착</th><th>명세서</th><th /></tr></thead>
         <tbody>{state.orders.map(o => <tr key={o.id}><td><b>{o.item_name}</b> <small>{o.ordered_at.slice(5).replace('-', '/')} · {o.option_label} · {o.prepaid ? '선결제 잔량에서' : fmtWon(o.amount)}</small></td>
-          <td className="num">{fmtQty(o.qty)}{o.bonus_qty ? ` + 증정 ${fmtQty(o.bonus_qty)}` : ''} {o.stock_unit}</td>
-          <td className="num"><input className="sf-num" type="number" min={0} inputMode="decimal" value={actual[o.id] ?? String(o.qty + o.bonus_qty)} onChange={e => setActual(a => ({ ...a, [o.id]: e.target.value }))} aria-label={`${o.item_name} 실제 도착 수량`} /> {o.stock_unit}</td>
+          <td className="num">{fmtQty(o.qty)}{o.bonus_qty ? ` + 증정 ${fmtQty(o.bonus_qty)}` : ''} {o.stock_unit}{(o.received_qty || 0) > 0 && <small className="iv-got">받음 {fmtQty(o.received_qty || 0)} · 남음 {fmtQty(o.qty + o.bonus_qty - (o.received_qty || 0))}</small>}</td>
+          <td className="num"><input className="sf-num" type="number" min={0} inputMode="decimal" value={actual[o.id] ?? String(Math.round((o.qty + o.bonus_qty - (o.received_qty || 0)) * 1000) / 1000)} onChange={e => setActual(a => ({ ...a, [o.id]: e.target.value }))} aria-label={`${o.item_name} 실제 도착 수량`} /> {o.stock_unit}</td>
           <td><label className="iv-check"><input type="checkbox" checked={!!invoice[`o${o.id}`]} onChange={e => setInvoice(v => ({ ...v, [`o${o.id}`]: e.target.checked }))} /> 받음</label></td>
-          <td className="num"><button type="button" className="sf-btn is-primary" disabled={busy === `o${o.id}`} onClick={() => void run(`o${o.id}`, () => invSend('POST', '/receive', { order_id: o.id, actual_qty: Number(actual[o.id] ?? o.qty + o.bonus_qty), date, invoice: invoice[`o${o.id}`] }), '입고확정했어요. 병원재고에 반영됐어요.')}>{busy === `o${o.id}` && <SavingMark />}입고확정</button></td></tr>)}</tbody></table>}
+          <td className="num"><button type="button" className="sf-btn is-primary" disabled={busy === `o${o.id}`} onClick={() => void run(`o${o.id}`, () => invSend('POST', '/receive', { order_id: o.id, actual_qty: Number(actual[o.id] ?? o.qty + o.bonus_qty - (o.received_qty || 0)), date, invoice: invoice[`o${o.id}`] }), '입고확정했어요.')}>{busy === `o${o.id}` && <SavingMark />}입고확정</button></td></tr>)}</tbody></table>}
     </section>
     {prepaidItems.length > 0 && <section className="iv-sec"><h3>선결제 반입</h3>
       <div className="iv-row">
@@ -509,11 +509,54 @@ function OutForm({ state, notify }: { state: InvState; notify: (m: string) => vo
   </section>;
 }
 
+// 거래명세서(2026-11-09): 입고·선결제·반입 줄마다. 사진 → '사진 N', 종이만 받음 → '받음', 돈이 나간 기록인데 없음 → '미등록', 0원 기록 → '올리기'(선택)
+const INVOICE_KINDS = ['in', 'prepaid_buy', 'prepaid_in'];
+const photosOf = (t: InvTx) => (t.invoice_ids ? String(t.invoice_ids).split(',').filter(Boolean) : []);
+type InvState2 = 'photo' | 'paper' | 'missing' | 'optional';
+const invoiceState = (t: InvTx): InvState2 => (photosOf(t).length ? 'photo' : t.invoice ? 'paper' : (t.amount || 0) > 0 ? 'missing' : 'optional');
+const INVOICE_LABEL: Record<InvState2, (t: InvTx) => string> = { photo: t => `사진 ${photosOf(t).length}`, paper: () => '받음', missing: () => '미등록', optional: () => '올리기' };
+
+function InvThumb({ id }: { id: string }) {
+  const [pdf, setPdf] = useState(false); // 사진이 아니면(PDF) 글자로
+  return pdf ? <span className="iv-inv-pdf">PDF</span> : <img src={invoiceSrc(id)} alt="거래명세서" onError={() => setPdf(true)} />;
+}
+
+function InvoiceDialog({ tx, rows, notify, onClose, onChange }: { tx: InvTx; rows: InvTx[]; notify: (m: string) => void; onClose: () => void; onChange: () => void }) {
+  // 같은 날 다른 입고 기록도 같은 종이면 한 번에 걸 수 있게
+  const sameDay = rows.filter(r => r.date === tx.date && INVOICE_KINDS.includes(r.kind));
+  const [pick, setPick] = useState<number[]>([tx.id]);
+  const [busy, setBusy] = useState(false), [big, setBig] = useState<string | null>(null), [drop, setDrop] = useState<string | null>(null);
+  const photos = photosOf(tx);
+  const upload = async (file: File | undefined) => {
+    if (!file) return; setBusy(true);
+    try { await invUploadInvoice(file, pick); notify(pick.length > 1 ? `명세서를 ${pick.length}건에 올렸어요.` : '명세서를 올렸어요.'); onChange(); announceInventory(); }
+    catch (e) { notify(errText(e)); } finally { setBusy(false); }
+  };
+  const paper = async (v: boolean) => { try { await invSend('PATCH', `/tx/${tx.id}`, { invoice: v }); onChange(); announceInventory(); } catch (e) { notify(errText(e)); } };
+  const remove = async (id: string) => { try { await invSend('DELETE', `/invoices/${id}`); setDrop(null); notify('사진을 지웠어요.'); onChange(); announceInventory(); } catch (e) { notify(errText(e)); } };
+  return <Modal title={`${Number(tx.date.slice(5, 7))}/${Number(tx.date.slice(8))} ${tx.item_name} 명세서`} onClose={onClose}>
+    {photos.length > 0 && <ul className="iv-inv-photos">{photos.map(id => <li key={id}>
+      <button type="button" className="iv-inv-thumb" onClick={() => setBig(id)} aria-label="크게 보기"><InvThumb id={id} /></button>
+      {drop === id ? <span className="iv-inv-ask">지울까요? <button type="button" className="sf-btn is-danger" onClick={() => void remove(id)}>삭제</button><button type="button" className="sf-btn" onClick={() => setDrop(null)}>아니요</button></span>
+        : <button type="button" className="sf-btn" onClick={() => setDrop(id)}>삭제</button>}</li>)}</ul>}
+    {sameDay.length > 1 && <fieldset className="iv-inv-rows"><legend>같은 명세서에 함께 걸 기록</legend>
+      {sameDay.map(r => <label key={r.id} className="iv-check"><input type="checkbox" checked={pick.includes(r.id)} disabled={r.id === tx.id} onChange={e => setPick(p => e.target.checked ? [...p, r.id] : p.filter(x => x !== r.id))} />
+        {r.item_name} · {KIND_LABEL[r.kind]} {fmtQty(r.qty)} {r.stock_unit}{(r.amount || 0) > 0 ? ` · ${fmtWon(r.amount)}` : ''}</label>)}</fieldset>}
+    <div className="sf-modal-foot">
+      <label className="iv-check"><input type="checkbox" checked={!!tx.invoice} onChange={e => void paper(e.target.checked)} /> 종이 받음</label>
+      <label className={`sf-btn is-primary iv-inv-up${busy ? ' is-busy' : ''}`}>{busy && <SavingMark />}사진 올리기
+        <input type="file" accept="image/*,application/pdf" disabled={busy} onChange={e => { void upload(e.target.files?.[0]); e.currentTarget.value = ''; }} /></label>
+    </div>
+    {big && <div className="iv-inv-big" role="dialog" aria-label="명세서 크게 보기" onClick={() => setBig(null)}><InvThumb id={big} /><a href={invoiceSrc(big)} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}>원본 열기</a></div>}
+  </Modal>;
+}
+
 function TxLog({ notify }: { notify: (m: string) => void }) {
   const [month, setMonth] = useState(todayLocal().slice(0, 7));
   const [kind, setKind] = useState<'all' | 'in' | 'out'>('all');
   const [rows, setRows] = useState<InvTx[] | null>(null);
   const [ask, setAsk] = useState<InvTx | null>(null);
+  const [inv, setInv] = useState<number | null>(null);
   const load = useCallback(async () => {
     const k = kind === 'in' ? 'in,prepaid_buy,prepaid_in' : kind === 'out' ? 'out' : undefined;
     try { setRows((await invGet('/tx', { from: `${month}-01`, to: `${month}-31`, kind: k })).rows); } catch (e) { notify(errText(e)); setRows([]); }
@@ -524,11 +567,14 @@ function TxLog({ notify }: { notify: (m: string) => void }) {
     <div className="sf-bar"><div className="sf-month"><button type="button" aria-label="이전 달" onClick={() => setMonth(m => shiftMonth(m, -1))}>‹</button><strong>{month.slice(0, 4)}년 {Number(month.slice(5))}월</strong><button type="button" aria-label="다음 달" onClick={() => setMonth(m => shiftMonth(m, 1))}>›</button></div>
       <Seg label="종류" value={kind} onChange={setKind} options={[['all', '전체'], ['in', '입고'], ['out', '출고']]} /></div>
     {rows == null ? <LoadingBox /> : !rows.length ? <p className="sf-hint">이 달 기록이 없어요.</p> : <table className="sf-table">
-      <thead><tr><th>날짜</th><th>품목</th><th>구분</th><th className="num">수량</th><th className="num">금액</th><th className="num">기록 후 병원재고</th><th /></tr></thead>
+      <thead><tr><th>날짜</th><th>품목</th><th>구분</th><th className="num">수량</th><th className="num">금액</th><th className="num">기록 후 병원재고</th><th>명세서</th><th /></tr></thead>
       <tbody>{rows.map(t => <tr key={t.id}><td>{Number(t.date.slice(5, 7))}.{Number(t.date.slice(8))}</td>
         <td><b>{t.item_name}</b> <small>{[t.vendor_name, t.memo].filter(Boolean).join(' · ')}</small></td><td><small>{KIND_LABEL[t.kind]}{t.daily_date ? ' · 일일 마감' : ''}</small></td>
         <td className="num">{fmtQty(t.qty)}{t.bonus_qty ? ` (+${fmtQty(t.bonus_qty)})` : ''} {t.stock_unit}</td><td className="num">{t.kind === 'out' || t.kind === 'prepaid_in' || t.kind === 'adjust' ? <small>—</small> : fmtWon(t.amount)}</td>
-        <td className="num">{fmtQty(t.hospital_after)}</td><td className="num"><button type="button" className="sf-btn" onClick={() => setAsk(t)}>삭제</button></td></tr>)}</tbody></table>}
+        <td className="num">{fmtQty(t.hospital_after)}</td>
+        <td>{INVOICE_KINDS.includes(t.kind) ? <button type="button" className={`iv-inv-btn is-${invoiceState(t)}`} onClick={() => setInv(t.id)}>{INVOICE_LABEL[invoiceState(t)](t)}</button> : null}</td>
+        <td className="num"><button type="button" className="sf-btn" onClick={() => setAsk(t)}>삭제</button></td></tr>)}</tbody></table>}
+    {inv != null && rows && rows.find(r => r.id === inv) && <InvoiceDialog tx={rows.find(r => r.id === inv)!} rows={rows} notify={notify} onClose={() => setInv(null)} onChange={() => void load()} />}
     {ask && <Modal title="기록 삭제" onClose={() => setAsk(null)}>
       <p>{Number(ask.date.slice(5, 7))}월 {Number(ask.date.slice(8))}일 {ask.item_name} {KIND_LABEL[ask.kind]} {fmtQty(ask.qty)} {ask.stock_unit}</p>
       <p className="sf-ask">지우면 이 기록이 바꾼 재고를 되돌려요: {effect(ask) || '재고 변화 없음'}</p>

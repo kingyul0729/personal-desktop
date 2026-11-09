@@ -15,8 +15,9 @@ function d1(sqlite) {
   };
 }
 function env() { const inv = new DatabaseSync(':memory:'); return { inv, INV_DB: d1(inv), DB: d1(new DatabaseSync(':memory:')) }; }
+const authH = () => new Headers({ Origin: 'https://site.test', 'oai-authenticated-user-id': 'u1', 'oai-authenticated-user-email': 'u1@test.invalid' });
 async function call(e, path, method = 'GET', body) {
-  const h = new Headers({ Origin: 'https://site.test', 'oai-authenticated-user-id': 'u1', 'oai-authenticated-user-email': 'u1@test.invalid' });
+  const h = authH();
   if (body) h.set('Content-Type', 'application/json');
   const r = await handleApi(new Request(`https://site.test/api/inventory${path}`, { method, headers: h, body: body ? JSON.stringify(body) : undefined }), e);
   return { status: r.status, data: await r.json() };
@@ -120,6 +121,64 @@ test('out reduces only hospital stock, deleting it restores; daily close replace
   const d = await call(e, '/daily?date=2026-11-09');
   assert.equal(d.data.day.patients, 16);
   assert.equal(d.data.items.find(i => i.id === pack.id).used, 1);
+});
+
+test('split arrivals: each arrival keeps its own date, the payment is counted once', async () => {
+  const e = env(); await call(e, '/state');
+  const it = item(e, 'GA20%');
+  const opt = e.inv.prepare('SELECT * FROM inv_options WHERE item_id = ? ORDER BY id LIMIT 1').get(it.id);
+  assert.equal((await call(e, '/orders', 'POST', { item_id: it.id, option_id: opt.id, count: 10, date: '2026-11-02' })).status, 200);
+  const order = (await call(e, '/state')).data.orders.find(o => o.item_id === it.id);
+  const total = order.qty + order.bonus_qty;
+  // 11/3 에 6개 → 주문은 남아 있고 받음 6
+  assert.equal((await call(e, '/receive', 'POST', { order_id: order.id, actual_qty: 6, date: '2026-11-03' })).status, 200);
+  const mid = (await call(e, '/state')).data.orders.find(o => o.id === order.id);
+  assert.equal(mid.received_qty, 6);
+  // 11/5 에 나머지 → 주문 끝
+  assert.equal((await call(e, '/receive', 'POST', { order_id: order.id, actual_qty: total - 6, date: '2026-11-05' })).status, 200);
+  assert.equal((await call(e, '/state')).data.orders.filter(o => o.id === order.id).length, 0);
+  const txs = e.inv.prepare(`SELECT date, qty, amount FROM inv_tx WHERE order_id = ? AND kind = 'in' ORDER BY id`).all(order.id).map(r => ({ ...r }));
+  assert.deepEqual(txs.map(t => t.date), ['2026-11-03', '2026-11-05']);
+  assert.deepEqual(txs.map(t => t.amount), [order.amount, 0]); // 결제금액은 한 번만
+  assert.equal(item(e, 'GA20%').hospital_stock, it.hospital_stock + total);
+  const rep = (await call(e, '/report?month=2026-11')).data;
+  assert.equal(rep.spend_general, order.amount);
+  // 금액이 걸린 첫 기록은 뒤 도착분보다 먼저 못 지움
+  const [firstTx, secondTx] = e.inv.prepare(`SELECT id FROM inv_tx WHERE order_id = ? AND kind = 'in' ORDER BY id`).all(order.id);
+  assert.equal((await call(e, `/tx/${firstTx.id}`, 'DELETE')).status, 409);
+  assert.equal((await call(e, `/tx/${secondTx.id}`, 'DELETE')).status, 200);
+  // 남은 것이 안 오면 '마감'(취소 대신 받은 만큼으로 끝)
+  assert.equal((await call(e, `/orders/${order.id}/cancel`, 'POST')).status, 200);
+  assert.equal(e.inv.prepare('SELECT status FROM inv_orders WHERE id = ?').get(order.id).status, 'received');
+});
+
+test('invoice photos: one photo on several same-day rows; 0-won rows are not counted as missing', async () => {
+  const e = env(); const objects = new Map();
+  e.BUCKET = { async put(k, v) { objects.set(k, v); }, async get(k) { return objects.has(k) ? { body: objects.get(k) } : null; }, async delete(k) { objects.delete(k); } };
+  await call(e, '/state');
+  const a = item(e, 'GA20%'), b = item(e, 'GA30%');
+  await call(e, '/receive', 'POST', { item_id: a.id, actual_qty: 1, amount: 40000, date: '2026-11-04' });
+  await call(e, '/receive', 'POST', { item_id: b.id, actual_qty: 1, amount: 0, date: '2026-11-04', memo: '교환' });
+  const [ta, tb] = e.inv.prepare(`SELECT id FROM inv_tx WHERE kind = 'in' ORDER BY id`).all();
+  // 돈이 나간 기록 1건만 미등록(0원 교환은 안 셈)
+  assert.equal((await call(e, '/report?month=2026-11')).data.no_invoice, 1);
+  const jpg = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3, 4, 5, 6, 7, 8]);
+  const fd = new FormData(); fd.append('file', new File([jpg], 'inv.jpg', { type: 'image/jpeg' })); fd.append('tx_ids', `${ta.id},${tb.id}`);
+  const up = await handleApi(new Request('https://site.test/api/inventory/invoices', { method: 'POST', headers: authH(), body: fd }), e);
+  assert.equal(up.status, 200, await up.clone().text());
+  const { id } = await up.json();
+  const rows = (await call(e, '/tx?from=2026-11-01&to=2026-11-30')).data.rows;
+  assert.deepEqual(rows.filter(r => r.invoice_ids).map(r => r.invoice_ids).sort(), [String(id), String(id)]);
+  assert.equal((await call(e, '/report?month=2026-11')).data.no_invoice, 0);
+  const file = await handleApi(new Request(`https://site.test/api/inventory/invoices/${id}/file`, { headers: authH() }), e);
+  assert.equal(file.status, 200); assert.equal(file.headers.get('content-type'), 'image/jpeg');
+  // 사진이 아닌 파일은 막음
+  const bad = new FormData(); bad.append('file', new File([new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])], 'x.txt')); bad.append('tx_ids', String(ta.id));
+  assert.equal((await handleApi(new Request('https://site.test/api/inventory/invoices', { method: 'POST', headers: authH(), body: bad }), e)).status, 400);
+  // 사진 지우기 → 파일도 지움, 다시 미등록 1
+  await call(e, `/invoices/${id}`, 'DELETE');
+  assert.equal(objects.size, 0);
+  assert.equal((await call(e, '/report?month=2026-11')).data.no_invoice, 1);
 });
 
 test('prepaid order with a hospital delivery amount: stays in keep stock until the arrival is confirmed', async () => {
