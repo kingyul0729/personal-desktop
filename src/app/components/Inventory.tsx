@@ -283,14 +283,14 @@ function OrderBoard({ state, q, notify }: { state: InvState; q: string; notify: 
             <div><dt>최소재고</dt><dd>{item.min_stock > 0 ? withUnit(item.min_stock, item.stock_unit) : '—'}</dd></div>
             <div><dt>{item.prepaid ? '개당원가' : '구매단가'}</dt><dd>{item.prepaid ? (item.unit_cost != null ? `${item.unit_cost.toLocaleString('ko-KR')}원` : '—') : fmtWon(item.price)}</dd></div>
           </dl>
-          <div className="iv-d-sec"><h4>구매조건</h4>
+          {item.prepaid ? <PrepaidOrder key={item.id} item={item} orders={state.orders} today={state.today} notify={notify} /> : <div className="iv-d-sec"><h4>구매조건</h4>
             <ul className="iv-d-opts">{item.options.map(o => <li key={o.id}>
               <div className="iv-d-opt-main"><b>{o.label || `${fmtQty(o.qty)} ${item.stock_unit}`}</b>
                 <span>{fmtQty(o.qty)} {item.stock_unit}{o.bonus_qty ? ` + 증정 ${fmtQty(o.bonus_qty)}` : ''}{o.prepaid ? <em className="iv-tag">선결제</em> : null}</span></div>
               <div className="iv-d-opt-price"><b>{fmtWon(o.amount)}</b>{o.amount != null && o.amount >= 10000 && <small>{readWon(o.amount)}</small>}</div>
               <button type="button" className="sf-btn is-primary" onClick={() => setPick({ item, opt: o })}>{o.prepaid ? '선결제' : '주문'}</button>
             </li>)}</ul>
-          </div>
+          </div>}
           {waiting(item.id).length > 0 && <div className="iv-d-sec"><h4>받기 전 주문</h4>
             <ul className="iv-d-wait">{waiting(item.id).map(o => <li key={o.id}>
               <span>{o.ordered_at.slice(5).replace('-', '/')}</span><span>{o.option_label || '—'}</span>
@@ -301,6 +301,47 @@ function OrderBoard({ state, q, notify }: { state: InvState; q: string; notify: 
     </div>
     {pick && <OrderDialog item={pick.item} opt={pick.opt} today={state.today} onClose={() => setPick(null)} onDone={msg => { notify(msg); setPick(null); announceInventory(); }} />}
   </>;
+}
+
+// 선결제 품목 주문(2026-11-09 사용자 지정, 사용자 문서의 '킵잔량' = 화면의 '선결제 잔량'): 주문수량 → 선결제 잔량을 먼저 모두 쓰고, 모자랄 때만 신규 선결제 옵션 하나(한 번에 결제).
+// 주문 후 킵잔량은 예상값. 실제 킵잔량 차감은 재고입출고 '주문한 것 받기'의 입고확정 때만.
+function PrepaidOrder({ item, orders, today, notify }: { item: InvItem; orders: InvOrder[]; today: string; notify: (m: string) => void }) {
+  const [qty, setQty] = useState(''), [optId, setOptId] = useState<number | null>(null), [date, setDate] = useState(today), [busy, setBusy] = useState(false);
+  const opts = item.options.filter(o => o.prepaid);
+  const reserved = orders.filter(o => o.item_id === item.id && o.prepaid).reduce((a, o) => a + o.qty, 0);
+  const keep = Math.round(((item.vendor_stock || 0) - reserved) * 1000) / 1000;
+  const n = Number(qty) || 0;
+  const short = Math.max(0, Math.round((n - Math.max(0, keep)) * 1000) / 1000);
+  const opt = short > 0 ? opts.find(o => o.id === optId) || null : null;
+  const newQty = opt ? opt.qty + (opt.bonus_qty || 0) : 0;
+  const after = Math.round((keep + newQty - n) * 1000) / 1000;
+  const tooSmall = !!opt && newQty < short;
+  const ready = n > 0 && (short === 0 || (!!opt && !tooSmall)) && !busy;
+  const u = item.stock_unit;
+  const submit = async () => {
+    setBusy(true);
+    try { await invSend('POST', '/prepaid-order', { item_id: item.id, qty: n, option_id: short > 0 ? opt?.id : undefined, date }); notify('주문했어요.'); setQty(''); setOptId(null); announceInventory(); }
+    catch (e) { notify(errText(e)); } finally { setBusy(false); }
+  };
+  return <div className="iv-d-sec iv-pp">
+    <h4>주문</h4>
+    <div className="iv-pp-inputs">
+      <label className="sf-input"><span>주문수량 ({u})</span><input type="number" min={0} inputMode="decimal" value={qty} onChange={e => setQty(e.target.value)} /></label>
+      <label className="sf-input"><span>주문일</span><input type="date" value={date} onChange={e => setDate(e.target.value)} /></label>
+    </div>
+    {short > 0 && <div className="iv-pp-opts" role="radiogroup" aria-label="신규 선결제 옵션">{opts.map(o => <button key={o.id} type="button" role="radio" aria-checked={optId === o.id} className={optId === o.id ? 'is-on' : ''} onClick={() => setOptId(o.id)}>
+      <b>{fmtQty(o.qty + (o.bonus_qty || 0))} {u}</b><span>{fmtWon(o.amount)}</span></button>)}</div>}
+    <dl className="iv-pp-sum">
+      <div><dt>현재 선결제 잔량</dt><dd>{fmtQty(keep)} {u}</dd></div>
+      <div><dt>주문수량</dt><dd>{fmtQty(n)} {u}</dd></div>
+      <div><dt>주문 후 선결제 잔량</dt><dd className={short > 0 && !opt ? 'is-dim' : ''}>{short > 0 && !opt ? '—' : `${fmtQty(after)} ${u}`}</dd></div>
+      <div><dt>선결제 옵션</dt><dd>{opt ? `${fmtQty(newQty)} ${u}` : '-'}</dd></div>
+      <div><dt>신규 선결제 금액</dt><dd>{fmtWon(opt?.amount ?? 0)}</dd></div>
+      <div className="is-total"><dt>예상 결제금액</dt><dd>{fmtWon(opt?.amount ?? 0)}{(opt?.amount ?? 0) >= 10000 && <small>{readWon(opt!.amount!)}</small>}</dd></div>
+    </dl>
+    {tooSmall && <p className="sf-hint is-warn">이 옵션으로는 {fmtQty(newQty - short)} {u} 모자라요.</p>}
+    <div className="iv-pp-foot"><button type="button" className="sf-btn is-primary" disabled={!ready} onClick={() => void submit()}>{busy && <SavingMark />}주문</button></div>
+  </div>;
 }
 
 function OrderDialog({ item, opt, today, onClose, onDone }: { item: InvItem; opt: InvOption; today: string; onClose: () => void; onDone: (m: string) => void }) {

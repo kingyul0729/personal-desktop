@@ -263,6 +263,42 @@ export async function handleInventory(request, env, url, user) {
     }
 
     // ── 주문(발주): 등록된 구매조건 하나를 골라 그 결제금액·수량·증정을 그대로 적용 ──
+    // ── 선결제 품목 주문(2026-11-09 사용자 지정 규칙) ──
+    // (사용자 문서의 '킵잔량' = 화면의 '선결제 잔량') 주문수량을 먼저 킵잔량(선결제 잔량 − 받기 전 반입 예정)에서 모두 쓰고, 모자랄 때만 신규 선결제 옵션 하나를 골라 한 번에 결제한다
+    // (부분 선결제·부분 결제 없음). 킵잔량만으로 되면 신규 선결제를 만들지 않는다.
+    // 주문 때는 킵잔량을 빼지 않는다(주문 후 킵잔량은 예상값). 실제 차감은 '입고확정' 때만: 킵잔량 − 실제 도착, 병원재고 + 실제 도착을 한 batch로.
+    if (m === 'POST' && path === '/prepaid-order') {
+      const item = await loadItem(db, body.item_id);
+      if (!item) return bad('품목을 찾을 수 없어요.', 404);
+      if (!item.prepaid) return bad('선결제 품목이 아니에요.');
+      const qty = num(body.qty);
+      if (!(qty > 0)) return bad('주문수량을 입력해 주세요.');
+      const date = okDate(body.date) ? body.date : kstToday();
+      const pend = await one(db, `SELECT coalesce(sum(qty), 0) AS q FROM inv_orders WHERE item_id = ? AND prepaid = 1 AND status = 'ordered'`, item.id);
+      const keep = round((item.vendor_stock || 0) - (pend?.q || 0));
+      const short = round(Math.max(0, qty - Math.max(0, keep)));
+      let opt = null;
+      if (short > 0) {
+        opt = await one(db, 'SELECT * FROM inv_options WHERE id = ? AND item_id = ? AND active = 1 AND prepaid = 1', Number(body.option_id), item.id);
+        if (!opt) return bad(`킵잔량이 ${short} ${item.stock_unit} 모자라요. 신규 선결제 옵션을 골라 주세요.`);
+        if (opt.qty + (opt.bonus_qty || 0) < short) return bad('고른 선결제 옵션으로도 모자라요. 더 큰 옵션을 골라 주세요.');
+      } else if (body.option_id) return bad('킵잔량으로 충분해서 신규 선결제가 필요 없어요.');
+      let paidId = null;
+      if (opt) {
+        const total = round(opt.qty + (opt.bonus_qty || 0));
+        await db.batch([
+          db.prepare(`INSERT INTO inv_orders (item_id, option_id, option_label, ordered_at, qty, bonus_qty, amount, prepaid, status, memo, created_by, created_at) VALUES (?,?,?,?,?,?,?,1,'paid',?,?,?)`)
+            .bind(item.id, opt.id, opt.label, date, opt.qty, opt.bonus_qty || 0, opt.amount, body.memo || null, user, Date.now()),
+          ...txStatements(db, item, { date, kind: 'prepaid_buy', qty: opt.qty, bonus_qty: opt.bonus_qty || 0, amount: opt.amount, vendor_delta: total, memo: body.memo || opt.label, by: user }),
+        ]);
+        paidId = (await one(db, 'SELECT max(id) AS id FROM inv_orders')).id;
+        await db.prepare(`UPDATE inv_tx SET order_id = ? WHERE id = (SELECT max(id) FROM inv_tx)`).bind(paidId).run();
+      }
+      await db.prepare(`INSERT INTO inv_orders (item_id, option_id, option_label, ordered_at, qty, bonus_qty, amount, prepaid, status, memo, created_by, created_at) VALUES (?,?,?,?,?,0,0,1,'ordered',?,?,?)`)
+        .bind(item.id, opt?.id ?? null, '반입 예정', date, round(qty), paidId ? `from:${paidId}` : 'keep', user, Date.now()).run();
+      const newQty = opt ? round(opt.qty + (opt.bonus_qty || 0)) : 0;
+      return json({ ok: true, keep, qty, after: round(keep + newQty - qty), option: opt?.label ?? null, new_amount: opt?.amount ?? 0, pay: opt?.amount ?? 0 });
+    }
     if (m === 'POST' && path === '/orders') {
       const item = await loadItem(db, body.item_id);
       if (!item) return bad('품목을 찾을 수 없어요.', 404);

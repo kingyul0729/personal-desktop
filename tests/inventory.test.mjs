@@ -130,6 +130,38 @@ test('prepaid items only move through prepaid payment and prepaid 반입 (never 
   assert.equal(item(e, '보관용 모델링팩').hospital_stock, it.hospital_stock);
 });
 
+test('prepaid order rule (user spec 2026-11-09): use keep first, new prepaid only for the shortage, deduct only at 입고확정', async () => {
+  const e = env(); await call(e, '/state');
+  const it = item(e, '보관용 3종 시트팩');
+  const o500 = e.inv.prepare('SELECT id FROM inv_options WHERE item_id = ? AND prepaid = 1 AND qty = 500').get(it.id).id;
+  const o300 = e.inv.prepare('SELECT id, amount FROM inv_options WHERE item_id = ? AND prepaid = 1 AND qty = 300').get(it.id);
+  const h0 = it.hospital_stock;
+  await call(e, '/adjust', 'POST', { item_id: it.id, vendor_stock: 50, date: '2026-11-01' });
+  // 킵 50 · 주문 100 → 옵션 없이는 막힘
+  assert.equal((await call(e, '/prepaid-order', 'POST', { item_id: it.id, qty: 100, date: '2026-11-09' })).status, 400);
+  // 500 선택 → 주문 후 킵잔량 450, 결제 500,000
+  const r = await call(e, '/prepaid-order', 'POST', { item_id: it.id, qty: 100, option_id: o500, date: '2026-11-09' });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.deepEqual([r.data.keep, r.data.after, r.data.pay], [50, 450, 500000]);
+  // 주문 때는 차감 없음: 잔량 = 50 + 500(신규 결제분), 병원재고 그대로
+  assert.deepEqual([item(e, '보관용 3종 시트팩').vendor_stock, item(e, '보관용 3종 시트팩').hospital_stock], [550, h0]);
+  const pend = (await call(e, '/state')).data.orders.find(o => o.item_id === it.id && o.prepaid);
+  assert.equal(pend.qty, 100);
+  // 입고확정(실제 100) 때만 킵잔량 − 100, 병원재고 + 100
+  assert.equal((await call(e, '/receive', 'POST', { order_id: pend.id, actual_qty: 100, date: '2026-11-10' })).status, 200);
+  assert.deepEqual([item(e, '보관용 3종 시트팩').vendor_stock, item(e, '보관용 3종 시트팩').hospital_stock], [450, h0 + 100]);
+  // 킵 450 · 주문 200 → 신규 선결제 없음(옵션을 주면 막힘), 결제 0원, 주문 후 250
+  assert.equal((await call(e, '/prepaid-order', 'POST', { item_id: it.id, qty: 200, option_id: o300.id })).status, 400);
+  const r2 = await call(e, '/prepaid-order', 'POST', { item_id: it.id, qty: 200, date: '2026-11-11' });
+  assert.deepEqual([r2.data.after, r2.data.pay, r2.data.option], [250, 0, null]);
+  assert.equal(item(e, '보관용 3종 시트팩').vendor_stock, 450); // 주문만으로는 안 줄어듦
+  // 받기 전 주문(200)은 킵잔량에서 예약된 것으로 봄: 킵 450 − 200 = 250 · 주문 300 → 50 모자람 → 300 옵션 → 주문 후 250
+  const r3 = await call(e, '/prepaid-order', 'POST', { item_id: it.id, qty: 300, option_id: o300.id, date: '2026-11-12' });
+  assert.deepEqual([r3.data.keep, r3.data.after, r3.data.pay], [250, 250, o300.amount]);
+  // 결제는 이달 지출에 한 번씩만(500,000 + 300 옵션)
+  assert.equal((await call(e, '/report?month=2026-11')).data.spend_prepaid, 500000 + o300.amount);
+});
+
 test('split arrivals: each arrival keeps its own date, the payment is counted once', async () => {
   const e = env(); await call(e, '/state');
   const it = item(e, 'GA20%');
