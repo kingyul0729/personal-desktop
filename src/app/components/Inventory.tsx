@@ -77,7 +77,7 @@ function AdjustDialog({ item, today, onClose, onDone }: { item: InvItem; today: 
   </Modal>;
 }
 
-type DailyItem = { id: number; name: string; stock_unit: string; hospital_stock: number; daily_mode: 'usage' | 'count'; used: number | null; used15: number };
+type DailyItem = { id: number; name: string; stock_unit: string; hospital_stock: number; stock_at: number; daily_mode: 'usage' | 'count'; used: number | null; used15: number };
 // 일일재고(2026-11-08 사용자 지정): 언제든 기록·수정. 팀장이 출근한 날은 품목 방식대로(당일 사용량 또는 마감재고),
 // 팀장이 출근하지 않은 날(미입력·휴무·연차·상담·휴일)은 당일 사용량·모델링 사용 인원은 닫고 모든 품목 마감재고만 적는다.
 // 총 피부관리 인원·메모는 늘 열림. 못 센 날 생긴 차이는 따로 표시하지 않는다.
@@ -90,8 +90,8 @@ function DailyClose({ today, notify, onSaved }: { items: InvItem[]; today: strin
     const d = await invGet('/daily', { date });
     const off = d.check ? !d.check.ok : false;
     setData(d); setPatients(d.day?.patients == null ? '' : String(d.day.patients)); setStatus(d.day?.status || ''); setPeople(d.day?.extra?.modeling_people == null ? '' : String(d.day.extra.modeling_people));
-    // 당일 사용량 칸은 기록한 사용량, 마감재고 칸은 지금 재고(= 기록 뒤 남은 수량)
-    setVals(Object.fromEntries(d.items.map((it: DailyItem) => [it.id, it.used == null ? '' : !off && it.daily_mode === 'usage' ? String(it.used) : String(it.hospital_stock)])));
+    // 당일 사용량 칸은 기록한 사용량, 마감재고 칸은 마감일 기준 재고(stock_at: 그 날짜 뒤 기록은 빼고 계산)
+    setVals(Object.fromEntries(d.items.map((it: DailyItem) => [it.id, it.used == null ? '' : !off && it.daily_mode === 'usage' ? String(it.used) : String(it.stock_at)])));
   }, [date]);
   useEffect(() => { setData(null); load().catch(e => notify(errText(e))); }, [load, notify]);
   // 성과에 관리 인원을 적으면 총 피부관리 인원이 바뀌므로 다시 불러온다
@@ -103,18 +103,20 @@ function DailyClose({ today, notify, onSaved }: { items: InvItem[]; today: strin
     const v = vals[it.id];
     if (v === '' || v == null) return null;
     if (!byCount(it)) return Number(v);
-    const before = it.hospital_stock + (it.used || 0); // 이 날 기록 전 재고
+    const before = it.stock_at + (it.used || 0); // 마감일 기준 마감 전 재고
     return Math.round((before - Number(v)) * 1000) / 1000;
   };
   const save = async () => {
-    const used: Record<number, number | null> = {};
+    const used: Record<number, number | null> = {}, closing: Record<number, number> = {};
     for (const it of data.items) {
       const u = usedOf(it);
       if (u != null && (!Number.isFinite(u) || u < 0)) { notify(`${it.name}: 마감재고가 마감 전 재고보다 많아요.`); return; }
-      used[it.id] = u ?? 0;
+      // 마감재고로 적은 품목은 남은 수량을 그대로 보내고 서버가 마감일 기준으로 사용량을 계산한다
+      if (byCount(it) && vals[it.id] !== '' && vals[it.id] != null) closing[it.id] = Number(vals[it.id]);
+      else used[it.id] = u ?? 0;
     }
     setBusy(true);
-    try { await invSend('POST', '/daily', { date, patients: patients === '' ? null : Number(patients), status: status || null, extra: { modeling_people: off ? (data.day?.extra?.modeling_people ?? null) : people === '' ? null : Number(people) }, used }); notify('마감을 저장했어요.'); announceInventory(); onSaved(); await load(); }
+    try { await invSend('POST', '/daily', { date, patients: patients === '' ? null : Number(patients), status: status || null, extra: { modeling_people: off ? (data.day?.extra?.modeling_people ?? null) : people === '' ? null : Number(people) }, used, closing }); notify('마감을 저장했어요.'); announceInventory(); onSaved(); await load(); }
     catch (e) { notify(errText(e)); } finally { setBusy(false); }
   };
   return <div className={`iv-daily${off ? ' is-off' : ''}`}>
@@ -128,7 +130,7 @@ function DailyClose({ today, notify, onSaved }: { items: InvItem[]; today: strin
         <button type="button" className="sf-btn is-primary" disabled={busy} onClick={() => void save()}>{busy && <SavingMark />}저장</button></div>
     </div>
     <div className="iv-grid">{data.items.map(it => {
-      const u = usedOf(it), before = it.hospital_stock + (it.used || 0), count = byCount(it);
+      const u = usedOf(it), before = it.stock_at + (it.used || 0), count = byCount(it);
       return <div key={it.id} className="iv-dcard">
         <div className="iv-dcard-head"><b>{it.name}</b><span className="iv-unit">{it.stock_unit}</span></div>
         <dl><dt>마감 전 재고</dt><dd>{withUnit(before, it.stock_unit)}</dd></dl>

@@ -122,6 +122,28 @@ test('out reduces only hospital stock, deleting it restores; daily close replace
   assert.equal(d.data.items.find(i => i.id === pack.id).used, 1);
 });
 
+test('daily close is computed by the chosen date, not by when it was typed in', async () => {
+  const e = env(); await call(e, '/state');
+  const pack = item(e, '더마 하이드로 팩');
+  await call(e, '/adjust', 'POST', { item_id: pack.id, hospital_stock: 6, date: '2026-11-08' });
+  // 11/9 마감을 못 적은 채로 11/10에 300 입고(재고 맞추기로 대신) → 지금 재고 306
+  await call(e, '/adjust', 'POST', { item_id: pack.id, hospital_stock: 306, date: '2026-11-10' });
+  // 나중에 11/9 마감을 연다: 마감 전 재고는 그날 기준 6
+  const d = await call(e, '/daily?date=2026-11-09');
+  assert.equal(d.data.items.find(i => i.id === pack.id).stock_at, 6);
+  // 11/9 마감재고 4 → 그날 사용 2, 11/10 입고 300은 그대로
+  const r = await call(e, '/daily', 'POST', { date: '2026-11-09', closing: { [pack.id]: 4 } });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.equal(e.inv.prepare(`SELECT qty FROM inv_tx WHERE kind = 'out' AND daily_date = '2026-11-09' AND deleted_at IS NULL`).get().qty, 2);
+  assert.equal(item(e, '더마 하이드로 팩').hospital_stock, 304);
+  // 같은 날 다시 고쳐 저장(마감재고 5) → 사용 1로 바뀜, 재고 305
+  await call(e, '/daily', 'POST', { date: '2026-11-09', closing: { [pack.id]: 5 } });
+  assert.equal(item(e, '더마 하이드로 팩').hospital_stock, 305);
+  assert.equal((await call(e, '/daily?date=2026-11-09')).data.items.find(i => i.id === pack.id).stock_at, 5);
+  // 그날 재고보다 많이 적으면 막음(11/10 입고분은 11/9에 없었음)
+  assert.equal((await call(e, '/daily', 'POST', { date: '2026-11-09', closing: { [pack.id]: 50 } })).status, 400);
+});
+
 test('inventory needs login', async () => {
   const e = env();
   const r = await handleApi(new Request('https://site.test/api/inventory/state'), e);

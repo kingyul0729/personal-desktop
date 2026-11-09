@@ -67,6 +67,14 @@ function optionUnits(item, o) {
 
 // 그날 팀장이 출근했는지(사용자 지정 2026-11-08): 출근한 날은 품목 방식대로, 아니면(미입력·휴무·연차·상담·빨간 날) 화면이
 // 당일 사용량을 닫고 마감재고만 받는다. 기록·수정은 언제든 가능. 못 센 날 생긴 재고 차이는 따로 표시하지 않는다.
+// 마감일 기준 재고(2026-11-09 사용자: '입력한 시간이 아니라 사용자가 지정한 기준 날짜에 따라 계산'):
+// 지금 병원재고에서 그 날짜 뒤(date > 마감일)에 생긴 입고·출고·반입·재고 맞추기 증감을 빼면 그날 마감 뒤 재고가 된다.
+// 기록을 언제 입력했는지와 상관없이 기록의 날짜만 본다.
+async function stockAtDates(db, date) {
+  const rows = await all(db, `SELECT item_id, sum(hospital_delta) AS d FROM inv_tx WHERE deleted_at IS NULL AND date > ? GROUP BY item_id`, date);
+  return new Map(rows.map(r => [r.item_id, r.d || 0]));
+}
+
 async function dailyCheck(db, date) {
   const lead = await db.prepare(`SELECT a.attendance, a.etc_type FROM staff s LEFT JOIN staff_attendance a ON a.staff_id = s.id AND a.work_date = ? WHERE s.is_leader = 1 ORDER BY s.status = 'retired', s.id LIMIT 1`).bind(date).first().catch(() => null);
   const att = lead?.attendance || null;
@@ -326,7 +334,8 @@ export async function handleInventory(request, env, url, user) {
       const used = await all(db, `SELECT item_id, qty, id FROM inv_tx WHERE deleted_at IS NULL AND daily_date = ? AND kind = 'out'`, date);
       const since = new Date(Date.parse(date) - 14 * 864e5).toISOString().slice(0, 10);
       const recent = await all(db, `SELECT item_id, sum(qty) AS q FROM inv_tx WHERE deleted_at IS NULL AND kind = 'out' AND daily_date BETWEEN ? AND ? GROUP BY item_id`, since, date);
-      return json({ date, check: await dailyCheck(db, date), patients_auto: await dailyPatientsAuto(db, date), day: day ? { ...day, extra: day.extra ? JSON.parse(day.extra) : {} } : null, items: items.map(it => ({ ...it, used: used.find(u => u.item_id === it.id)?.qty ?? null, used15: recent.find(r => r.item_id === it.id)?.q ?? 0 })) });
+      const later = await stockAtDates(db, date);
+      return json({ date, check: await dailyCheck(db, date), patients_auto: await dailyPatientsAuto(db, date), day: day ? { ...day, extra: day.extra ? JSON.parse(day.extra) : {} } : null, items: items.map(it => ({ ...it, stock_at: round(it.hospital_stock - (later.get(it.id) || 0)), used: used.find(u => u.item_id === it.id)?.qty ?? null, used15: recent.find(r => r.item_id === it.id)?.q ?? 0 })) });
     }
     if (m === 'POST' && path === '/daily') {
       const date = okDate(body.date) ? body.date : null;
@@ -337,8 +346,24 @@ export async function handleInventory(request, env, url, user) {
       const stmts = [db.prepare(`INSERT INTO inv_daily (date, patients, status, extra, updated_by, updated_at) VALUES (?,?,?,?,?,?)
         ON CONFLICT(date) DO UPDATE SET patients = excluded.patients, status = excluded.status, extra = excluded.extra, updated_by = excluded.updated_by, updated_at = excluded.updated_at`)
         .bind(date, patients, body.status || null, JSON.stringify(body.extra || {}), user, Date.now())];
+      // 마감재고로 적은 품목: 마감일 기준 마감 전 재고 − 마감재고 = 그날 사용량(서버가 날짜 기준으로 계산)
+      const used = { ...(body.used || {}) };
+      const closing = Object.entries(body.closing || {}).filter(([, v]) => v !== '' && v != null);
+      if (closing.length) {
+        const later = await stockAtDates(db, date);
+        for (const [id, raw] of closing) {
+          const left = num(raw);
+          if (!isNum(left) || left < 0) return bad('마감재고는 0 이상이어야 해요.');
+          const it = await loadItem(db, id);
+          if (!it) continue;
+          const prev = await one(db, `SELECT coalesce(sum(-hospital_delta), 0) AS q FROM inv_tx WHERE deleted_at IS NULL AND daily_date = ? AND item_id = ? AND kind = 'out'`, date, it.id);
+          const before = round(it.hospital_stock - (later.get(it.id) || 0) + (prev?.q || 0));
+          if (left > before) return bad(`${it.name}: 마감재고가 마감 전 재고(${before} ${it.stock_unit})보다 많아요.`);
+          used[id] = round(before - left);
+        }
+      }
       // 품목별 당일 사용량: 이전 마감 출고를 되돌리고 새 값으로 다시 기록(같은 batch)
-      for (const [id, raw] of Object.entries(body.used || {})) {
+      for (const [id, raw] of Object.entries(used)) {
         const qty = num(raw);
         if (qty != null && (qty < 0 || !Number.isFinite(qty))) return bad('사용량은 0 이상이어야 해요.');
         let item = await loadItem(db, id);
