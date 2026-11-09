@@ -2202,3 +2202,4 @@ input[type="date"]::-webkit-date-and-time-value, input[type="month"]::-webkit-da
 @container sfw (max-width: 600px) {
   .sf-wrap .iv-txlog { min-width: 700px; } /* 휴대폰: 칸을 줄이지 않고 표만 옆으로 밀기 */
 }
+.iv-tx-item small.iv-tx-reason { color: #6b7480; -webkit-line-clamp: 1; }

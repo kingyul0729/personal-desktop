@@ -654,6 +654,12 @@ function InvoiceDialog({ tx, rows, notify, onClose, onChange }: { tx: InvTx; row
   </Modal>;
 }
 
+// 메모 앞부분이 팀(피부팀·간호팀·고객·직원구매 등)이면 떼어 '업체, 팀' 줄로, 나머지는 '사유' 줄로(2026-11-09 사용자)
+const splitMemo = (memo?: string | null) => {
+  const parts = (memo || '').split(' · ').map(x => x.trim()).filter(Boolean);
+  const team = parts.length && /(팀|구매)$/.test(parts[0]) ? parts.shift()! : '';
+  return { team, reason: parts.join(' · ') };
+};
 const KIND_TONE: Record<string, string> = { in: 'in', out: 'out', prepaid_buy: 'pp', prepaid_in: 'pp', adjust: 'adj' };
 function TxLog({ notify }: { notify: (m: string) => void }) {
   const [month, setMonth] = useState(todayLocal().slice(0, 7));
@@ -675,7 +681,8 @@ function TxLog({ notify }: { notify: (m: string) => void }) {
     {rows == null ? <LoadingBox /> : !rows.length ? <p className="sf-hint">이 달 기록이 없어요.</p> : <div className="iv-txwrap"><table className="sf-table iv-txlog">
       <thead><tr><th className="c-date">날짜</th><th>품목</th><th className="c-kind">구분</th><th className="num c-qty">수량</th><th className="num c-amt">금액</th><th className="num c-after"><span className="t-long">기록 후 </span>병원재고</th><th className="c-inv">명세서</th><th className="c-act" aria-label="수정·삭제" /></tr></thead>
       <tbody>{rows.map(t => <tr key={t.id}><td className="c-date">{Number(t.date.slice(5, 7))}.{Number(t.date.slice(8))}</td>
-        <td><div className="iv-tx-item"><b>{t.item_name}</b>{(t.vendor_name || t.memo) && <small>{[t.vendor_name, t.memo].filter(Boolean).join(' · ')}</small>}</div></td>
+        <td>{(() => { const m = splitMemo(t.memo); const who = [t.vendor_name, m.team].filter(Boolean).join(', ');
+          return <div className="iv-tx-item"><b>{t.item_name}</b>{who && <small>{who}</small>}{m.reason && <small className="iv-tx-reason">{m.reason}</small>}</div>; })()}</td>
         <td className="c-kind"><span className="iv-kind-dot"><i className={`iv-dot is-${KIND_TONE[t.kind] || 'adj'}`} aria-hidden="true" />{KIND_LABEL[t.kind]}</span>{t.daily_date ? <small className="iv-kind-sub">일일 마감</small> : null}</td>
         <td className="num c-qty">{fmtQty(t.qty)}{t.bonus_qty ? <small> +{fmtQty(t.bonus_qty)}</small> : null}<small className="iv-unit-t"> {t.stock_unit}</small></td>
         <td className="num c-amt">{t.kind === 'out' || t.kind === 'prepaid_in' || t.kind === 'adjust' ? <span className="iv-muted">—</span> : fmtWon(t.amount)}</td>
