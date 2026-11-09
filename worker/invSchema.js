@@ -91,9 +91,11 @@ let ready = null;
 // — 직원 근태 같은 개인 자료를 공개 저장소에 넣지 않기 위해.
 export async function ensureInvSchema(db) {
   if (ready === db) return;
-  let ok = null;
-  try { ok = await db.prepare(`SELECT value FROM inv_meta WHERE key = 'schema'`).first(); } catch { ok = null; }
-  if (!ok) await db.exec(schemaSql());
+  // 표를 새로 만드는 것은 처음 한 번뿐(표가 정말 없거나 schema 기록이 없을 때만). 잠깐 DB가 응답을 못 한 경우까지 새로 만들면 모든 기록이 지워지므로 그때는 오류로 멈춘다.
+  let missing = false;
+  try { missing = !(await db.prepare(`SELECT value FROM inv_meta WHERE key = 'schema'`).first()); }
+  catch (e) { if (/no such table/i.test(String(e?.message || e))) missing = true; else throw e; }
+  if (missing) await db.exec(schemaSql());
   {
     // 기준 자료 고침을 한 번씩 적용(새 DB도 같은 길로 — 트리거는 exec 한 줄에 못 넣어서 여기서 만든다)
     let fixes = (await db.prepare(`SELECT value FROM inv_meta WHERE key = 'fixes'`).first())?.value || '';

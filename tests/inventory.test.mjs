@@ -207,7 +207,10 @@ test('split arrivals: each arrival keeps its own date, the payment is counted on
   assert.equal((await call(e, `/tx/${secondTx.id}`, 'DELETE')).status, 200);
   // 남은 것이 안 오면 '마감'(취소 대신 받은 만큼으로 끝)
   assert.equal((await call(e, `/orders/${order.id}/cancel`, 'POST')).status, 200);
-  assert.equal(e.inv.prepare('SELECT status FROM inv_orders WHERE id = ?').get(order.id).status, 'received');
+  assert.equal(e.inv.prepare('SELECT status FROM inv_orders WHERE id = ?').get(order.id).status, 'closed');
+  // 마감한 주문은 도착 기록을 지워도 다시 열리지 않음
+  await call(e, `/tx/${firstTx.id}`, 'DELETE');
+  assert.equal(e.inv.prepare('SELECT status FROM inv_orders WHERE id = ?').get(order.id).status, 'closed');
 });
 
 test('invoice photos: one photo on several same-day rows; 0-won rows are not counted as missing', async () => {
@@ -530,4 +533,73 @@ test('one-time fix: a negative prepaid balance from a deleted purchase is restor
   e.inv.prepare('UPDATE inv_items SET vendor_stock = -1 WHERE id = ?').run(ga.id);
   await call({ ...e, INV_DB: d1(e.inv) }, '/state');
   assert.equal(item(e, 'GA20%').vendor_stock, -1);
+});
+
+
+// 2026-11-09 점검에서 찾은 것
+test('check: over-receiving an order is blocked (general, prepaid, and by editing)', async () => {
+  const e = env(); await call(e, '/state');
+  const it = item(e, 'GA20%');
+  const opt = e.inv.prepare('SELECT id FROM inv_options WHERE item_id = ? AND prepaid = 0').get(it.id);
+  await call(e, '/orders', 'POST', { item_id: it.id, option_id: opt.id, count: 3, date: '2026-11-03' });
+  const o = (await call(e, '/state')).data.orders[0];
+  assert.equal((await call(e, '/receive', 'POST', { order_id: o.id, actual_qty: 30, date: '2026-11-04' })).status, 400);
+  const r = await call(e, '/receive', 'POST', { order_id: o.id, actual_qty: 1, date: '2026-11-04' });
+  assert.equal((await call(e, `/tx/${r.data.tx_id}`, 'PATCH', { actual_qty: 4 })).status, 400);
+  assert.equal((await call(e, `/tx/${r.data.tx_id}`, 'PATCH', { actual_qty: 3 })).status, 200);
+  const pp = item(e, '보관용 3종 시트팩');
+  await call(e, '/adjust', 'POST', { item_id: pp.id, vendor_stock: 100, date: '2026-11-01' });
+  await call(e, '/prepaid-order', 'POST', { item_id: pp.id, qty: 40, date: '2026-11-05' });
+  const po = (await call(e, '/state')).data.orders.find(x => x.prepaid);
+  assert.equal((await call(e, '/receive', 'POST', { order_id: po.id, actual_qty: 41, date: '2026-11-06' })).status, 400);
+});
+
+test('check: replaying a long saved response does not crash', async () => {
+  const e = env(); await call(e, '/state');
+  const body = { name: '점검 품목', stock_unit: 'ea', price: 1000, min_stock: 1 };
+  const a = await callId(e, '/items', 'POST', body, 'req-item-0001');
+  const b = await callId(e, '/items', 'POST', body, 'req-item-0001');
+  assert.equal(a.status, 200); assert.equal(b.status, 200); assert.equal(b.data.duplicate, true);
+  assert.equal(e.inv.prepare(`SELECT count(*) n FROM inv_items WHERE name = '점검 품목'`).get().n, 1);
+});
+
+test('check: a failing schema read never rebuilds (wipes) the inventory tables', async () => {
+  const e = env(); await call(e, '/state');
+  const it = item(e, 'GA20%');
+  await call(e, '/adjust', 'POST', { item_id: it.id, hospital_stock: 40, date: '2026-11-01' });
+  const base = d1(e.inv);
+  const flaky = { ...base, prepare(sql) { if (/key = 'schema'/.test(sql)) throw new Error('D1_ERROR: network'); return base.prepare(sql); } };
+  const r = await call({ ...e, INV_DB: flaky }, '/state');
+  assert.notEqual(r.status, 200);
+  assert.equal(item(e, 'GA20%').hospital_stock, 40);
+  assert.ok(e.inv.prepare('SELECT count(*) n FROM inv_tx').get().n > 0);
+});
+
+test('check: filling in an earlier daily count keeps a later count true', async () => {
+  const e = env(); await call(e, '/state');
+  const it = item(e, '일회용해면');
+  await call(e, '/adjust', 'POST', { item_id: it.id, hospital_stock: 10, date: '2026-11-01' });
+  await call(e, '/daily', 'POST', { date: '2026-11-10', closing: { [it.id]: 6 } });
+  assert.equal(item(e, '일회용해면').hospital_stock, 6);
+  await call(e, '/daily', 'POST', { date: '2026-11-08', closing: { [it.id]: 7 } });
+  const at = d => call(e, `/daily?date=${d}`).then(r => r.data.items.find(x => x.id === it.id).stock_at);
+  assert.equal(await at('2026-11-08'), 7);
+  assert.equal(await at('2026-11-10'), 6);
+  assert.equal(item(e, '일회용해면').hospital_stock, 6);
+  // 앞 날짜를 장부보다 많게 고쳐도(12) 뒤 날짜 6은 그대로
+  await call(e, '/daily', 'POST', { date: '2026-11-08', closing: { [it.id]: 12 } });
+  assert.deepEqual([await at('2026-11-08'), await at('2026-11-10'), item(e, '일회용해면').hospital_stock], [12, 6, 6]);
+  const s = e.inv.prepare('SELECT coalesce(sum(hospital_delta),0) h FROM inv_tx WHERE item_id = ? AND deleted_at IS NULL').get(it.id).h;
+  assert.equal(s, 6);
+});
+
+test('check: a prepaid order links its payment and planned delivery in one step', async () => {
+  const e = env(); await call(e, '/state');
+  const pp = item(e, '보관용 3종 시트팩');
+  const o300 = e.inv.prepare('SELECT id FROM inv_options WHERE item_id = ? AND prepaid = 1 AND qty = 300').get(pp.id);
+  await call(e, '/prepaid-order', 'POST', { item_id: pp.id, qty: 100, option_id: o300.id, date: '2026-11-05' });
+  const buy = e.inv.prepare(`SELECT * FROM inv_tx WHERE kind = 'prepaid_buy'`).get();
+  const paid = e.inv.prepare(`SELECT id FROM inv_orders WHERE status = 'paid'`).get();
+  const pend = e.inv.prepare(`SELECT memo FROM inv_orders WHERE status = 'ordered'`).get();
+  assert.equal(buy.order_id, paid.id); assert.equal(pend.memo, `from:${paid.id}`);
 });
