@@ -105,6 +105,8 @@ test('prepaid: paying creates the keep balance, receive confirm deducts it and a
 
 test('out reduces only hospital stock, deleting it restores; daily close replaces the same day usage', async () => {
   const e = env(); await call(e, '/state');
+  await call(e, '/adjust', 'POST', { item_id: item(e, '카프리가스').id, hospital_stock: 10, date: '2026-11-08' });
+  await call(e, '/adjust', 'POST', { item_id: item(e, '더마 하이드로 팩').id, hospital_stock: 10, date: '2026-11-08' });
   const it = item(e, '카프리가스');
   await call(e, '/out', 'POST', { item_id: it.id, qty: 2, date: '2026-11-09' });
   assert.deepEqual([item(e, '카프리가스').hospital_stock, item(e, '카프리가스').vendor_stock], [it.hospital_stock - 2, 0]);
@@ -370,4 +372,89 @@ test('an item saved with a price but no purchase condition gets one so it can be
   const r = await call(e, '/items', 'POST', { name: '테스트 크림', stock_unit: 'ea', order_unit: 'box', pack_qty: 10, price: 50000 });
   const it = r.data.items.find(i => i.name === '테스트 크림');
   assert.deepEqual(it.options.map(o => [o.qty, o.amount]), [[10, 50000]]);
+});
+
+// 2026-11-09 사용자 문서(재고관리 최종 수정 1~23)
+async function callId(e, path, method, body, id) {
+  const h = authH(); h.set('Content-Type', 'application/json'); h.set('x-req-id', id);
+  const r = await handleApi(new Request(`https://site.test/api/inventory${path}`, { method, headers: h, body: body ? JSON.stringify(body) : undefined }), e);
+  return { status: r.status, data: await r.json() };
+}
+test('spec example: prepaid 500 → 100 in → same request again → 30 out → same again → cancel out', async () => {
+  const e = env(); await call(e, '/state');
+  const it = item(e, '보관용 3종 시트팩');
+  const o500 = e.inv.prepare('SELECT id, amount FROM inv_options WHERE item_id = ? AND prepaid = 1 AND qty = 500').get(it.id);
+  await call(e, '/adjust', 'POST', { item_id: it.id, hospital_stock: 0, date: '2026-11-01' });
+  const st = () => { const x = item(e, '보관용 3종 시트팩'); return [x.hospital_stock, x.vendor_stock]; };
+  const r = await call(e, '/prepaid-order', 'POST', { item_id: it.id, qty: 100, option_id: o500.id, date: '2026-11-02' });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.deepEqual(st(), [0, 500]);
+  const pend = (await call(e, '/state')).data.orders.find(o => o.item_id === it.id && o.prepaid);
+  const a = await callId(e, '/receive', 'POST', { order_id: pend.id, actual_qty: 100, date: '2026-11-03' }, 'req-in-0001');
+  const b = await callId(e, '/receive', 'POST', { order_id: pend.id, actual_qty: 100, date: '2026-11-03' }, 'req-in-0001');
+  assert.equal(b.data.duplicate, true); assert.equal(b.data.tx_id, a.data.tx_id);
+  assert.deepEqual(st(), [100, 400]);
+  await callId(e, '/out', 'POST', { item_id: it.id, qty: 30, date: '2026-11-04' }, 'req-out-0001');
+  await callId(e, '/out', 'POST', { item_id: it.id, qty: 30, date: '2026-11-04' }, 'req-out-0001');
+  assert.deepEqual(st(), [70, 400]);
+  const out = e.inv.prepare(`SELECT id FROM inv_tx WHERE kind = 'out' AND item_id = ? AND deleted_at IS NULL`).all(it.id);
+  assert.equal(out.length, 1);
+  await call(e, `/tx/${out[0].id}`, 'DELETE');
+  assert.deepEqual(st(), [100, 400]);
+  // 결제는 처음 한 번만, 반입·출고는 0원
+  assert.equal((await call(e, '/report?month=2026-11')).data.spend_prepaid, o500.amount);
+});
+
+test('stock never goes below zero: out, deleting a paid prepaid record already brought in, and the database itself', async () => {
+  const e = env(); await call(e, '/state');
+  const it = item(e, '카프리가스');
+  await call(e, '/adjust', 'POST', { item_id: it.id, hospital_stock: 3, date: '2026-11-01' });
+  assert.equal((await call(e, '/out', 'POST', { item_id: it.id, qty: 4, date: '2026-11-02' })).status, 400);
+  assert.equal(item(e, '카프리가스').hospital_stock, 3);
+  const pp = item(e, '보관용 3종 시트팩');
+  const o300 = e.inv.prepare('SELECT id FROM inv_options WHERE item_id = ? AND prepaid = 1 AND qty = 300').get(pp.id);
+  await call(e, '/prepaid-order', 'POST', { item_id: pp.id, qty: 300, option_id: o300.id, date: '2026-11-06' });
+  const pend = (await call(e, '/state')).data.orders.find(o => o.item_id === pp.id && o.prepaid);
+  await call(e, '/receive', 'POST', { order_id: pend.id, actual_qty: 300, date: '2026-11-06' });
+  const buy = e.inv.prepare(`SELECT id FROM inv_tx WHERE kind = 'prepaid_buy' AND item_id = ?`).get(pp.id);
+  const del = await call(e, `/tx/${buy.id}`, 'DELETE');
+  assert.equal(del.status, 409); // 그대로 두면 선결제 잔량 −300이 됨
+  assert.equal(item(e, '보관용 3종 시트팩').vendor_stock, 0);
+  assert.throws(() => e.inv.prepare('UPDATE inv_items SET hospital_stock = -1 WHERE id = ?').run(it.id), /INV_NEGATIVE/);
+  // 이미 마이너스인 예전 값은 더 줄어들 때만 막음(다른 칸은 고칠 수 있음)
+  e.inv.exec('DROP TRIGGER inv_items_no_negative'); e.inv.prepare('UPDATE inv_items SET vendor_stock = -300 WHERE id = ?').run(pp.id);
+  e.inv.exec(`CREATE TRIGGER inv_items_no_negative BEFORE UPDATE OF hospital_stock, vendor_stock ON inv_items WHEN (NEW.hospital_stock < -0.0005 AND NEW.hospital_stock < OLD.hospital_stock) OR (NEW.vendor_stock < -0.0005 AND NEW.vendor_stock < OLD.vendor_stock) BEGIN SELECT RAISE(ABORT, 'INV_NEGATIVE'); END`);
+  assert.equal((await call(e, '/out', 'POST', { item_id: pp.id, qty: 1, date: '2026-11-07' })).status, 200);
+});
+
+test('editing a quantity applies only the difference, the payment stays', async () => {
+  const e = env(); await call(e, '/state');
+  const it = item(e, 'GA20%');
+  const r = await call(e, '/receive', 'POST', { item_id: it.id, actual_qty: 5, date: '2026-11-03' });
+  const h = item(e, 'GA20%').hospital_stock;
+  const amount = e.inv.prepare('SELECT amount FROM inv_tx WHERE id = ?').get(r.data.tx_id).amount;
+  assert.equal((await call(e, `/tx/${r.data.tx_id}`, 'PATCH', { actual_qty: 3 })).status, 200);
+  assert.equal(item(e, 'GA20%').hospital_stock, h - 2);
+  const t = e.inv.prepare('SELECT qty, hospital_delta, amount FROM inv_tx WHERE id = ?').get(r.data.tx_id);
+  assert.deepEqual([t.qty, t.hospital_delta, t.amount], [3, 3, amount]);
+  await call(e, '/out', 'POST', { item_id: it.id, qty: 1, date: '2026-11-04' });
+  const out = e.inv.prepare(`SELECT id FROM inv_tx WHERE kind = 'out' ORDER BY id DESC`).get();
+  await call(e, `/tx/${out.id}`, 'PATCH', { actual_qty: 2 });
+  assert.equal(item(e, 'GA20%').hospital_stock, h - 4);
+  assert.equal((await call(e, `/tx/${out.id}`, 'PATCH', { actual_qty: 99 })).status, 400);
+});
+
+test('daily record: 작성제외 on leader days off, 미작성 on work days, every save is kept with who and when', async () => {
+  const e = env(); await call(e, '/state');
+  e.inv.prepare(`INSERT INTO staff_attendance (staff_id, work_date, attendance) VALUES (1, '2026-11-03', '연차')`).run();
+  e.inv.prepare(`INSERT INTO staff_attendance (staff_id, work_date, attendance, start_time, end_time) VALUES (1, '2026-11-04', '정상근무', '10:00', '19:30')`).run();
+  assert.equal((await call(e, '/daily?date=2026-11-03')).data.record.state, 'skip');
+  assert.equal((await call(e, '/daily?date=2026-11-04')).data.record.state, 'missing');
+  assert.equal((await call(e, '/daily?date=2026-11-08')).data.record.state, 'skip'); // 일요일
+  await call(e, '/daily', 'POST', { date: '2026-11-04', patients: 10, used: {} });
+  await call(e, '/daily', 'POST', { date: '2026-11-04', patients: 12, used: {} });
+  const d = (await call(e, '/daily?date=2026-11-04')).data.record;
+  assert.equal(d.state, 'done');
+  assert.deepEqual(d.log.map(l => l.patients), [10, 12]);
+  assert.ok(d.first_at && d.first_by);
 });

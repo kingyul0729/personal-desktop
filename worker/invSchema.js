@@ -39,6 +39,18 @@ const INV_INVOICE_SCHEMA = [
   `CREATE INDEX IF NOT EXISTS inv_invoice_links_tx ON inv_invoice_links(tx_id)`,
 ];
 
+// 2026-11-09 사용자 문서(재고관리 최종 수정 1~23): 같은 요청을 두 번 받아도 한 번만 반영(inv_requests),
+// 일일재고 저장마다 기록을 남김(inv_daily_log: 기록 기준일·작성자·작성일시, 수정 전후 보존),
+// 재고가 0보다 적어지는 변경은 DB가 막음(이미 마이너스인 값은 더 줄어들 때만 막음 — 기존 기록은 건드리지 않음).
+const INV_GUARD_SCHEMA = [
+  `CREATE TABLE IF NOT EXISTS inv_requests (id TEXT PRIMARY KEY, path TEXT, response TEXT, created_at INTEGER)`,
+  `CREATE TABLE IF NOT EXISTS inv_daily_log (id INTEGER PRIMARY KEY, date TEXT NOT NULL, data TEXT, created_by TEXT, created_at INTEGER)`,
+  `CREATE INDEX IF NOT EXISTS inv_daily_log_date ON inv_daily_log(date)`,
+  `CREATE TRIGGER IF NOT EXISTS inv_items_no_negative BEFORE UPDATE OF hospital_stock, vendor_stock ON inv_items
+     WHEN (NEW.hospital_stock < -0.0005 AND NEW.hospital_stock < OLD.hospital_stock) OR (NEW.vendor_stock < -0.0005 AND NEW.vendor_stock < OLD.vendor_stock)
+     BEGIN SELECT RAISE(ABORT, 'INV_NEGATIVE'); END`,
+];
+
 // 재고 표(2026-11-08 새로 설계). 기록(inv_tx)마다 병원재고·업체재고 증감을 저장해 삭제 때 정확히 되돌린다.
 const INV_STOCK_SCHEMA = [
   `CREATE TABLE IF NOT EXISTS inv_vendors (id INTEGER PRIMARY KEY, name TEXT NOT NULL, company TEXT, category TEXT, manager TEXT, payment_method TEXT, contact TEXT, bank TEXT, account TEXT, holder TEXT, memo TEXT, sort INTEGER DEFAULT 0, active INTEGER NOT NULL DEFAULT 1)`,
@@ -82,8 +94,8 @@ export async function ensureInvSchema(db) {
   let ok = null;
   try { ok = await db.prepare(`SELECT value FROM inv_meta WHERE key = 'schema'`).first(); } catch { ok = null; }
   if (!ok) await db.exec(schemaSql());
-  else {
-    // 이미 만든 DB에 기준 자료 고침을 한 번씩 적용
+  {
+    // 기준 자료 고침을 한 번씩 적용(새 DB도 같은 길로 — 트리거는 exec 한 줄에 못 넣어서 여기서 만든다)
     let fixes = (await db.prepare(`SELECT value FROM inv_meta WHERE key = 'fixes'`).first())?.value || '';
     if (!fixes.includes('invoice1')) {
       // 이미 쓰던 DB에 명세서 사진 표만 더함(기존 자료는 그대로)
@@ -95,6 +107,12 @@ export async function ensureInvSchema(db) {
         db.prepare(`UPDATE inv_options SET amount = 450000 WHERE item_id = 1010 AND qty = 300 AND prepaid = 1 AND amount = 360000`),
         db.prepare(`INSERT OR REPLACE INTO inv_meta (key, value) VALUES ('fixes', ?)`).bind(`${fixes} opt300`.trim()),
       ]);
+      fixes = `${fixes} opt300`.trim();
+    }
+    if (!fixes.includes('guard1')) {
+      for (const q of INV_GUARD_SCHEMA) await db.prepare(q).run(); // 모두 IF NOT EXISTS라 중간에 끊겨도 다시 해도 됨
+      await db.prepare(`INSERT OR REPLACE INTO inv_meta (key, value) VALUES ('fixes', ?)`).bind(`${fixes} guard1`.trim()).run();
+      fixes = `${fixes} guard1`.trim();
     }
   }
   ready = db;

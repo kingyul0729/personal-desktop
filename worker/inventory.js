@@ -24,6 +24,7 @@ const num = v => (v === '' || v == null ? null : Number(v));
 const isNum = v => typeof v === 'number' && Number.isFinite(v);
 const round = v => Math.round(v * 1000) / 1000;
 const kstToday = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
+const fmtNum = v => String(round(v));
 const okDate = d => /^\d{4}-\d{2}-\d{2}$/.test(d || '');
 
 async function all(db, sql, ...args) { return (await db.prepare(sql).bind(...args).all()).results || []; }
@@ -34,7 +35,11 @@ async function itemsWithOptions(db) {
   const opts = await all(db, `SELECT * FROM inv_options WHERE active = 1 ORDER BY item_id, sort, id`);
   for (const it of items) it.options = opts.filter(o => o.item_id === it.id);
   const lastBuys = await all(db, `SELECT t.item_id, t.amount, t.qty, t.bonus_qty FROM inv_tx t WHERE t.deleted_at IS NULL AND t.kind = 'prepaid_buy' AND t.id = (SELECT max(id) FROM inv_tx x WHERE x.item_id = t.item_id AND x.kind = 'prepaid_buy' AND x.deleted_at IS NULL)`);
-  for (const it of items) it.unit_cost = it.prepaid ? unitCostOf(lastBuys.find(b => b.item_id === it.id)) : null;
+  for (const it of items) {
+    const b = it.prepaid ? lastBuys.find(x => x.item_id === it.id) : null;
+    it.unit_cost = b ? unitCostOf(b) : null; // 실질 취득단가(증정 포함)
+    it.paid_unit_cost = b && b.amount != null && b.qty > 0 && b.bonus_qty > 0 ? Math.round((b.amount / b.qty) * 100) / 100 : null; // 유상 구매단가(증정이 있을 때만 다름)
+  }
   return items;
 }
 
@@ -83,7 +88,9 @@ async function dailyCheck(db, date) {
   const att = lead?.attendance || null;
   const works = att === '정상근무' || (att === '기타' && lead?.etc_type === 'time');
   const label = works ? null : att ? (att === '상담' ? '풀상담일' : att === '공휴일' ? '휴일' : att === '기타' ? '무급' : `팀장 ${att}`) : isRedDay(date) ? '휴일' : '팀장 근태 미입력';
-  return { ok: works, label };
+  // 작성제외(2026-11-09 사용자 문서 17번): 팀장 휴무·연차·상담·병원휴무·휴일, 빨간 날. 미기록·근태 미입력은 작성 대상.
+  const skip = !works && (isRedDay(date) || ['휴무', '연차', '상담', '병원휴무', '휴일', '공휴일'].includes(att));
+  return { ok: works, label, skip };
 }
 
 // ── 거래명세서 사진(2026-11-09 사용자 지정) ──
@@ -143,6 +150,24 @@ export async function handleInventory(request, env, url, user) {
   await ensureInvSchema(db);
   const path = url.pathname.slice('/api/inventory'.length) || '/';
   const m = request.method;
+  // 같은 요청 두 번 받기 방지(2026-11-09 사용자 문서 8번): 화면이 저장 한 번마다 고유 번호(x-req-id)를 붙인다.
+  // 같은 번호가 다시 오면(재시도·두 번 누름) 처음 결과만 돌려주고 재고·결제는 다시 바꾸지 않는다.
+  const reqId = m === 'GET' ? null : request.headers.get('x-req-id');
+  if (reqId && /^[\w-]{8,64}$/.test(reqId)) {
+    try { await db.prepare('INSERT INTO inv_requests (id, path, created_at) VALUES (?,?,?)').bind(reqId, `${m} ${path}`, Date.now()).run(); }
+    catch {
+      const seen = await one(db, 'SELECT response FROM inv_requests WHERE id = ?', reqId).catch(() => null);
+      return seen?.response ? json({ ...JSON.parse(seen.response), duplicate: true }) : bad('같은 요청을 처리하고 있어요. 잠시 뒤 다시 확인해 주세요.', 409);
+    }
+    const res = await inventoryRoute(request, env, url, user, db, path, m);
+    if (res.ok) await db.prepare('UPDATE inv_requests SET response = ? WHERE id = ?').bind((await res.clone().text()).slice(0, 4000), reqId).run().catch(() => undefined);
+    else await db.prepare('DELETE FROM inv_requests WHERE id = ?').bind(reqId).run().catch(() => undefined);
+    return res;
+  }
+  return inventoryRoute(request, env, url, user, db, path, m);
+}
+
+async function inventoryRoute(request, env, url, user, db, path, m) {
   if (m === 'POST' && path === '/invoices') return uploadInvoice(request, env, db, user);
   if (m === 'GET' && /^\/invoices\/\d+\/file$/.test(path)) return invoiceFile(env, db, Number(path.split('/')[2]));
   const body = m === 'GET' ? {} : await request.json().catch(() => ({}));
@@ -178,7 +203,7 @@ export async function handleInventory(request, env, url, user) {
       if (m === 'GET') return json({ imported: done?.value || null });
       if (done) return bad('예전 자료는 이미 넣었어요.', 409);
       if (body.step === 'start') {
-        await db.batch(INV_TABLES.map(t => db.prepare(`DELETE FROM ${t}`)));
+        await db.batch([...INV_TABLES, 'inv_daily_log'].map(t => db.prepare(`DELETE FROM ${t}`)));
         await db.prepare(`INSERT OR REPLACE INTO inv_meta (key, value) VALUES ('import_started', ?)`).bind(new Date().toISOString()).run();
         return json({ ok: true });
       }
@@ -402,6 +427,7 @@ export async function handleInventory(request, env, url, user) {
       if (!item) return bad('품목을 찾을 수 없어요.', 404);
       const qty = num(body.qty);
       if (!(qty > 0)) return bad('출고 수량을 입력해 주세요.');
+      if (qty > round(item.hospital_stock || 0)) return bad(`병원재고(${round(item.hospital_stock || 0)} ${item.stock_unit})보다 많이 출고할 수 없어요.`);
       const date = okDate(body.date) ? body.date : kstToday();
       await db.batch(txStatements(db, item, { date, kind: 'out', qty, hospital_delta: -qty, memo: body.memo, by: user }));
       return json({ ok: true });
@@ -423,6 +449,13 @@ export async function handleInventory(request, env, url, user) {
     if (m === 'DELETE' && path.startsWith('/tx/')) {
       const tx = await one(db, 'SELECT * FROM inv_tx WHERE id = ? AND deleted_at IS NULL', Number(path.split('/')[2]));
       if (!tx) return bad('기록을 찾을 수 없어요.', 404);
+      // 지우면 재고가 0보다 적어지는 기록은 지우지 않는다(예: 이미 병원으로 반입한 선결제 구매 기록)
+      const cur = await loadItem(db, tx.item_id);
+      if (cur) {
+        const h = round(cur.hospital_stock - tx.hospital_delta), v = round(cur.vendor_stock - tx.vendor_delta);
+        if (v < 0 && tx.vendor_delta > 0) return bad(tx.kind === 'prepaid_buy' ? '이 결제로 산 수량이 이미 병원으로 반입돼서 지울 수 없어요. 반입 기록을 먼저 지워 주세요.' : '지우면 선결제 잔량이 0보다 적어져요.', 409);
+        if (h < 0 && tx.hospital_delta > 0) return bad('지우면 병원재고가 0보다 적어져요. 그 뒤 출고 기록을 먼저 확인해 주세요.', 409);
+      }
       const stmts = [
         db.prepare(`UPDATE inv_items SET hospital_stock = round(hospital_stock - ?, 3), vendor_stock = round(vendor_stock - ?, 3), updated_at = ? WHERE id = ?`).bind(tx.hospital_delta, tx.vendor_delta, Date.now(), tx.item_id),
         db.prepare('UPDATE inv_tx SET deleted_at = ?, deleted_by = ? WHERE id = ? AND deleted_at IS NULL').bind(Date.now(), user, tx.id),
@@ -461,8 +494,30 @@ export async function handleInventory(request, env, url, user) {
       return json({ ok: true });
     }
     if (m === 'PATCH' && path.startsWith('/tx/')) {
-      // 거래명세서 등록 여부·메모만 고친다(수량을 고치려면 지우고 다시 기록)
+      // 메모, 그리고 입고·출고·선결제 반입의 수량(2026-11-09 사용자 문서 7·8번): 고친 전후 차이만 재고에 반영, 결제금액은 그대로.
       const id = Number(path.split('/')[2]);
+      if (body.actual_qty != null) {
+        const tx = await one(db, 'SELECT * FROM inv_tx WHERE id = ? AND deleted_at IS NULL', id);
+        if (!tx) return bad('기록을 찾을 수 없어요.', 404);
+        if (!['in', 'out', 'prepaid_in'].includes(tx.kind) || tx.daily_date) return bad(tx.daily_date ? '일일 마감 소모는 일일재고에서 고쳐 주세요.' : '이 기록은 수량을 고칠 수 없어요.');
+        const actual = num(body.actual_qty);
+        if (!(actual > 0)) return bad('수량은 0보다 커야 해요.');
+        if (tx.kind === 'in' && actual < tx.bonus_qty) return bad(`증정 수량(${tx.bonus_qty})보다 적게 고칠 수 없어요.`);
+        const old = Math.abs(tx.hospital_delta);
+        const diff = round(actual - old);
+        if (!diff) return json({ ok: true, unchanged: true });
+        const item = await loadItem(db, tx.item_id);
+        const hd = tx.kind === 'out' ? -diff : diff, vd = tx.kind === 'prepaid_in' ? -diff : 0;
+        if (round(item.hospital_stock + hd) < 0) return bad(`병원재고(${round(item.hospital_stock)} ${item.stock_unit})가 모자라요.`);
+        if (round(item.vendor_stock + vd) < 0) return bad(`선결제 잔량(${round(item.vendor_stock)} ${item.stock_unit})보다 많이 받을 수 없어요.`);
+        const qty = tx.kind === 'in' ? round(actual - tx.bonus_qty) : actual;
+        await db.batch([
+          db.prepare(`UPDATE inv_items SET hospital_stock = round(hospital_stock + ?, 3), vendor_stock = round(vendor_stock + ?, 3), updated_at = ? WHERE id = ?`).bind(hd, vd, Date.now(), item.id),
+          db.prepare(`UPDATE inv_tx SET qty = ?, hospital_delta = round(hospital_delta + ?, 3), vendor_delta = round(vendor_delta + ?, 3), hospital_after = round(coalesce(hospital_after, 0) + ?, 3), vendor_after = round(coalesce(vendor_after, 0) + ?, 3),
+            memo = trim(coalesce(memo, '') || ' ' || ?) WHERE id = ? AND deleted_at IS NULL`).bind(qty, hd, vd, hd, vd, `(수량 ${fmtNum(old)}→${fmtNum(actual)} 수정 · ${user || ''})`.replace(' · )', ')'), id),
+        ]);
+        return json({ ok: true, diff });
+      }
       await db.prepare('UPDATE inv_tx SET invoice = coalesce(?, invoice), memo = coalesce(?, memo) WHERE id = ? AND deleted_at IS NULL')
         .bind(null, body.memo ?? null, id).run(); // 명세서 받음은 사진을 올려야만(2026-11-09 사용자)
       return json({ ok: true });
@@ -485,7 +540,15 @@ export async function handleInventory(request, env, url, user) {
       const since = new Date(Date.parse(date) - 14 * 864e5).toISOString().slice(0, 10);
       const recent = await all(db, `SELECT item_id, sum(qty) AS q FROM inv_tx WHERE deleted_at IS NULL AND kind = 'out' AND daily_date BETWEEN ? AND ? GROUP BY item_id`, since, date);
       const later = await stockAtDates(db, date);
-      return json({ date, check: await dailyCheck(db, date), patients_auto: await dailyPatientsAuto(db, date), day: day ? { ...day, extra: day.extra ? JSON.parse(day.extra) : {} } : null, items: items.map(it => ({ ...it, stock_at: round(it.hospital_stock - (later.get(it.id) || 0)), used: used.find(u => u.item_id === it.id)?.qty ?? null, used15: recent.find(r => r.item_id === it.id)?.q ?? 0 })) });
+      // 기록상태: 작성완료 / 작성제외 / 미작성(작성 대상인데 기록 없음). 작성일시·작성자는 저장 기록(inv_daily_log)에서.
+      const check = await dailyCheck(db, date);
+      const log = await all(db, 'SELECT id, data, created_by, created_at FROM inv_daily_log WHERE date = ? ORDER BY id', date);
+      const written = !!day || used.length > 0;
+      const record = { state: written ? 'done' : check.skip ? 'skip' : date <= kstToday() ? 'missing' : null,
+        first_at: log[0]?.created_at ?? day?.updated_at ?? null, first_by: log[0]?.created_by ?? day?.updated_by ?? null,
+        last_at: log.length ? log[log.length - 1].created_at : day?.updated_at ?? null, last_by: log.length ? log[log.length - 1].created_by : day?.updated_by ?? null,
+        log: log.map(l => ({ at: l.created_at, by: l.created_by, ...JSON.parse(l.data || '{}') })) };
+      return json({ date, record, check, patients_auto: await dailyPatientsAuto(db, date), day: day ? { ...day, extra: day.extra ? JSON.parse(day.extra) : {} } : null, items: items.map(it => ({ ...it, stock_at: round(it.hospital_stock - (later.get(it.id) || 0)), used: used.find(u => u.item_id === it.id)?.qty ?? null, used15: recent.find(r => r.item_id === it.id)?.q ?? 0 })) });
     }
     if (m === 'POST' && path === '/daily') {
       const date = okDate(body.date) ? body.date : null;
@@ -513,6 +576,7 @@ export async function handleInventory(request, env, url, user) {
         }
       }
       // 품목별 당일 사용량: 이전 마감 출고를 되돌리고 새 값으로 다시 기록(같은 batch)
+      const logUsed = {};
       for (const [id, raw] of Object.entries(used)) {
         const qty = num(raw);
         if (qty != null && (qty < 0 || !Number.isFinite(qty))) return bad('사용량은 0 이상이어야 해요.');
@@ -526,7 +590,11 @@ export async function handleInventory(request, env, url, user) {
         }
         if (back) { stmts.push(db.prepare('UPDATE inv_items SET hospital_stock = round(hospital_stock + ?, 3) WHERE id = ?').bind(round(back), item.id)); item = { ...item, hospital_stock: round(item.hospital_stock + back) }; }
         if (qty) stmts.push(...txStatements(db, item, { date, kind: 'out', qty, hospital_delta: -qty, daily_date: date, memo: '일일 마감 소모', by: user }));
+        if (qty || back || closing.some(([cid]) => Number(cid) === item.id)) logUsed[item.name] = { used: qty ?? 0, before: round(back), unit: item.stock_unit, ...(closing.some(([cid]) => Number(cid) === item.id) ? { left: num(Object.fromEntries(closing)[id]) } : {}) };
       }
+      // 저장할 때마다 기록을 하나 더 남긴다(덮어쓰지 않음): 기록 기준일·작성자·작성일시·그때 적은 숫자(수정 전후 비교)
+      stmts.push(db.prepare('INSERT INTO inv_daily_log (date, data, created_by, created_at) VALUES (?,?,?,?)')
+        .bind(date, JSON.stringify({ patients, memo: body.status || null, items: logUsed }), user, Date.now()));
       await db.batch(stmts);
       return json({ ok: true });
     }
@@ -544,6 +612,7 @@ export async function handleInventory(request, env, url, user) {
     }
     return bad('요청한 기능을 찾을 수 없어요.', 404);
   } catch (e) {
+    if (String(e?.message || e).includes('INV_NEGATIVE')) return bad('재고가 0보다 적어질 수 없어요. 먼저 재고를 확인해 주세요.', 409);
     return json({ error: '재고 자료를 처리하지 못했어요.', detail: String(e?.message || e).slice(0, 300) }, 500);
   }
 }

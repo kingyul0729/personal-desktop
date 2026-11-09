@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 export type InvOption = { id: number; item_id: number; label: string | null; qty: number; bonus_qty: number; amount: number | null; prepaid: number; unit_label?: string | null };
 export type InvItem = {
   id: number; name: string; vendor_id: number | null; vendor_name?: string | null; category: string | null; stock_unit: string; order_unit: string | null; pack_qty: number | null;
-  price: number | null; min_stock: number; hospital_stock: number; vendor_stock: number; daily_mode: 'usage' | 'count' | null; prepaid: number; is_pack: number; memo: string | null; options: InvOption[]; unit_cost?: number | null;
+  price: number | null; min_stock: number; hospital_stock: number; vendor_stock: number; daily_mode: 'usage' | 'count' | null; prepaid: number; is_pack: number; memo: string | null; options: InvOption[]; unit_cost?: number | null; paid_unit_cost?: number | null;
 };
 export type InvVendor = { id: number; name: string; company: string | null; category: string | null; manager: string | null; payment_method: string | null; contact: string | null; bank: string | null; account: string | null; holder: string | null; memo: string | null };
 export type InvOrder = { id: number; item_id: number; item_name: string; stock_unit: string; option_label: string | null; ordered_at: string; qty: number; bonus_qty: number; amount: number | null; prepaid: number; status: string; memo: string | null; received_qty?: number };
@@ -21,8 +21,20 @@ export const invGet = async (path: string, params: Record<string, string | numbe
   const q = new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined && v !== '').map(([k, v]) => [k, String(v)])).toString();
   return parse(await fetch(`/api/inventory${path}${q ? `?${q}` : ''}`, { cache: 'no-store' }));
 };
-export const invSend = async (method: 'POST' | 'DELETE' | 'PATCH', path: string, body?: unknown) =>
-  parse(await fetch(`/api/inventory${path}`, { method, headers: { 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) }));
+// 저장 한 번 = 고유 번호 하나(x-req-id). 같은 저장이 겹치면 하나만 보내고, 응답을 못 받으면 같은 번호로 한 번 더 물어 두 번 반영되지 않게 한다.
+const inflight = new Map<string, Promise<any>>();
+const newReqId = () => (globalThis.crypto?.randomUUID?.() || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`);
+export const invSend = (method: 'POST' | 'DELETE' | 'PATCH', path: string, body?: unknown) => {
+  const payload = body === undefined ? undefined : JSON.stringify(body);
+  const key = `${method} ${path} ${payload || ''}`;
+  const busy = inflight.get(key);
+  if (busy) return busy;
+  const id = newReqId();
+  const send = () => fetch(`/api/inventory${path}`, { method, headers: { 'Content-Type': 'application/json', 'x-req-id': id }, body: payload });
+  const p = (async () => { let res: Response; try { res = await send(); } catch { res = await send(); } return parse(res); })().finally(() => inflight.delete(key));
+  inflight.set(key, p);
+  return p;
+};
 
 // 거래명세서 사진 올리기(여러 기록에 한 장)
 export const invUploadInvoice = async (file: File, txIds: number[]) => {

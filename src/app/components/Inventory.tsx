@@ -50,7 +50,7 @@ export function StockCheck() {
   return <Shell toast={toast}>
     {!state.imported && <OldDataImport onDone={() => { announceInventory(); void reload(); }} />}
     <div className="iv-cards">
-      {prepaid.map(it => <div key={it.id} className="iv-card"><span>선결제 잔량</span><b>{it.name}</b><strong>{withUnit(it.vendor_stock, it.stock_unit)}</strong><small>병원재고 {withUnit(it.hospital_stock, it.stock_unit)}{it.unit_cost != null ? ` · 개당원가 ${it.unit_cost.toLocaleString('ko-KR')}원` : ''}</small></div>)}
+      {prepaid.map(it => <div key={it.id} className="iv-card"><span>선결제 잔량</span><b>{it.name}</b><strong>{withUnit(it.vendor_stock, it.stock_unit)}</strong><small>병원재고 {withUnit(it.hospital_stock, it.stock_unit)}{it.unit_cost != null ? ` · 개당원가 ${it.unit_cost.toLocaleString('ko-KR')}원` : ''}{it.paid_unit_cost != null ? ` · 유상단가 ${it.paid_unit_cost.toLocaleString('ko-KR')}원` : ''}</small></div>)}
       <div className={`iv-card${low.length ? ' is-warn' : ''}`}><span>위험 기준 이하</span><b>부족 품목</b><strong>{low.length}개</strong><small>{low.slice(0, 3).map(i => i.name).join(', ') || '없음'}{bring.length > 0 && ` · 반입 필요 ${bring.length}개`}</small></div>
     </div>
     <div className="sf-bar"><Seg label="보기" value={tab} onChange={setTab} options={[['daily', '일일 재고'], ['all', '전체 재고']]} /></div>
@@ -94,11 +94,15 @@ type DailyItem = { id: number; name: string; stock_unit: string; hospital_stock:
 // 일일재고(2026-11-08 사용자 지정): 언제든 기록·수정. 팀장이 출근한 날은 품목 방식대로(당일 사용량 또는 마감재고),
 // 팀장이 출근하지 않은 날(미입력·휴무·연차·상담·휴일)은 당일 사용량·모델링 사용 인원은 닫고 모든 품목 마감재고만 적는다.
 // 총 피부관리 인원·메모는 늘 열림. 못 센 날 생긴 차이는 따로 표시하지 않는다.
+type DailyRecord = { state: 'done' | 'missing' | 'skip' | null; first_at: number | null; first_by: string | null; last_at: number | null; last_by: string | null;
+  log: { at: number; by: string | null; patients: number | null; memo: string | null; items?: Record<string, { used: number; before: number; left?: number; unit: string }> }[] };
+const RECORD_LABEL = { done: '작성완료', missing: '미작성', skip: '작성제외' } as const;
+const fmtStamp = (ms: number) => { const d = new Date(ms); return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
 function DailyClose({ today, notify, onSaved }: { items: InvItem[]; today: string; notify: (m: string) => void; onSaved: () => void }) {
   const [date, setDate] = useState(today);
-  const [data, setData] = useState<{ check?: { ok: boolean; label: string | null }; patients_auto?: number | null; day: { patients: number | null; status: string | null; extra: Record<string, unknown> } | null; items: DailyItem[] } | null>(null);
+  const [data, setData] = useState<{ record?: DailyRecord; check?: { ok: boolean; label: string | null }; patients_auto?: number | null; day: { patients: number | null; status: string | null; extra: Record<string, unknown> } | null; items: DailyItem[] } | null>(null);
   const [patients, setPatients] = useState(''), [status, setStatus] = useState(''), [vals, setVals] = useState<Record<number, string>>({}), [people, setPeople] = useState('');
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState(false), [hist, setHist] = useState(false);
   const load = useCallback(async () => {
     const d = await invGet('/daily', { date });
     const off = d.check ? !d.check.ok : false;
@@ -139,9 +143,15 @@ function DailyClose({ today, notify, onSaved }: { items: InvItem[]; today: strin
         ? <input type="number" value={data.patients_auto} readOnly disabled aria-label="총 피부관리 인원(성과 관리 인원 합계)" />
         : <input type="number" min={0} inputMode="numeric" value={patients} onChange={e => setPatients(e.target.value)} placeholder="명" />}</label>
       <label className="sf-input"><span>메모(휴무 등)</span><input type="text" value={status} onChange={e => setStatus(e.target.value)} placeholder="선택" /></label>
-      <div className="iv-row-acts">{off && <span className="iv-tag iv-off-tag">{data.check?.label}</span>}
+      <div className="iv-row-acts">{data.record?.state && <span className={`iv-dstate is-${data.record.state}`}>{RECORD_LABEL[data.record.state]}</span>}
+        {off && <span className="iv-tag iv-off-tag">{data.check?.label}</span>}
+        {!!data.record?.log.length && <button type="button" className="sf-btn" onClick={() => setHist(true)}>이력 {data.record.log.length}</button>}
         <button type="button" className="sf-btn is-primary" disabled={busy} onClick={() => void save()}>{busy && <SavingMark />}저장</button></div>
     </div>
+    {hist && data.record && <Modal title={`${Number(date.slice(5, 7))}월 ${Number(date.slice(8))}일 일일재고 이력`} onClose={() => setHist(false)}>
+      <ul className="sf-list sf-log">{data.record.log.slice().reverse().map((l, i) => <li key={i}><b>{fmtStamp(l.at)}{l.by ? ` · ${l.by}` : ''}</b>
+        <span>{[l.patients != null ? `총 피부관리 인원 ${l.patients}명` : '', ...Object.entries(l.items || {}).map(([n, v]) => `${n} ${v.left != null ? `마감재고 ${fmtQty(v.left)} · ` : ''}사용 ${fmtQty(v.used)}${v.before ? ` (전 ${fmtQty(v.before)})` : ''} ${v.unit}`)].filter(Boolean).join(' · ') || '—'}</span></li>)}</ul>
+    </Modal>}
     <div className="iv-grid">{data.items.map(it => {
       const u = usedOf(it), before = it.stock_at + (it.used || 0), count = byCount(it);
       return <div key={it.id} className="iv-dcard">
@@ -282,6 +292,7 @@ function OrderBoard({ state, q, notify }: { state: InvState; q: string; notify: 
             {item.prepaid ? <div><dt>선결제 잔량</dt><dd>{withUnit(item.vendor_stock, item.stock_unit)}</dd></div> : null}
             <div><dt>최소재고</dt><dd>{item.min_stock > 0 ? withUnit(item.min_stock, item.stock_unit) : '—'}</dd></div>
             <div><dt>{item.prepaid ? '개당원가' : '구매단가'}</dt><dd>{item.prepaid ? (item.unit_cost != null ? `${item.unit_cost.toLocaleString('ko-KR')}원` : '—') : fmtWon(item.price)}</dd></div>
+            {item.paid_unit_cost != null ? <div><dt>유상단가</dt><dd>{item.paid_unit_cost.toLocaleString('ko-KR')}원</dd></div> : null}
           </dl>
           {item.prepaid ? <PrepaidOrder key={item.id} item={item} orders={state.orders} today={state.today} notify={notify} /> : <div className="iv-d-sec"><h4>구매조건</h4>
             <ul className="iv-d-opts">{item.options.map(o => <li key={o.id}>
@@ -632,6 +643,8 @@ function TxLog({ notify }: { notify: (m: string) => void }) {
   const [rows, setRows] = useState<InvTx[] | null>(null);
   const [ask, setAsk] = useState<InvTx | null>(null);
   const [inv, setInv] = useState<number | null>(null);
+  const [edit, setEdit] = useState<{ tx: InvTx; v: string } | null>(null);
+  const editable = (t: InvTx) => (t.kind === 'in' || t.kind === 'out' || t.kind === 'prepaid_in') && !t.daily_date;
   const load = useCallback(async () => {
     const k = kind === 'in' ? 'in,prepaid_buy,prepaid_in' : kind === 'out' ? 'out' : undefined;
     try { setRows((await invGet('/tx', { from: `${month}-01`, to: `${month}-31`, kind: k })).rows); } catch (e) { notify(errText(e)); setRows([]); }
@@ -648,7 +661,15 @@ function TxLog({ notify }: { notify: (m: string) => void }) {
         <td className="num">{fmtQty(t.qty)}{t.bonus_qty ? ` (+${fmtQty(t.bonus_qty)})` : ''} {t.stock_unit}</td><td className="num">{t.kind === 'out' || t.kind === 'prepaid_in' || t.kind === 'adjust' ? <small>—</small> : fmtWon(t.amount)}</td>
         <td className="num">{fmtQty(t.hospital_after)}</td>
         <td>{INVOICE_KINDS.includes(t.kind) ? <button type="button" className={`iv-inv-btn is-${invoiceState(t)}`} onClick={() => setInv(t.id)}>{INVOICE_LABEL[invoiceState(t)](t)}</button> : null}</td>
-        <td className="num"><button type="button" className="sf-btn" onClick={() => setAsk(t)}>삭제</button></td></tr>)}</tbody></table>}
+        <td className="num"><span className="iv-row-btns">{editable(t) && <button type="button" className="sf-btn" onClick={() => setEdit({ tx: t, v: String(Math.abs(t.hospital_delta)) })}>수정</button>}<button type="button" className="sf-btn" onClick={() => setAsk(t)}>삭제</button></span></td></tr>)}</tbody></table>}
+    {edit && <Modal title="수량 수정" onClose={() => setEdit(null)}>
+      <p>{Number(edit.tx.date.slice(5, 7))}월 {Number(edit.tx.date.slice(8))}일 {edit.tx.item_name} {KIND_LABEL[edit.tx.kind]}</p>
+      <label className="sf-input"><span>{edit.tx.kind === 'out' ? '출고 수량' : '받은 수량'}{edit.tx.bonus_qty ? ' (증정 포함)' : ''} ({edit.tx.stock_unit})</span><input type="number" min={0} inputMode="decimal" value={edit.v} onChange={e => setEdit({ ...edit, v: e.target.value })} /></label>
+      {(() => { const d = Math.round(((Number(edit.v) || 0) - Math.abs(edit.tx.hospital_delta)) * 1000) / 1000; const h = edit.tx.kind === 'out' ? -d : d;
+        return d ? <div className="iv-calc"><span>병원재고 <b>{h > 0 ? '+' : '−'}{fmtQty(Math.abs(h))}</b></span>{edit.tx.kind === 'prepaid_in' && <span>선결제 잔량 <b>{d > 0 ? '−' : '+'}{fmtQty(Math.abs(d))}</b></span>}</div> : null; })()}
+      <div className="sf-modal-foot"><button type="button" className="sf-btn" onClick={() => setEdit(null)}>취소</button>
+        <button type="button" className="sf-btn is-primary" disabled={!(Number(edit.v) > 0)} onClick={async () => { try { await invSend('PATCH', `/tx/${edit.tx.id}`, { actual_qty: Number(edit.v) }); notify('수량을 고쳤어요.'); setEdit(null); announceInventory(); void load(); } catch (e) { notify(errText(e)); } }}>저장</button></div>
+    </Modal>}
     {inv != null && rows && rows.find(r => r.id === inv) && <InvoiceDialog tx={rows.find(r => r.id === inv)!} rows={rows} notify={notify} onClose={() => setInv(null)} onChange={() => void load()} />}
     {ask && <Modal title="기록 삭제" onClose={() => setAsk(null)}>
       <p>{Number(ask.date.slice(5, 7))}월 {Number(ask.date.slice(8))}일 {ask.item_name} {KIND_LABEL[ask.kind]} {fmtQty(ask.qty)} {ask.stock_unit}</p>

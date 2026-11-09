@@ -2099,3 +2099,9 @@ input[type="date"]::-webkit-date-and-time-value, input[type="month"]::-webkit-da
 .iv-photo-pick { position: relative; display: inline-flex; align-items: center; height: var(--ui-h, 36px); padding: 0 12px; border: 1px dashed #c9d6e3; border-radius: 8px; background: #fff; color: #557591; font-size: 13px; font-weight: 600; white-space: nowrap; cursor: pointer; overflow: hidden; }
 .iv-photo-pick.is-on { border-style: solid; border-color: #557591; background: #ecf1f6; color: #44617c; }
 .iv-photo-pick input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+
+/* 입출고 내역 수정·삭제 버튼(2026-11-09) */
+.iv-row-btns { display: inline-flex; gap: 6px; justify-content: flex-end; }
+.iv-dstate { font-size: 12px; padding: 2px 10px; border-radius: 999px; border: 1px solid var(--line, #c9d6e3); color: #44617c; background: #ecf1f6; white-space: nowrap; }
+.iv-dstate.is-missing { color: #c2504a; background: #fbeceb; border-color: #f0cfcc; }
+.iv-dstate.is-skip { color: #7D838B; background: transparent; }

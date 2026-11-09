@@ -180,9 +180,9 @@ test('red days (sundays and 2026 public holidays) are clinic holidays on the sch
 test('daily stock: leader work day check is reported, and saving is allowed any day', async () => {
   const e = env(); await call(e, '/api/staff/list');
   const daily = async d => (await call(e, `/api/inventory/daily?date=${d}`)).data;
-  assert.deepEqual((await daily('2027-08-02')).check, { ok: false, label: '팀장 근태 미입력' });
+  assert.deepEqual((await daily('2027-08-02')).check, { ok: false, label: '팀장 근태 미입력', skip: false });
   await call(e, '/api/staff/attendance', { method: 'POST', body: { staff_id: 1, work_date: '2027-08-02', attendance: '휴무' } });
-  assert.deepEqual((await daily('2027-08-02')).check, { ok: false, label: '팀장 휴무' });
+  assert.deepEqual((await daily('2027-08-02')).check, { ok: false, label: '팀장 휴무', skip: true });
   // 팀장이 쉬는 날도 마감재고·총 피부관리 인원은 기록할 수 있다(화면이 당일 사용량만 닫음)
   const r = await call(e, '/api/inventory/daily', { method: 'POST', body: { date: '2027-08-02', patients: 5, used: {} } });
   assert.equal(r.status, 200);
