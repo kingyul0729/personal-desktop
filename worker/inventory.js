@@ -349,8 +349,7 @@ export async function handleInventory(request, env, url, user) {
       // 주문 없이 바로 받은 일반 입고: 금액을 안 넣으면 등록된 구매단가 × 수량(주문단위는 구성수량으로 환산). 단가 미확인이면 금액 없음.
       const item = await loadItem(db, body.item_id);
       if (!item) return bad('품목을 찾을 수 없어요.', 404);
-      // 선결제 품목도 돈이 안 나간 증정·무상 입고(0원)는 받을 수 있다(2026-11-09 사용자: 명세서의 0원 수드 페퍼민트 5kg). 금액이 있으면 선결제·반입으로.
-      if (item.prepaid && num(body.amount) !== 0) return bad('선결제 품목은 구매(재고주문의 선결제)와 반입(선결제 반입)으로 따로 처리해요. 증정·무상이면 결제금액 0으로 넣어 주세요.');
+      if (item.prepaid) return bad('선결제 품목은 구매(재고주문의 선결제)와 반입(선결제 반입)으로 따로 처리해요.');
       const bonus = num(body.bonus_qty) ?? 0;
       if (bonus < 0 || bonus > actual) return bad('증정 수량을 확인해 주세요.');
       let amount = num(body.amount);
