@@ -446,6 +446,7 @@ function Receive({ state, notify }: { state: InvState; notify: (m: string) => vo
   const [busy, setBusy] = useState('');
   const prepaidItems = state.items.filter(i => i.prepaid);
   const [pp, setPp] = useState({ item: '', qty: '' });
+  const [fixV, setFixV] = useState<string | null>(null); // 선결제 잔량 고치기(2026-11-09): 앱에 빠진 업체 잔량을 이 칸에서 바로 맞춤
   const [free, setFree] = useState({ item: '', qty: '', bonus: '', amount: '', memo: '' });
   const ppItem = prepaidItems.find(i => String(i.id) === pp.item);
   const freeItem = state.items.find(i => String(i.id) === free.item);
@@ -467,11 +468,18 @@ function Receive({ state, notify }: { state: InvState; notify: (m: string) => vo
     </section>
     {prepaidItems.length > 0 && <section className="iv-sec"><h3>선결제 반입</h3>
       <div className="iv-row">
-        <label className="sf-input"><span>품목</span><select value={pp.item} onChange={e => setPp({ item: e.target.value, qty: '' })}><option value="">선택</option>{prepaidItems.map(i => { const pend = state.orders.some(o => o.item_id === i.id && o.prepaid); return <option key={i.id} value={i.id} disabled={pend}>{i.name}{pend ? ' (반입 중)' : ''}</option>; })}</select></label>
+        <label className="sf-input"><span>품목</span><select value={pp.item} onChange={e => { setPp({ item: e.target.value, qty: '' }); setFixV(null); }}><option value="">선택</option>{prepaidItems.map(i => { const pend = state.orders.some(o => o.item_id === i.id && o.prepaid); return <option key={i.id} value={i.id} disabled={pend}>{i.name}{pend ? ' (반입 중)' : ''}</option>; })}</select></label>
         <label className="sf-input"><span>실제 도착 수량</span><input type="number" min={0} inputMode="decimal" value={pp.qty} onChange={e => setPp(x => ({ ...x, qty: e.target.value }))} placeholder={ppItem?.stock_unit} /></label>
         <label className="iv-check"><input type="checkbox" checked={!!invoice.pp} onChange={e => setInvoice(v => ({ ...v, pp: e.target.checked }))} /> 명세서 받음</label>
         <button type="button" className="sf-btn is-primary" disabled={!ppItem || !(ppQty > 0) || ppQty > (ppItem?.vendor_stock || 0) || busy === 'pp'} onClick={async () => { if (await run('pp', () => invSend('POST', '/receive', { from_prepaid: true, item_id: ppItem!.id, actual_qty: ppQty, date, invoice: invoice.pp }), '입고확정했어요. 선결제 잔량을 차감했어요.')) setPp({ item: pp.item, qty: '' }); }}>{busy === 'pp' && <SavingMark />}입고확정</button>
       </div>
+      {ppItem && (fixV == null
+        ? <div className="iv-fix-row"><button type="button" className="sf-btn" onClick={() => setFixV(String(ppItem.vendor_stock))}>잔량 고치기</button></div>
+        : <div className="iv-fix-row">
+          <label className="sf-input"><span>선결제 잔량 ({ppItem.stock_unit})</span><input type="number" min={0} inputMode="decimal" value={fixV} onChange={e => setFixV(e.target.value)} /></label>
+          <button type="button" className="sf-btn" onClick={() => setFixV(null)}>닫기</button>
+          <button type="button" className="sf-btn is-primary" disabled={fixV === '' || Number(fixV) < 0 || busy === 'fix'} onClick={async () => { if (await run('fix', () => invSend('POST', '/adjust', { item_id: ppItem.id, vendor_stock: Number(fixV), date, memo: '선결제 잔량 고치기' }), '선결제 잔량을 고쳤어요.')) setFixV(null); }}>{busy === 'fix' && <SavingMark />}저장</button>
+        </div>)}
       {ppItem && <div className="iv-calc"><span>선결제 잔량 <b>{withUnit(ppItem.vendor_stock, ppItem.stock_unit)}</b></span><span>→ 남는 잔량 <b className={ppQty > ppItem.vendor_stock ? 'is-warn' : ''}>{withUnit(Math.round((ppItem.vendor_stock - ppQty) * 1000) / 1000, ppItem.stock_unit)}</b></span><span>병원재고 {withUnit(ppItem.hospital_stock, ppItem.stock_unit)} → <b>{withUnit(ppItem.hospital_stock + ppQty, ppItem.stock_unit)}</b></span></div>}
     </section>}
     <section className="iv-sec"><h3>주문 없이 받은 것</h3>

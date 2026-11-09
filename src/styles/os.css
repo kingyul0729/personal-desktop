@@ -2072,3 +2072,6 @@ input[type="date"]::-webkit-date-and-time-value, input[type="month"]::-webkit-da
 .iv-inv-big a { color: #fff; font-size: 14px; font-weight: 600; }
 .iv-got { display: block; margin-top: 2px; font-size: 11.5px; color: #7d838b; font-weight: 500; }
 .sf-wrap .sf-table th { white-space: nowrap; }
+/* 선결제 반입 안 '잔량 고치기' 줄 */
+.iv-fix-row { display: flex; align-items: flex-end; gap: 8px; flex-wrap: wrap; }
+.iv-fix-row .sf-input { width: 180px; }
