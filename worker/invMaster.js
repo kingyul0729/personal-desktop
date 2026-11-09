@@ -28,7 +28,7 @@ export const ITEMS = [
   // ── 팩류: 일반 가격 규칙과 분리(박스/선결제 전용) ──
   [1010, '보관용 3종 시트팩', 4, '팩류', 'sheet', 'sheet', 1, null, 20, 'usage', 1, 1, [
     { label: '선결제 300장', qty: 300, bonus_qty: 0, amount: 450000, prepaid: 1 }, // 사용자 확인 2026-11-08: 원래 45만원(예전 앱 36만원은 잘못)
-    { label: '선결제 500장', qty: 500, bonus_qty: 0, amount: 500000, prepaid: 1 }], '선결제 품목: 결제 시 선결제 잔량 생성, 반입 시 잔량 차감'],
+    { label: '선결제 500장', qty: 500, bonus_qty: 0, amount: 500000, prepaid: 1 }], '선결제 품목: 결제 시 업체 보관 잔량 생성, 반입 시 잔량 차감'],
   [1005, '더마 하이드로 팩', 1, '팩류', 'sheet', 'box', 5, 21000, 5, 'usage', 0, 1, [{ label: '1박스(5장)', qty: 5, bonus_qty: 0, amount: 21000 }], null],
   [1004, '더마 리바이브 팩', 1, '팩류', 'sheet', 'box', 8, 25000, 8, 'usage', 0, 1, [{ label: '1박스(8장)', qty: 8, bonus_qty: 0, amount: 25000 }], null],
   [1011, '보관용 모델링팩', 4, '팩류', 'kg', 'kg', 1, null, 5, 'count', 1, 1, [

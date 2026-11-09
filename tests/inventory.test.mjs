@@ -260,7 +260,7 @@ test('prepaid order with a hospital delivery amount: stays in keep stock until t
   const v0 = it.vendor_stock;
   assert.deepEqual([item(e, '보관용 3종 시트팩').vendor_stock, item(e, '보관용 3종 시트팩').hospital_stock], [v0 + 500, it.hospital_stock]);
   const pend = (await call(e, '/state')).data.orders.filter(o => o.item_id === it.id);
-  assert.deepEqual(pend.map(o => [o.prepaid, o.qty, o.option_label]), [[1, 200, '반입 예정']]);
+  assert.deepEqual(pend.map(o => [o.prepaid, o.qty, o.option_label]), [[1, 200, '입고 예정']]);
   // 같은 물건을 선결제 반입으로 또 받는 건 막음
   assert.equal((await call(e, '/receive', 'POST', { from_prepaid: true, item_id: it.id, actual_qty: 10 })).status, 409);
   // 실제 180 도착 → 업체 −180, 병원 +180, 예정은 끝, 금액 없음

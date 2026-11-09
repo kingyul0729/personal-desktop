@@ -7,7 +7,7 @@ export type InvItem = {
   price: number | null; min_stock: number; hospital_stock: number; vendor_stock: number; daily_mode: 'usage' | 'count' | null; prepaid: number; is_pack: number; memo: string | null; options: InvOption[]; unit_cost?: number | null; paid_unit_cost?: number | null;
 };
 export type InvVendor = { id: number; name: string; company: string | null; category: string | null; manager: string | null; payment_method: string | null; contact: string | null; bank: string | null; account: string | null; holder: string | null; memo: string | null };
-export type InvOrder = { id: number; item_id: number; item_name: string; stock_unit: string; option_label: string | null; ordered_at: string; qty: number; bonus_qty: number; amount: number | null; prepaid: number; status: string; memo: string | null; received_qty?: number };
+export type InvOrder = { id: number; item_id: number; item_name: string; stock_unit: string; option_label: string | null; ordered_at: string; qty: number; bonus_qty: number; amount: number | null; prepaid: number; status: string; memo: string | null; received_qty?: number; contract_qty?: number | null; contract_amount?: number | null };
 export type InvTx = { id: number; date: string; kind: 'in' | 'out' | 'prepaid_buy' | 'prepaid_in' | 'adjust'; item_id: number; item_name: string; stock_unit: string; vendor_name: string | null; qty: number; bonus_qty: number; amount: number | null; hospital_delta: number; vendor_delta: number; hospital_after: number | null; vendor_after: number | null; invoice: number; memo: string | null; daily_date: string | null; source?: string | null; invoice_ids?: string | null };
 export type InvState = { today: string; imported: string | null; vendors: InvVendor[]; items: InvItem[]; orders: InvOrder[] };
 
@@ -59,7 +59,7 @@ export function useInventory() {
 
 export const fmtQty = (v: number | null | undefined) => (v == null ? '—' : Number.isInteger(v) ? v.toLocaleString('ko-KR') : (Math.round(v * 100) / 100).toLocaleString('ko-KR'));
 export const fmtWon = (v: number | null | undefined) => (v == null ? '단가 미확인' : `${Math.round(v).toLocaleString('ko-KR')}원`);
-export const KIND_LABEL: Record<string, string> = { in: '입고', out: '출고', prepaid_buy: '선결제 구매', prepaid_in: '선결제 반입', adjust: '재고 맞추기' };
+export const KIND_LABEL: Record<string, string> = { in: '입고', out: '출고', prepaid_buy: '선결제 구매', prepaid_in: '선결제 입고', adjust: '재고 맞추기' };
 export const todayLocal = () => { const n = new Date(); return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`; };
 export const shiftMonth = (month: string, by: number) => { const d = new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)) - 1 + by, 1)); return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`; };
 export const unitHint = (it: InvItem) => (it.order_unit && it.pack_qty && it.order_unit !== it.stock_unit ? `1 ${it.order_unit} = ${fmtQty(it.pack_qty)} ${it.stock_unit}` : '');

@@ -2146,3 +2146,10 @@ input[type="date"]::-webkit-date-and-time-value, input[type="month"]::-webkit-da
 .iv-open input { width: 96px; height: 30px; text-align: right; font: inherit; font-size: 13px; color: #2D3136; border: 1px solid #e1e4e8; border-radius: 8px; padding: 0 8px; background: #fff; }
 .iv-open input::placeholder { color: #2D3136; opacity: 1; }
 .iv-open input:focus { outline: 2px solid #557591; outline-offset: -1px; }
+/* 선결제 입고 줄: 이번 입고 → 병원재고·업체 보관 잔량 변화(2026-11-09 사용자 '혼동되지 않도록') */
+.iv-recv-list li .iv-recv-calc { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; color: #7D838B; padding-top: 4px; }
+.iv-recv-calc b { color: #2D3136; }
+.iv-recv-calc b.is-warn { color: #c2504a; }
+.iv-recv-note { margin: 10px 0 0; font-size: 12.5px; line-height: 1.6; color: #7D838B; }
+.iv-pp-optwrap { display: flex; flex-direction: column; gap: 6px; }
+.iv-pp-optlabel { font-size: 12px; color: #7D838B; }

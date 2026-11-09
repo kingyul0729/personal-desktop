@@ -51,7 +51,7 @@ const INV_GUARD_SCHEMA = [
      BEGIN SELECT RAISE(ABORT, 'INV_NEGATIVE'); END`,
 ];
 
-// 재고 표(2026-11-08 새로 설계). 기록(inv_tx)마다 병원재고·업체재고 증감을 저장해 삭제 때 정확히 되돌린다.
+// 재고 표(2026-11-08 새로 설계). 기록(inv_tx)마다 병원재고·업체 보관 잔량 증감을 저장해 삭제 때 정확히 되돌린다.
 const INV_STOCK_SCHEMA = [
   `CREATE TABLE IF NOT EXISTS inv_vendors (id INTEGER PRIMARY KEY, name TEXT NOT NULL, company TEXT, category TEXT, manager TEXT, payment_method TEXT, contact TEXT, bank TEXT, account TEXT, holder TEXT, memo TEXT, sort INTEGER DEFAULT 0, active INTEGER NOT NULL DEFAULT 1)`,
   `CREATE TABLE IF NOT EXISTS inv_items (id INTEGER PRIMARY KEY, name TEXT NOT NULL, vendor_id INTEGER, category TEXT, stock_unit TEXT NOT NULL DEFAULT 'ea', order_unit TEXT, pack_qty REAL, price REAL, min_stock REAL DEFAULT 0,
@@ -117,7 +117,7 @@ export async function ensureInvSchema(db) {
       fixes = `${fixes} guard1`.trim();
     }
     if (!fixes.includes('negfix1')) {
-      // 2026-11-09 사용자 '일단 고쳐줘': 결제 기록이 지워져 선결제 잔량이 마이너스가 된 품목(보관용 3종 시트팩 −300)을 한 번 바로잡는다.
+      // 2026-11-09 사용자 '일단 고쳐줘': 결제 기록이 지워져 업체 보관 잔량이 마이너스가 된 품목(보관용 3종 시트팩 −300)을 한 번 바로잡는다.
       // 지운 선결제 구매 기록 중 그 마이너스를 정확히 메우는 것이 있으면 되살리고(지출도 돌아옴), 없으면 잔량만 0으로 맞추는 기록을 남긴다.
       const neg = (await db.prepare('SELECT id, vendor_stock, hospital_stock FROM inv_items WHERE vendor_stock < -0.0005').all()).results || [];
       for (const it of neg) {
@@ -129,7 +129,7 @@ export async function ensureInvSchema(db) {
         ]);
         else await db.batch([
           db.prepare(`INSERT INTO inv_tx (date, kind, item_id, qty, bonus_qty, amount, hospital_delta, vendor_delta, hospital_after, vendor_after, memo, created_by, created_at)
-            VALUES (date('now', '+9 hours'), 'adjust', ?, ?, 0, NULL, 0, ?, ?, 0, '선결제 잔량 고치기', 'system', ?)`).bind(it.id, gap, gap, it.hospital_stock, Date.now()),
+            VALUES (date('now', '+9 hours'), 'adjust', ?, ?, 0, NULL, 0, ?, ?, 0, '업체 보관 잔량 고치기', 'system', ?)`).bind(it.id, gap, gap, it.hospital_stock, Date.now()),
           db.prepare('UPDATE inv_items SET vendor_stock = 0, updated_at = ? WHERE id = ?').bind(Date.now(), it.id),
         ]);
       }

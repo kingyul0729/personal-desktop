@@ -1,18 +1,18 @@
-// 피부팀 재고 — 품목·거래처·구매조건·주문·입고·출고·선결제 잔량·일일 재고·월말/연말 보고.
+// 피부팀 재고 — 품목·거래처·구매조건·주문·입고·출고·업체 보관 잔량·일일 재고·월말/연말 보고.
 // 데이터는 팀 공용 D1(INV_DB). 사용자가 정한 규칙(2026-11-08):
 // - 일반 구매: 실제 병원에 들어온 수량만 병원재고 증가. 결제금액은 고른 구매조건 그대로. 증정은 결제금액 제외·재고 포함.
-// - 선결제: 결제 때 업체재고(선결제 잔량)를 만들고, 입고확정 때 잔량 차감 + 병원재고 증가를 한 번에(batch) 처리. 추가 결제 없음.
+// - 선결제: 결제 때 업체 보관 잔량를 만들고, 입고확정 때 잔량 차감 + 병원재고 증가를 한 번에(batch) 처리. 추가 결제 없음.
 //   구매와 반입은 다른 기록이다: 반입은 구매가 아니라 재고 위치 이동(업체 → 병원)이라 금액을 다시 계산하지 않는다.
 //   개당원가 = 실제 구매금액 ÷ 증정 포함 총수량.
-// - 일반 품목: 등록된 구매조건(가격표·증정조건)이 있으면 그대로, 없으면 구매단가 × 수량. 업체재고·선결제 잔량은 건드리지 않음.
+// - 일반 품목: 등록된 구매조건(가격표·증정조건)이 있으면 그대로, 없으면 구매단가 × 수량. 업체 보관 잔량·업체 보관 잔량은 건드리지 않음.
 // 핵심: 일반 품목은 기존 구매단가 기준으로 입고 처리하고, 선결제 품목은 최초 구매 시에만 결제 처리한다.
-//       이후 병원 반입은 업체재고에서 병원재고로 이동만 하며 구매금액은 다시 계산하지 않는다.
+//       이후 병원 반입은 업체 보관 잔량에서 병원재고로 이동만 하며 구매금액은 다시 계산하지 않는다.
 // - 선결제 주문 때 '병원 입고 수량'을 정하면(2026-11-09 사용자 지정) 그 수량은 반입 예정(inv_orders prepaid=1, status 'ordered',
-//   memo 'from:<선결제 주문 id>')으로만 남고 업체재고(선결제 잔량)에 그대로 있다. 실제 도착을 '입고확정'할 때 도착 수량만
-//   업체재고 − / 병원재고 + (기존 반입과 같은 prepaid_in). 예정보다 적게 와도 그 예정은 끝나고 나머지는 업체재고에 남는다.
-// - 출고: 병원재고만 재고단위로 차감. 금액·업체재고는 건드리지 않음.
+//   memo 'from:<선결제 주문 id>')으로만 남고 업체 보관 잔량에 그대로 있다. 실제 도착을 '입고확정'할 때 도착 수량만
+//   업체 보관 잔량 − / 병원재고 + (기존 반입과 같은 prepaid_in). 예정보다 적게 와도 그 예정은 끝나고 나머지는 업체 보관 잔량에 남는다.
+// - 출고: 병원재고만 재고단위로 차감. 금액·업체 보관 잔량는 건드리지 않음.
 // - 단위는 숫자만 비교하지 않고 품목에 등록된 구성수량(pack_qty: 주문단위 1개 = 재고단위 몇 개)으로 환산.
-// - 입고·출고 기록 삭제 = 그 기록이 바꾼 병원재고·업체재고를 정확히 되돌림(기록마다 증감값을 저장해 둠).
+// - 입고·출고 기록 삭제 = 그 기록이 바꾼 병원재고·업체 보관 잔량를 정확히 되돌림(기록마다 증감값을 저장해 둠).
 // - 단가 미확인 품목은 price=null 그대로(0원으로 바꾸지 않음).
 import { isRedDay } from './redDays.js';
 import { dailyPatientsAuto } from './staff.js';
@@ -115,7 +115,7 @@ async function uploadInvoice(request, env, db, user) {
   if (file.size > 15 * 1024 * 1024) return bad('15MB 이하 파일만 올릴 수 있어요.');
   if (!ids.length) return bad('명세서를 걸 기록을 골라 주세요.');
   const txs = await all(db, `SELECT id, kind FROM inv_tx WHERE deleted_at IS NULL AND id IN (${ids.map(() => '?').join(',')})`, ...ids);
-  if (txs.length !== ids.length || txs.some(t => !INVOICE_KINDS.includes(t.kind))) return bad('입고·선결제·반입 기록에만 명세서를 걸 수 있어요.');
+  if (txs.length !== ids.length || txs.some(t => !INVOICE_KINDS.includes(t.kind))) return bad('입고·선결제 기록에만 명세서를 걸 수 있어요.');
   const bytes = await file.arrayBuffer();
   const mime = fileType(bytes);
   if (!mime) return bad('사진(JPG·PNG·HEIC) 또는 PDF만 올릴 수 있어요.');
@@ -239,7 +239,8 @@ async function inventoryRoute(request, env, url, user, db, path, m) {
       const [vendors, items, orders] = await Promise.all([
         all(db, 'SELECT * FROM inv_vendors WHERE active = 1 ORDER BY sort, id'),
         itemsWithOptions(db),
-        all(db, `SELECT o.*, i.name AS item_name, i.stock_unit, (SELECT coalesce(sum(t.qty + t.bonus_qty), 0) FROM inv_tx t WHERE t.order_id = o.id AND t.deleted_at IS NULL AND t.kind = 'in') AS received_qty FROM inv_orders o JOIN inv_items i ON i.id = o.item_id WHERE o.status = 'ordered' ORDER BY o.ordered_at, o.id`),
+        all(db, `SELECT o.*, i.name AS item_name, i.stock_unit, (SELECT coalesce(sum(t.qty + t.bonus_qty), 0) FROM inv_tx t WHERE t.order_id = o.id AND t.deleted_at IS NULL AND t.kind = 'in') AS received_qty,
+          (SELECT p.qty + p.bonus_qty FROM inv_orders p WHERE o.memo = 'from:' || p.id) AS contract_qty, (SELECT p.amount FROM inv_orders p WHERE o.memo = 'from:' || p.id) AS contract_amount FROM inv_orders o JOIN inv_items i ON i.id = o.item_id WHERE o.status = 'ordered' ORDER BY o.ordered_at, o.id`),
       ]);
       return json({ today: kstToday(), imported: imported?.value || null, vendors, items, orders });
     }
@@ -297,9 +298,9 @@ async function inventoryRoute(request, env, url, user, db, path, m) {
 
     // ── 주문(발주): 등록된 구매조건 하나를 골라 그 결제금액·수량·증정을 그대로 적용 ──
     // ── 선결제 품목 주문(2026-11-09 사용자 지정 규칙) ──
-    // (사용자 문서의 '킵잔량' = 화면의 '선결제 잔량') 주문수량을 먼저 킵잔량(선결제 잔량 − 받기 전 반입 예정)에서 모두 쓰고, 모자랄 때만 신규 선결제 옵션 하나를 골라 한 번에 결제한다
-    // (부분 선결제·부분 결제 없음). 킵잔량만으로 되면 신규 선결제를 만들지 않는다.
-    // 주문 때는 킵잔량을 빼지 않는다(주문 후 킵잔량은 예상값). 실제 차감은 '입고확정' 때만: 킵잔량 − 실제 도착, 병원재고 + 실제 도착을 한 batch로.
+    // (사용자 문서의 '업체 보관 잔량' = 화면의 '업체 보관 잔량') 주문수량을 먼저 업체 보관 잔량(업체 보관 잔량 − 받기 전 반입 예정)에서 모두 쓰고, 모자랄 때만 신규 선결제 옵션 하나를 골라 한 번에 결제한다
+    // (부분 선결제·부분 결제 없음). 업체 보관 잔량만으로 되면 신규 선결제를 만들지 않는다.
+    // 주문 때는 업체 보관 잔량을 빼지 않는다(주문 후 업체 보관 잔량은 예상값). 실제 차감은 '입고확정' 때만: 업체 보관 잔량 − 실제 도착, 병원재고 + 실제 도착을 한 batch로.
     if (m === 'POST' && path === '/prepaid-order') {
       const item = await loadItem(db, body.item_id);
       if (!item) return bad('품목을 찾을 수 없어요.', 404);
@@ -313,9 +314,9 @@ async function inventoryRoute(request, env, url, user, db, path, m) {
       let opt = null;
       if (short > 0) {
         opt = await one(db, 'SELECT * FROM inv_options WHERE id = ? AND item_id = ? AND active = 1 AND prepaid = 1', Number(body.option_id), item.id);
-        if (!opt) return bad(`킵잔량이 ${short} ${item.stock_unit} 모자라요. 신규 선결제 옵션을 골라 주세요.`);
+        if (!opt) return bad(`업체 보관 잔량이 ${short} ${item.stock_unit} 모자라요. 신규 선결제 옵션을 골라 주세요.`);
         if (opt.qty + (opt.bonus_qty || 0) < short) return bad('고른 선결제 옵션으로도 모자라요. 더 큰 옵션을 골라 주세요.');
-      } else if (body.option_id) return bad('킵잔량으로 충분해서 신규 선결제가 필요 없어요.');
+      } else if (body.option_id) return bad('업체 보관 잔량으로 충분해서 신규 선결제가 필요 없어요.');
       // 결제 기록·주문 연결·반입 예정을 한 batch로(중간에 끊기거나 다른 요청이 끼어도 엉키지 않게)
       const stmts = [];
       if (opt) {
@@ -327,7 +328,7 @@ async function inventoryRoute(request, env, url, user, db, path, m) {
       }
       stmts.push(db.prepare(`INSERT INTO inv_orders (item_id, option_id, option_label, ordered_at, qty, bonus_qty, amount, prepaid, status, memo, created_by, created_at)
         VALUES (?,?,?,?,?,0,0,1,'ordered', CASE WHEN ? THEN 'from:' || (SELECT max(id) FROM inv_orders) ELSE 'keep' END, ?, ?)`)
-        .bind(item.id, opt?.id ?? null, '반입 예정', date, round(qty), opt ? 1 : 0, user, Date.now()));
+        .bind(item.id, opt?.id ?? null, '입고 예정', date, round(qty), opt ? 1 : 0, user, Date.now()));
       await db.batch(stmts);
       const newQty = opt ? round(opt.qty + (opt.bonus_qty || 0)) : 0;
       return json({ ok: true, keep, qty, after: round(keep + newQty - qty), option: opt?.label ?? null, new_amount: opt?.amount ?? 0, pay: opt?.amount ?? 0 });
@@ -343,7 +344,7 @@ async function inventoryRoute(request, env, url, user, db, path, m) {
       const u = optionUnits(item, opt);
       const qty = u.qty * count, bonus = u.bonus * count, amount = u.amount == null ? null : u.amount * count;
       if (opt.prepaid) {
-        // 선결제: 결제와 동시에 업체재고(선결제 잔량) 생성. 병원재고는 반입(입고확정) 때 늘어난다.
+        // 선결제: 결제와 동시에 업체 보관 잔량 생성. 병원재고는 반입(입고확정) 때 늘어난다.
         const ship = num(body.ship_qty) ?? 0;
         if (!isNum(ship) || ship < 0 || ship > qty + bonus) return bad(`병원 입고 수량은 0 ~ ${round(qty + bonus)} ${item.stock_unit} 사이로 적어 주세요.`);
         const stmts = [db.prepare(`INSERT INTO inv_orders (item_id, option_id, option_label, ordered_at, qty, bonus_qty, amount, prepaid, status, memo, created_by, created_at) VALUES (?,?,?,?,?,?,?,1,'paid',?,?,?)`)
@@ -351,7 +352,7 @@ async function inventoryRoute(request, env, url, user, db, path, m) {
         ...txStatements(db, item, { date, kind: 'prepaid_buy', qty, bonus_qty: bonus, amount, vendor_delta: qty + bonus, memo: body.memo || opt.label, by: user, invoice: 0 })];
         stmts.push(db.prepare(`UPDATE inv_tx SET order_id = (SELECT max(id) FROM inv_orders) WHERE id = (SELECT max(id) FROM inv_tx)`));
         if (ship > 0) stmts.push(db.prepare(`INSERT INTO inv_orders (item_id, option_id, option_label, ordered_at, qty, bonus_qty, amount, prepaid, status, memo, created_by, created_at) VALUES (?,?,?,?,?,0,0,1,'ordered','from:' || (SELECT max(id) FROM inv_orders),?,?)`)
-          .bind(item.id, opt.id, '반입 예정', date, round(ship), user, Date.now()));
+          .bind(item.id, opt.id, '입고 예정', date, round(ship), user, Date.now()));
         await db.batch(stmts); // 한 batch(한 트랜잭션)라 max(id)가 이 요청 것
         return json({ ok: true, prepaid: true, ship });
       }
@@ -371,7 +372,7 @@ async function inventoryRoute(request, env, url, user, db, path, m) {
 
     // ── 입고확정 ──
     // 일반 구매: 주문 1건을 받음(실제 도착 수량만 병원재고 +, 결제금액은 주문 그대로).
-    // 선결제 반입: 선결제 잔량 - 실제 수량, 병원재고 + 실제 수량을 한 batch로. 결제금액 0.
+    // 선결제 반입: 업체 보관 잔량 - 실제 수량, 병원재고 + 실제 수량을 한 batch로. 결제금액 0.
     if (m === 'POST' && path === '/receive') {
       const actual = num(body.actual_qty);
       if (!(actual > 0)) return bad('실제 도착 수량을 입력해 주세요.');
@@ -379,9 +380,9 @@ async function inventoryRoute(request, env, url, user, db, path, m) {
       if (body.from_prepaid) {
         const item = await loadItem(db, body.item_id);
         if (!item) return bad('품목을 찾을 수 없어요.', 404);
-        if (actual > round(item.vendor_stock || 0)) return bad(`선결제 잔량(${round(item.vendor_stock || 0)} ${item.stock_unit})보다 많이 받을 수 없어요.`);
+        if (actual > round(item.vendor_stock || 0)) return bad(`업체 보관 잔량(${round(item.vendor_stock || 0)} ${item.stock_unit})보다 많이 받을 수 없어요.`);
         // 같은 물건을 두 번 받지 않게: 받기 전 반입 예정이 있으면 그 줄에서 입고확정
-        if (await one(db, `SELECT id FROM inv_orders WHERE item_id = ? AND prepaid = 1 AND status = 'ordered'`, item.id)) return bad('받기 전 반입 예정이 있어요. 위 주문한 것 받기에서 입고확정해 주세요.', 409);
+        if (await one(db, `SELECT id FROM inv_orders WHERE item_id = ? AND prepaid = 1 AND status = 'ordered'`, item.id)) return bad('받기 전 입고 예정이 있어요. 위 주문한 것 받기에서 입고확정해 주세요.', 409);
         await db.batch(txStatements(db, item, { date, kind: 'prepaid_in', qty: actual, amount: 0, hospital_delta: actual, vendor_delta: -actual, memo: body.memo, by: user, invoice: 0 }));
         return json({ ok: true, item: await loadItem(db, item.id), tx_id: (await one(db, `SELECT max(id) AS id FROM inv_tx WHERE item_id = ? AND kind = 'prepaid_in'`, item.id)).id });
       }
@@ -393,10 +394,10 @@ async function inventoryRoute(request, env, url, user, db, path, m) {
         const seen = await one(db, 'SELECT count(*) AS n FROM inv_tx WHERE order_id = ?', order.id);
         const lock = db.prepare('INSERT INTO inv_requests (id, path, created_at) VALUES (?,?,?)').bind(`recv:${order.id}:${seen?.n || 0}`, 'receive-lock', Date.now());
         if (order.prepaid) {
-          // 선결제 반입 예정: 실제 도착 수량만 업체재고 → 병원재고로 옮긴다(금액 없음). 주문 수량보다 많이는 못 받음(오타 방지).
+          // 선결제 반입 예정: 실제 도착 수량만 업체 보관 잔량 → 병원재고로 옮긴다(금액 없음). 주문 수량보다 많이는 못 받음(오타 방지).
           const oq = round(order.qty + (order.bonus_qty || 0));
           if (actual > oq) return bad(`주문 수량(${oq} ${item.stock_unit})보다 많이 받을 수 없어요. 더 받으려면 주문을 하나 더 해 주세요.`);
-          if (actual > round(item.vendor_stock || 0)) return bad(`선결제 잔량(${round(item.vendor_stock || 0)} ${item.stock_unit})보다 많이 받을 수 없어요.`);
+          if (actual > round(item.vendor_stock || 0)) return bad(`업체 보관 잔량(${round(item.vendor_stock || 0)} ${item.stock_unit})보다 많이 받을 수 없어요.`);
           await db.batch([lock,
             db.prepare(`UPDATE inv_orders SET status = 'received', received_at = ? WHERE id = ? AND status = 'ordered'`).bind(date, order.id),
             ...txStatements(db, item, { date, kind: 'prepaid_in', qty: actual, amount: 0, hospital_delta: actual, vendor_delta: -actual, order_id: order.id, memo: body.memo, by: user, invoice: 0 }),
@@ -421,7 +422,7 @@ async function inventoryRoute(request, env, url, user, db, path, m) {
       // 주문 없이 바로 받은 일반 입고: 금액을 안 넣으면 등록된 구매단가 × 수량(주문단위는 구성수량으로 환산). 단가 미확인이면 금액 없음.
       const item = await loadItem(db, body.item_id);
       if (!item) return bad('품목을 찾을 수 없어요.', 404);
-      if (item.prepaid) return bad('선결제 품목은 구매(재고주문의 선결제)와 반입(선결제 반입)으로 따로 처리해요.');
+      if (item.prepaid) return bad('선결제 품목은 재고주문에서 주문한 뒤 받기에서 입고확정해 주세요.');
       const bonus = num(body.bonus_qty) ?? 0;
       if (bonus < 0 || bonus > actual) return bad('증정 수량을 확인해 주세요.');
       let amount = num(body.amount);
@@ -443,7 +444,7 @@ async function inventoryRoute(request, env, url, user, db, path, m) {
       return json({ ok: true });
     }
 
-    // ── 재고 맞추기(실사): 센 수량으로 병원재고·선결제 잔량을 맞추고 차이를 기록(삭제하면 되돌림) ──
+    // ── 재고 맞추기(실사): 센 수량으로 병원재고·업체 보관 잔량을 맞추고 차이를 기록(삭제하면 되돌림) ──
     if (m === 'POST' && path === '/adjust') {
       const item = await loadItem(db, body.item_id);
       if (!item) return bad('품목을 찾을 수 없어요.', 404);
@@ -463,7 +464,7 @@ async function inventoryRoute(request, env, url, user, db, path, m) {
       const cur = await loadItem(db, tx.item_id);
       if (cur) {
         const h = round(cur.hospital_stock - tx.hospital_delta), v = round(cur.vendor_stock - tx.vendor_delta);
-        if (v < 0 && tx.vendor_delta > 0) return bad(tx.kind === 'prepaid_buy' ? '이 결제로 산 수량이 이미 병원으로 반입돼서 지울 수 없어요. 반입 기록을 먼저 지워 주세요.' : '지우면 선결제 잔량이 0보다 적어져요.', 409);
+        if (v < 0 && tx.vendor_delta > 0) return bad(tx.kind === 'prepaid_buy' ? '이 결제로 산 수량이 이미 병원에 입고돼서 지울 수 없어요. 입고 기록을 먼저 지워 주세요.' : '지우면 업체 보관 잔량이 0보다 적어져요.', 409);
         if (h < 0 && tx.hospital_delta > 0) return bad('지우면 병원재고가 0보다 적어져요. 그 뒤 출고 기록을 먼저 확인해 주세요.', 409);
       }
       const stmts = [
@@ -519,7 +520,7 @@ async function inventoryRoute(request, env, url, user, db, path, m) {
         const item = await loadItem(db, tx.item_id);
         const hd = tx.kind === 'out' ? -diff : diff, vd = tx.kind === 'prepaid_in' ? -diff : 0;
         if (round(item.hospital_stock + hd) < 0) return bad(`병원재고(${round(item.hospital_stock)} ${item.stock_unit})가 모자라요.`);
-        if (round(item.vendor_stock + vd) < 0) return bad(`선결제 잔량(${round(item.vendor_stock)} ${item.stock_unit})보다 많이 받을 수 없어요.`);
+        if (round(item.vendor_stock + vd) < 0) return bad(`업체 보관 잔량(${round(item.vendor_stock)} ${item.stock_unit})보다 많이 받을 수 없어요.`);
         if (tx.order_id && tx.kind !== 'out') { // 주문으로 받은 기록은 주문 수량을 넘게 고치지 못함
           const o = await one(db, 'SELECT qty, bonus_qty FROM inv_orders WHERE id = ?', tx.order_id);
           const others = await one(db, `SELECT coalesce(sum(abs(hospital_delta)), 0) AS q FROM inv_tx WHERE deleted_at IS NULL AND order_id = ? AND id <> ? AND kind = ?`, tx.order_id, tx.id, tx.kind);
@@ -580,7 +581,7 @@ async function inventoryRoute(request, env, url, user, db, path, m) {
       // 마감재고로 적은 품목(2026-11-09 사용자): 실제로 센 수량이 그 날짜의 병원재고가 된다.
       // 마감 전 재고(마감일 기준 장부) − 마감재고 = 그날 바뀐 양. 못 적은 날(휴무·연차·상담 등)의 사용량을 나누거나 따로 빼지 않고,
       // 그 사이 입고·출고 기록은 그대로 둔 채 차이만 한 번 반영. 같은 날을 다시 저장하면 앞서 반영한 것을 되돌리고 새 값으로(중복 차감 없음).
-      // 업체재고(선결제 잔량)는 바꾸지 않는다.
+      // 업체 보관 잔량는 바꾸지 않는다.
       const used = { ...(body.used || {}) };
       const closing = Object.entries(body.closing || {}).filter(([, v]) => v !== '' && v != null);
       // 마감 전 재고 고침(2026-11-09 사용자 '월말 보고서 사용량까지 정확하게'): 그 날 시작 재고를 직접 적으면
