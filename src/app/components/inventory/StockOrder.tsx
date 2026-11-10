@@ -94,8 +94,10 @@ export function ReceiveHere({ item, orders, today, notify }: { item: InvItem; or
       const r = await fn() as { tx_id?: number } | undefined;
       const f = photo[key];
       if (f && r?.tx_id) {
-        try { await invUploadInvoice(f, [r.tx_id]); msg += ' 명세서 사진도 올렸어요.'; }
+        try { const up = await invUploadInvoice(f, [r.tx_id], true) as { linked?: number }; msg += (up?.linked || 1) > 1 ? ` 명세서 사진을 같은 날 같은 업체 ${up.linked}건에 올렸어요.` : ' 명세서 사진도 올렸어요.'; }
         catch (e) { msg += ` 사진은 못 올렸어요(${errText(e)}). 입출고 내역에서 다시 올려 주세요.`; }
+      } else if (r?.tx_id) { // 같은 날·같은 업체 명세서가 이미 있으면 거기에 함께
+        try { const j = await invSend('POST', '/invoices/join', { tx_id: r.tx_id }) as { linked?: boolean }; if (j?.linked) msg += ' 같은 날 명세서에 함께 걸었어요.'; } catch { /* 사진은 입출고 내역에서 */ }
       }
       setPhoto(v => ({ ...v, [key]: undefined }));
       notify(msg); announceInventory(); return true;

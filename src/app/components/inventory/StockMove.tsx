@@ -46,25 +46,35 @@ export const invoiceState = (t: InvTx): InvState2 => (photosOf(t).length ? 'phot
 export const INVOICE_LABEL: Record<InvState2, (t: InvTx) => string> = { photo: t => `사진 ${photosOf(t).length}`, paper: () => '받음', missing: () => '미등록', optional: () => '올리기' };
 
 export function InvoiceDialog({ tx, rows, notify, onClose, onChange }: { tx: InvTx; rows: InvTx[]; notify: (m: string) => void; onClose: () => void; onChange: () => void }) {
-  // 같은 날 다른 입고 기록도 같은 종이면 한 번에 걸 수 있게
-  const sameDay = rows.filter(r => r.date === tx.date && INVOICE_KINDS.includes(r.kind));
-  const [pick, setPick] = useState<number[]>([tx.id]);
+  // 명세서 한 장 = 같은 날·같은 업체 입고(2026-11-10 사용자 지정). 품목·수량은 기록마다 따로, 사진은 한 번만.
+  const group = rows.filter(r => r.date === tx.date && (r.vendor_id ?? 0) === (tx.vendor_id ?? 0) && INVOICE_KINDS.includes(r.kind));
+  const [pick, setPick] = useState<number[]>(() => group.filter(r => r.id === tx.id || !photosOf(r).length).map(r => r.id));
   const [busy, setBusy] = useState(false), [big, setBig] = useState<string | null>(null), [drop, setDrop] = useState<string | null>(null);
   const photos = photosOf(tx);
+  const others = [...new Set(group.filter(r => r.id !== tx.id).flatMap(photosOf))].filter(id => !photos.includes(id)); // 같은 묶음에 이미 올린 사진
+  const done = (m: string) => { notify(m); onChange(); announceInventory(); };
   const upload = async (file: File | undefined) => {
     if (!file) return; setBusy(true);
-    try { await invUploadInvoice(file, pick); notify(pick.length > 1 ? `명세서를 ${pick.length}건에 올렸어요.` : '명세서를 올렸어요.'); onChange(); announceInventory(); }
+    try { await invUploadInvoice(file, pick); done(pick.length > 1 ? `명세서를 ${pick.length}건에 올렸어요.` : '명세서를 올렸어요.'); }
     catch (e) { notify(errText(e)); } finally { setBusy(false); }
   };
-  const remove = async (id: string) => { try { await invSend('DELETE', `/invoices/${id}`); setDrop(null); notify('사진을 지웠어요.'); onChange(); announceInventory(); } catch (e) { notify(errText(e)); } };
-  return <Modal title={`${Number(tx.date.slice(5, 7))}/${Number(tx.date.slice(8))} ${tx.item_name} 명세서`} onClose={onClose}>
+  const join = async (id: string) => {
+    setBusy(true);
+    try { await invSend('POST', `/invoices/${id}/links`, { tx_ids: pick }); done(pick.length > 1 ? `같은 명세서에 ${pick.length}건을 걸었어요.` : '같은 명세서에 걸었어요.'); }
+    catch (e) { notify(errText(e)); } finally { setBusy(false); }
+  };
+  const remove = async (id: string) => { try { await invSend('DELETE', `/invoices/${id}`); setDrop(null); done('사진을 지웠어요.'); } catch (e) { notify(errText(e)); } };
+  return <Modal title={`${Number(tx.date.slice(5, 7))}/${Number(tx.date.slice(8))} ${tx.vendor_name || tx.item_name} 명세서`} onClose={onClose}>
     {photos.length > 0 && <ul className="iv-inv-photos">{photos.map(id => <li key={id}>
       <button type="button" className="iv-inv-thumb" onClick={() => setBig(id)} aria-label="크게 보기"><InvThumb id={id} /></button>
       {drop === id ? <span className="iv-inv-ask">지울까요? <button type="button" className="sf-btn is-danger" onClick={() => void remove(id)}>삭제</button><button type="button" className="sf-btn" onClick={() => setDrop(null)}>아니요</button></span>
         : <button type="button" className="sf-btn" onClick={() => setDrop(id)}>삭제</button>}</li>)}</ul>}
-    {sameDay.length > 1 && <fieldset className="iv-inv-rows"><legend>같은 명세서에 함께 걸 기록</legend>
-      {sameDay.map(r => <label key={r.id} className="iv-check"><input type="checkbox" checked={pick.includes(r.id)} disabled={r.id === tx.id} onChange={e => setPick(p => e.target.checked ? [...p, r.id] : p.filter(x => x !== r.id))} />
-        {r.item_name} · {KIND_LABEL[r.kind]} {fmtQty(r.qty)} {r.stock_unit}{(r.amount || 0) > 0 ? ` · ${fmtWon(r.amount)}` : ''}</label>)}</fieldset>}
+    {group.length > 1 && <fieldset className="iv-inv-rows"><legend>같은 명세서 · {group.length}건</legend>
+      {group.map(r => <label key={r.id} className="iv-check"><input type="checkbox" checked={pick.includes(r.id)} disabled={r.id === tx.id} onChange={e => setPick(p => e.target.checked ? [...p, r.id] : p.filter(x => x !== r.id))} />
+        {r.item_name} · {KIND_LABEL[r.kind]} {fmtQty(r.qty)} {r.stock_unit}{(r.amount || 0) > 0 ? ` · ${fmtWon(r.amount)}` : ''}{photosOf(r).length ? ' · 사진 있음' : ''}</label>)}</fieldset>}
+    {others.length > 0 && <ul className="iv-inv-photos">{others.map(id => <li key={id}>
+      <button type="button" className="iv-inv-thumb" onClick={() => setBig(id)} aria-label="크게 보기"><InvThumb id={id} /></button>
+      <button type="button" className="sf-btn is-primary" disabled={busy} onClick={() => void join(id)}>이 명세서에 걸기</button></li>)}</ul>}
     <div className="sf-modal-foot">
       <label className={`sf-btn is-primary iv-inv-up${busy ? ' is-busy' : ''}`}>{busy && <SavingMark />}사진 올리기
         <input type="file" accept="image/*,application/pdf" disabled={busy} onChange={e => { void upload(e.target.files?.[0]); e.currentTarget.value = ''; }} /></label>

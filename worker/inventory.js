@@ -108,16 +108,31 @@ function fileType(bytes) {
   if (b[0] === 0x25 && b[1] === 0x50 && b[2] === 0x44 && b[3] === 0x46) return 'application/pdf';
   return null;
 }
+// 명세서 한 장 = 같은 날·같은 업체 입고(2026-11-10 사용자 지정). 품목·수량은 기록마다 따로, 사진만 한 번. 업체나 날짜가 다르면 따로 올린다.
+async function txGroupInfo(db, ids) {
+  if (!ids.length) return [];
+  return all(db, `SELECT t.id, t.kind, t.date, coalesce(i.vendor_id, 0) AS vendor_id FROM inv_tx t JOIN inv_items i ON i.id = t.item_id WHERE t.deleted_at IS NULL AND t.id IN (${ids.map(() => '?').join(',')})`, ...ids);
+}
+const oneGroup = rows => rows.every(r => r.date === rows[0].date && r.vendor_id === rows[0].vendor_id);
+const SAME_GROUP_ERR = '같은 날·같은 업체 입고만 한 명세서로 묶을 수 있어요.';
+async function groupMates(db, tx) { // 같은 날·같은 업체의 다른 입고 기록
+  return all(db, `SELECT t.id FROM inv_tx t JOIN inv_items i ON i.id = t.item_id WHERE t.deleted_at IS NULL AND t.date = ? AND coalesce(i.vendor_id, 0) = ? AND t.kind IN ('in','prepaid_buy','prepaid_in') AND t.id <> ?`, tx.date, tx.vendor_id, tx.id);
+}
 async function uploadInvoice(request, env, db, user) {
   if (!env.BUCKET) return bad('파일 저장소가 연결되지 않았어요.', 503);
   const form = await request.formData().catch(() => null);
   const file = form?.get('file');
-  const ids = String(form?.get('tx_ids') || '').split(',').map(Number).filter(n => n > 0);
+  let ids = [...new Set(String(form?.get('tx_ids') || '').split(',').map(Number).filter(n => n > 0))];
   if (!(file && typeof file.arrayBuffer === 'function') || !file.size) return bad('사진을 골라 주세요.');
   if (file.size > 15 * 1024 * 1024) return bad('15MB 이하 파일만 올릴 수 있어요.');
   if (!ids.length) return bad('명세서를 걸 기록을 골라 주세요.');
-  const txs = await all(db, `SELECT id, kind FROM inv_tx WHERE deleted_at IS NULL AND id IN (${ids.map(() => '?').join(',')})`, ...ids);
+  const txs = await txGroupInfo(db, ids);
   if (txs.length !== ids.length || txs.some(t => !INVOICE_KINDS.includes(t.kind))) return bad('입고·선결제 기록에만 명세서를 걸 수 있어요.');
+  if (!oneGroup(txs)) return bad(SAME_GROUP_ERR);
+  if (form?.get('group') === '1') { // 입고확정과 함께 올린 사진: 같은 날·같은 업체에서 아직 사진 없는 기록에도 함께
+    const mates = await all(db, `SELECT t.id FROM inv_tx t JOIN inv_items i ON i.id = t.item_id WHERE t.deleted_at IS NULL AND t.date = ? AND coalesce(i.vendor_id, 0) = ? AND t.kind IN ('in','prepaid_buy','prepaid_in') AND NOT EXISTS (SELECT 1 FROM inv_invoice_links l WHERE l.tx_id = t.id)`, txs[0].date, txs[0].vendor_id);
+    ids = [...new Set([...ids, ...mates.map(r => r.id)])];
+  }
   const bytes = await file.arrayBuffer();
   const mime = fileType(bytes);
   if (!mime) return bad('사진(JPG·PNG·HEIC) 또는 PDF만 올릴 수 있어요.');
@@ -128,7 +143,7 @@ async function uploadInvoice(request, env, db, user) {
     const inv = await one(db, 'SELECT id FROM inv_invoices WHERE object_key = ?', key);
     await db.batch([...ids.map(id => db.prepare('INSERT OR IGNORE INTO inv_invoice_links (invoice_id, tx_id) VALUES (?, ?)').bind(inv.id, id)),
       ...ids.map(id => db.prepare('UPDATE inv_tx SET invoice = 1 WHERE id = ?').bind(id))]); // 사진이 올라가야 '명세서 받음'
-    return json({ ok: true, id: inv.id });
+    return json({ ok: true, id: inv.id, linked: ids.length });
   } catch (e) { await env.BUCKET.delete(key).catch(() => {}); throw e; }
 }
 async function invoiceFile(env, db, id) {
@@ -500,11 +515,24 @@ async function inventoryRoute(request, env, url, user, db, path, m) {
       await dropOrphanInvoices(env, db);
       return json({ ok: true });
     }
+    if (m === 'POST' && path === '/invoices/join') {
+      // 사진 없이 입고확정한 기록: 같은 날·같은 업체에 이미 올린 명세서가 딱 한 장이면 거기에 함께 건다
+      const [tx] = await txGroupInfo(db, [Number(body.tx_id) || 0]);
+      if (!tx || !INVOICE_KINDS.includes(tx.kind)) return json({ ok: true, linked: false });
+      const mates = await groupMates(db, tx);
+      const invs = mates.length ? await all(db, `SELECT DISTINCT invoice_id FROM inv_invoice_links WHERE tx_id IN (${mates.map(() => '?').join(',')})`, ...mates.map(r => r.id)) : [];
+      if (invs.length !== 1) return json({ ok: true, linked: false });
+      await db.batch([db.prepare('INSERT OR IGNORE INTO inv_invoice_links (invoice_id, tx_id) VALUES (?, ?)').bind(invs[0].invoice_id, tx.id), db.prepare('UPDATE inv_tx SET invoice = 1 WHERE id = ?').bind(tx.id)]);
+      return json({ ok: true, linked: true });
+    }
     if (m === 'POST' && /^\/invoices\/\d+\/links$/.test(path)) {
       // 이미 올린 사진을 같은 날 다른 기록에도 걸기
       const id = Number(path.split('/')[2]);
       const ids = (Array.isArray(body.tx_ids) ? body.tx_ids : []).map(Number).filter(n => n > 0);
       if (!ids.length) return bad('기록을 골라 주세요.');
+      const already = (await all(db, 'SELECT tx_id FROM inv_invoice_links WHERE invoice_id = ?', id)).map(r => r.tx_id);
+      const info = await txGroupInfo(db, [...new Set([...already, ...ids])]);
+      if (!oneGroup(info)) return bad(SAME_GROUP_ERR);
       await db.batch([...ids.map(t => db.prepare(`INSERT OR IGNORE INTO inv_invoice_links (invoice_id, tx_id) SELECT ?, id FROM inv_tx WHERE id = ? AND deleted_at IS NULL AND kind IN ('in','prepaid_buy','prepaid_in')`).bind(id, t)),
         ...ids.map(t => db.prepare('UPDATE inv_tx SET invoice = 1 WHERE id = ? AND EXISTS (SELECT 1 FROM inv_invoice_links WHERE tx_id = ?)').bind(t, t))]);
       return json({ ok: true });
@@ -522,6 +550,10 @@ async function inventoryRoute(request, env, url, user, db, path, m) {
         if (!okDate(date) || date > kstToday()) return bad('날짜를 확인해 주세요.');
         const err = await moveTxDate(db, tx, date, user);
         if (err) return bad(err);
+        // 날짜가 바뀌면 다른 날 기록과 같이 건 명세서에서는 빠짐(명세서 = 같은 날·같은 업체). 혼자 걸린 사진은 그대로.
+        const shared = date === tx.date ? [] : await all(db, 'SELECT invoice_id FROM inv_invoice_links l WHERE tx_id = ? AND EXISTS (SELECT 1 FROM inv_invoice_links l2 WHERE l2.invoice_id = l.invoice_id AND l2.tx_id <> l.tx_id)', id);
+        if (shared.length) await db.batch([...shared.map(r => db.prepare('DELETE FROM inv_invoice_links WHERE invoice_id = ? AND tx_id = ?').bind(r.invoice_id, id)),
+          db.prepare('UPDATE inv_tx SET invoice = CASE WHEN EXISTS (SELECT 1 FROM inv_invoice_links WHERE tx_id = ?) THEN 1 ELSE 0 END WHERE id = ?').bind(id, id)]);
         if (body.actual_qty == null) return json({ ok: true });
       }
       if (body.actual_qty != null) {
@@ -561,7 +593,7 @@ async function inventoryRoute(request, env, url, user, db, path, m) {
       const kind = url.searchParams.get('kind'), itemId = url.searchParams.get('item_id');
       // 병원재고 칸 = 그 날짜(같은 날은 기록 순서)까지의 재고. 저장할 때의 재고(hospital_after)는 늦게 적은 기록이면 그때 재고라 날짜와 안 맞아서(2026-11-10 사용자 '10/31 시트팩 맞아?') 지금 재고에서 그 뒤 기록을 빼서 다시 계산.
       const rows = await all(db, `SELECT t.*, round(i.hospital_stock - coalesce((SELECT sum(t2.hospital_delta) FROM inv_tx t2 WHERE t2.item_id = t.item_id AND t2.deleted_at IS NULL AND (t2.date > t.date OR (t2.date = t.date AND t2.id > t.id))), 0), 3) AS stock_asof,
-        i.name AS item_name, i.stock_unit, v.name AS vendor_name, (SELECT group_concat(l.invoice_id) FROM inv_invoice_links l WHERE l.tx_id = t.id) AS invoice_ids FROM inv_tx t JOIN inv_items i ON i.id = t.item_id LEFT JOIN inv_vendors v ON v.id = i.vendor_id
+        i.name AS item_name, i.stock_unit, i.vendor_id, v.name AS vendor_name, (SELECT group_concat(l.invoice_id) FROM inv_invoice_links l WHERE l.tx_id = t.id) AS invoice_ids FROM inv_tx t JOIN inv_items i ON i.id = t.item_id LEFT JOIN inv_vendors v ON v.id = i.vendor_id
         WHERE t.deleted_at IS NULL AND NOT (t.daily_date IS NOT NULL AND t.hospital_delta = 0) AND t.date BETWEEN ? AND ? ${kind ? `AND t.kind IN (${kind.split(',').map(() => '?').join(',')})` : ''} ${itemId ? 'AND t.item_id = ?' : ''}
         ORDER BY t.date DESC, t.id DESC LIMIT 500`, from, to, ...(kind ? kind.split(',') : []), ...(itemId ? [Number(itemId)] : []));
       return json({ rows });

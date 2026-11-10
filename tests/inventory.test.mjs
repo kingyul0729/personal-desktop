@@ -826,3 +826,37 @@ test('check: datefix2 puts the one November 300-sheet prepaid receipt on 11/6 on
   assert.deepEqual(rows.map(r => r.date), ['2026-11-06']);
   assert.equal(item(e, '보관용 3종 시트팩').hospital_stock, 306);
 });
+
+test('invoice = same day + same vendor: one photo for many items, other vendor or other day kept apart', async () => {
+  const e = env(); const objects = new Map();
+  e.BUCKET = { async put(k, v) { objects.set(k, v); }, async get(k) { return objects.has(k) ? { body: objects.get(k) } : null; }, async delete(k) { objects.delete(k); } };
+  await call(e, '/state');
+  const byVendor = e.inv.prepare(`SELECT vendor_id, group_concat(id) AS ids FROM inv_items WHERE vendor_id IS NOT NULL AND active = 1 AND id NOT IN (SELECT DISTINCT item_id FROM inv_options o JOIN inv_items i2 ON i2.id = o.item_id WHERE 0) GROUP BY vendor_id HAVING count(*) >= 2`).all();
+  const prepaid = new Set(e.inv.prepare(`SELECT id FROM inv_items WHERE vendor_stock > 0 OR id IN (SELECT item_id FROM inv_tx WHERE kind = 'prepaid_buy')`).all().map(r => r.id));
+  const vA = byVendor.map(v => ({ v: v.vendor_id, ids: v.ids.split(',').map(Number) })).find(v => v.ids.filter(i => !prepaid.has(i)).length >= 2);
+  const [a1, a2] = vA.ids.filter(i => !prepaid.has(i));
+  const b1 = e.inv.prepare(`SELECT id FROM inv_items WHERE vendor_id IS NOT NULL AND vendor_id <> ? AND active = 1`).all(vA.v).map(r => r.id).find(i => !prepaid.has(i));
+  const rcv = async (id, date) => { const r = await call(e, '/receive', 'POST', { item_id: id, actual_qty: 2, amount: 1000, date }); assert.equal(r.status, 200, JSON.stringify(r.data)); return r.data.tx_id; };
+  const t1 = await rcv(a1, '2026-10-21'), t2 = await rcv(a2, '2026-10-21'), tOther = await rcv(b1, '2026-10-21'), tLater = await rcv(a1, '2026-10-22');
+  const jpg = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3, 4, 5, 6, 7, 8]);
+  const up = async (ids, group) => { const fd = new FormData(); fd.append('file', new File([jpg], 'inv.jpg', { type: 'image/jpeg' })); fd.append('tx_ids', ids.join(',')); if (group) fd.append('group', '1');
+    const r = await handleApi(new Request('https://site.test/api/inventory/invoices', { method: 'POST', headers: authH(), body: fd }), e); return { status: r.status, data: await r.json() }; };
+  // 다른 업체·다른 날짜는 한 명세서로 못 묶음
+  assert.equal((await up([t1, tOther])).status, 400);
+  assert.equal((await up([t1, tLater])).status, 400);
+  // 입고확정과 함께 올린 사진(group): 같은 날·같은 업체 기록에만 함께, 품목·수량 기록은 각각 그대로
+  const g = await up([t1], true);
+  assert.equal(g.status, 200); assert.equal(g.data.linked, 2);
+  const links = id => e.inv.prepare('SELECT invoice_id FROM inv_invoice_links WHERE tx_id = ?').all(id).map(r => r.invoice_id);
+  assert.deepEqual(links(t1), [g.data.id]); assert.deepEqual(links(t2), [g.data.id]);
+  assert.deepEqual(links(tOther), []); assert.deepEqual(links(tLater), []);
+  assert.equal(e.inv.prepare(`SELECT count(*) AS n FROM inv_tx WHERE id IN (?, ?) AND qty = 2`).get(t1, t2).n, 2);
+  // 이미 올린 명세서에 다른 업체 기록을 거는 것도 막음
+  assert.equal((await call(e, `/invoices/${g.data.id}/links`, 'POST', { tx_ids: [tOther] })).status, 400);
+  // 사진 없이 같은 날·같은 업체 입고를 더 받으면 그 명세서에 함께
+  const t3 = await rcv(a2, '2026-10-21');
+  assert.equal((await call(e, '/invoices/join', 'POST', { tx_id: t3 })).data.linked, true);
+  assert.deepEqual(links(t3), [g.data.id]);
+  assert.equal((await call(e, '/invoices/join', 'POST', { tx_id: tOther })).data.linked, false);
+  assert.equal(objects.size, 1); // 사진은 한 번만
+});
