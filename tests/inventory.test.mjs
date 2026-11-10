@@ -771,3 +771,31 @@ test('user spec 11-10: skipped days change nothing, the next count sets hospital
   // 8 일일재고는 업체재고를 바꾸지 않음
   assert.equal(stock().vendor_stock, vendor);
 });
+
+test('check: back-dated 입고·출고 add/edit/delete keep a later count and the lead\'s usage (no double, no loss)', async () => {
+  const e = env(); await call(e, '/state');
+  const it = item(e, '더마 하이드로 팩'), st = () => item(e, '더마 하이드로 팩').hospital_stock;
+  await call(e, '/receive', 'POST', { item_id: it.id, actual_qty: 50, amount: 1000, date: '2026-11-01' });
+  // 11/6 실사: 사용 3, 마감재고 40(재고 차이 −7)
+  await call(e, '/daily', 'POST', { date: '2026-11-06', closing: { [it.id]: 40 }, opening: { [it.id]: 43 } });
+  assert.equal(st(), 40);
+  const day6 = async () => { const d = (await call(e, '/daily?date=2026-11-06')).data.items.find(x => x.id === it.id); return [d.stock_at, Math.round((d.used + (d.open_fix || 0)) * 1000) / 1000]; };
+  // 11/5에 받은 10개를 나중에 적음 → 11/6 센 40은 그대로, 사용 3도 그대로(두 번 더해지지 않음)
+  const r = await call(e, '/receive', 'POST', { item_id: it.id, actual_qty: 10, amount: 1000, date: '2026-11-05' });
+  assert.equal(st(), 40); assert.deepEqual(await day6(), [40, 3]);
+  // 그 입고 수량 10 → 12 수정 → 그대로
+  await call(e, `/tx/${r.data.tx_id}`, 'PATCH', { actual_qty: 12 });
+  assert.equal(st(), 40); assert.deepEqual(await day6(), [40, 3]);
+  // 지움 → 그대로
+  await call(e, `/tx/${r.data.tx_id}`, 'DELETE');
+  assert.equal(st(), 40); assert.deepEqual(await day6(), [40, 3]);
+  // 실사 뒤 날짜의 출고는 그대로 빠짐
+  await call(e, '/out', 'POST', { item_id: it.id, qty: 4, date: '2026-11-07' });
+  assert.equal(st(), 36); assert.deepEqual(await day6(), [40, 3]);
+  // 11/4 출고를 나중에 적음 → 11/6 센 40 그대로, 지금 36 그대로
+  await call(e, '/out', 'POST', { item_id: it.id, qty: 2, date: '2026-11-04' });
+  assert.equal(st(), 36); assert.deepEqual(await day6(), [40, 3]);
+  // 앞날(11/3)을 나중에 셈 → 11/6 사용 3은 그대로
+  await call(e, '/daily', 'POST', { date: '2026-11-03', closing: { [it.id]: 45 } });
+  assert.equal(st(), 36); assert.deepEqual(await day6(), [40, 3]);
+});
