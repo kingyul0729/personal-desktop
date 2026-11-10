@@ -14,7 +14,7 @@ function d1(sqlite) {
     async exec(sql) { sqlite.exec(sql); },
   };
 }
-function env() { const inv = new DatabaseSync(':memory:'); return { inv, INV_DB: d1(inv), DB: d1(new DatabaseSync(':memory:')) }; }
+function env(o = {}) { const inv = new DatabaseSync(':memory:'); return { inv, INV_DB: d1(inv), DB: d1(new DatabaseSync(':memory:')), SKIP_OLD_DAILY_FIX: !o.oldDailyFix }; }
 const authH = () => new Headers({ Origin: 'https://site.test', 'oai-authenticated-user-id': 'u1', 'oai-authenticated-user-email': 'u1@test.invalid' });
 async function call(e, path, method = 'GET', body) {
   const h = authH();
@@ -683,5 +683,40 @@ test('check: one-time datefix1 moves the 11/9 prepaid receipt of 3종 시트팩 
   const d = (await call(e, '/daily?date=2026-11-06')).data.items.find(x => x.id === it.id);
   assert.equal(d.stock_at, 290);
   resetInvSchemaCache(); await call(e, '/state'); // 두 번 돌지 않음
+  assert.equal(item(e, '보관용 3종 시트팩').hospital_stock, 290);
+});
+
+test('check: old app daily counts (dailyfix1) put each photo day exactly as written, once', async () => {
+  const e = env({ oldDailyFix: true }); await call(e, '/state');
+  e.inv.prepare(`UPDATE inv_items SET daily_mode = CASE WHEN name IN ('보관용 모델링팩','일회용해면') THEN 'count' ELSE 'usage' END WHERE name IN ('보관용 3종 시트팩','더마 하이드로 팩','더마 리바이브 팩','보관용 모델링팩','일회용해면')`).run();
+  e.inv.prepare(`UPDATE inv_items SET hospital_stock = 400 WHERE name IN ('보관용 3종 시트팩','더마 하이드로 팩','더마 리바이브 팩','보관용 모델링팩','일회용해면')`).run();
+  e.inv.prepare(`INSERT OR REPLACE INTO inv_meta (key, value) VALUES ('import', 'old-app-data.json')`).run(); // 예전 자료를 넣은 곳
+  for (let k = 0; k < 50; k++) await call(e, '/state'); // 요청마다 하루씩
+  const { OLD_DAILY_COUNTS } = await import('../worker/invDailyFix.js');
+  for (const day of OLD_DAILY_COUNTS) {
+    const d = (await call(e, `/daily?date=${day.d}`)).data;
+    for (const [name, [close, used]] of Object.entries(day.i)) {
+      const it = d.items?.find(x => x.name === name);
+      assert.ok(it, JSON.stringify(d.items?.map(x => x.name)) + JSON.stringify(Object.keys(d)));
+      assert.equal(it.stock_at, close, `${day.d} ${name}`);
+      if (used) assert.equal(Math.round((it.used + (it.open_fix || 0)) * 1000) / 1000, used, `${day.d} ${name} 사용량`);
+    }
+  }
+  const before = item(e, '보관용 3종 시트팩').hospital_stock;
+  await call(e, '/state'); assert.equal(item(e, '보관용 3종 시트팩').hospital_stock, before); // 두 번 안 함
+});
+
+test('check: dailyfix1 keeps a November count the team lead already wrote', async () => {
+  const e = env({ oldDailyFix: true }); await call(e, '/state');
+  const id = item(e, '보관용 3종 시트팩').id;
+  e.inv.prepare('UPDATE inv_items SET hospital_stock = 400 WHERE id = ?').run(id);
+  assert.equal((await call(e, '/daily', 'POST', { date: '2026-11-06', closing: { [id]: 290 }, opening: { [id]: 296 } })).status, 200);
+  e.inv.prepare(`INSERT OR REPLACE INTO inv_meta (key, value) VALUES ('import', 'old-app-data.json')`).run();
+  e.inv.prepare(`DELETE FROM inv_meta WHERE key = 'dailyfix1'`).run();
+  for (let k = 0; k < 50; k++) await call(e, '/state');
+  const d6 = (await call(e, '/daily?date=2026-11-06')).data.items.find(x => x.id === id);
+  const d31 = (await call(e, '/daily?date=2026-10-31')).data.items.find(x => x.id === id);
+  assert.equal(d31.stock_at, 26);
+  assert.equal(d6.stock_at, 290);
   assert.equal(item(e, '보관용 3종 시트팩').hospital_stock, 290);
 });

@@ -18,6 +18,7 @@ import { isRedDay } from './redDays.js';
 import { dailyPatientsAuto } from './staff.js';
 import { ensureInvSchema, INV_TABLES } from './invSchema.js';
 import { moveTxDate } from './invTxDate.js';
+import { OLD_DAILY_COUNTS } from './invDailyFix.js';
 
 const json = (body, status = 200) => Response.json(body, { status, headers: { 'cache-control': 'no-store' } });
 const bad = (error, status = 400) => json({ error }, status);
@@ -145,6 +146,43 @@ async function dropOrphanInvoices(env, db) {
   }
 }
 
+// 예전 앱 일일재고 46일을 사진 숫자 그대로 한 번 넣는다(2026-11-10 사용자 '다른데' — 마감재고가 빠져 날마다 재고가 사진과 달랐음).
+// 화면의 일일재고 저장과 같은 길(POST /daily: 마감재고 + 마감 전 재고 = 마감재고 + 사용량)을 날짜 순서대로. 11월에 직접 센 날은 그 수량 그대로 남는다.
+const oldDailyDone = new WeakSet(); // 이미 확인한 DB
+async function applyOldDailyCounts(request, env, url, db) {
+  if (oldDailyDone.has(db) || env.SKIP_OLD_DAILY_FIX) return;
+  const done = await one(db, `SELECT value FROM inv_meta WHERE key = 'dailyfix1'`).catch(() => null);
+  if (done) { oldDailyDone.add(db); return; }
+  const imported = await one(db, `SELECT value FROM inv_meta WHERE key = 'import'`).catch(() => null);
+  if (!imported) return; // 예전 앱 자료를 넣은 곳에서만
+  // D1은 요청 한 번에 쿼리 수가 정해져 있어 하루씩 나눠서(요청마다 한 날). 다른 요청과 겹치지 않게 날마다 잠금.
+  const next = Number((await one(db, `SELECT value FROM inv_meta WHERE key = 'dailyfix1_next'`).catch(() => null))?.value || 0);
+  if (next >= OLD_DAILY_COUNTS.length) {
+    await db.prepare(`INSERT OR REPLACE INTO inv_meta (key, value) VALUES ('dailyfix1', ?)`).bind(String(Date.now())).run();
+    oldDailyDone.add(db); return;
+  }
+  try { await db.prepare('INSERT INTO inv_requests (id, path, created_at) VALUES (?,?,?)').bind(`fix:dailyfix1:${next}`, 'dailyfix1', Date.now()).run(); }
+  catch { // 다른 요청이 이 날을 하고 있음 — 1분 넘게 끝나지 않았으면(중간에 끊김) 잠금을 풀어 다음 요청이 다시 하게
+    await db.prepare('DELETE FROM inv_requests WHERE id = ? AND created_at < ?').bind(`fix:dailyfix1:${next}`, Date.now() - 60000).run().catch(() => undefined);
+    return;
+  }
+  const day = OLD_DAILY_COUNTS[next];
+  const items = await all(db, 'SELECT id, name FROM inv_items');
+  const idOf = Object.fromEntries(items.map(i => [i.name, i.id]));
+  const row = await one(db, 'SELECT patients, status, extra FROM inv_daily WHERE date = ?', day.d);
+  const closing = {}, opening = {};
+  for (const [name, [close, used]] of Object.entries(day.i)) {
+    const id = idOf[name]; if (!id) continue;
+    closing[id] = close; if (used != null) opening[id] = close + used;
+  }
+  let extra = {}; try { extra = row?.extra ? JSON.parse(row.extra) : {}; } catch { /* */ }
+  const body = { date: day.d, patients: row ? row.patients : day.p, status: row?.status || null, extra, used: {}, closing, opening };
+  const req = new Request(url.origin + '/api/inventory/daily', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  const res = await inventoryRoute(req, env, new URL(req.url), '예전 앱 일일재고', db, '/daily', 'POST');
+  if (!res.ok) console.log('dailyfix1', day.d, await res.text());
+  await db.prepare(`INSERT OR REPLACE INTO inv_meta (key, value) VALUES ('dailyfix1_next', ?)`).bind(String(next + 1)).run();
+}
+
 export async function handleInventory(request, env, url, user) {
   const db = env.INV_DB;
   if (!db) return json({ error: '재고 데이터베이스가 연결되지 않았어요.', unavailable: true }, 503);
@@ -152,6 +190,7 @@ export async function handleInventory(request, env, url, user) {
   catch { return json({ error: '재고 자료를 잠시 불러오지 못했어요. 새로고침해 주세요.' }, 503); }
   const path = url.pathname.slice('/api/inventory'.length) || '/';
   const m = request.method;
+  await applyOldDailyCounts(request, env, url, db);
   // 같은 요청 두 번 받기 방지(2026-11-09 사용자 문서 8번): 화면이 저장 한 번마다 고유 번호(x-req-id)를 붙인다.
   // 같은 번호가 다시 오면(재시도·두 번 누름) 처음 결과만 돌려주고 재고·결제는 다시 바꾸지 않는다.
   const reqId = m === 'GET' ? null : request.headers.get('x-req-id');
