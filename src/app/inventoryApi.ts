@@ -50,7 +50,7 @@ export const announceInventory = () => listeners.forEach(fn => fn());
 let fixing: Promise<void> | null = null;
 export const finishOldFix = () => (fixing ??= (async () => {
   let worked = false;
-  for (let i = 0; i < 80; i++) {
+  for (let i = 0; i < 12; i++) {
     const r = await invGet('/fix-left').catch(() => ({ left: 0 }));
     if (!r.left) break;
     worked = true;
@@ -65,7 +65,7 @@ export function useInventory() {
     try { setState(await invGet('/state')); setError(null); }
     catch (e) { setError(e instanceof InvError ? e : new InvError('재고 자료를 불러오지 못했어요.')); }
   }, []);
-  useEffect(() => { void finishOldFix().then(load); listeners.add(load); return () => { listeners.delete(load); }; }, [load]);
+  useEffect(() => { void load(); void finishOldFix(); listeners.add(load); return () => { listeners.delete(load); }; }, [load]);
   return { state, error, reload: load };
 }
 

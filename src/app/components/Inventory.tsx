@@ -105,7 +105,6 @@ function DailyClose({ today, notify, onSaved }: { items: InvItem[]; today: strin
   const [patients, setPatients] = useState(''), [status, setStatus] = useState(''), [vals, setVals] = useState<Record<number, string>>({}), [people, setPeople] = useState('');
   const [busy, setBusy] = useState(false), [hist, setHist] = useState(false), [uses, setUses] = useState<Record<number, string>>({});
   const load = useCallback(async () => {
-    await finishOldFix();
     const d = await invGet('/daily', { date });
     setData(d); setPatients(d.day?.patients == null ? '' : String(d.day.patients)); setStatus(d.day?.status || ''); setPeople(d.day?.extra?.modeling_people == null ? '' : String(d.day.extra.modeling_people));
     // 이미 적은 날: 마감재고 칸에 그날 마감 수량(stock_at). 당일 사용량 칸은 마감 전 재고를 고친 날만 채우고(고친 값 − 마감재고),
@@ -114,7 +113,7 @@ function DailyClose({ today, notify, onSaved }: { items: InvItem[]; today: strin
     setVals(Object.fromEntries(d.items.map((it: DailyItem) => [it.id, it.used == null ? '' : String(it.stock_at)])));
     setUses(Object.fromEntries(d.items.map((it: DailyItem) => [it.id, it.used == null ? '' : String(Math.round(((it.used || 0) + (it.open_fix || 0)) * 1000) / 1000)])));
   }, [date]);
-  useEffect(() => { setData(null); load().catch(e => notify(errText(e))); }, [load, notify]);
+  useEffect(() => { setData(null); load().catch(e => notify(errText(e))); void finishOldFix(); }, [load, notify]);
   useEffect(() => subscribeInventory(() => { void load().catch(() => undefined); }), [load]);
   // 성과에 관리 인원을 적으면 총 피부관리 인원이 바뀌므로 다시 불러온다
   useEffect(() => { const on = () => { load().catch(() => undefined); }; window.addEventListener('staff-data-changed', on); return () => window.removeEventListener('staff-data-changed', on); }, [load]);
