@@ -154,7 +154,8 @@ async function invoiceFile(env, db, id) {
 }
 // 사진이 더 이상 어느 기록에도 걸려 있지 않으면 파일까지 지운다
 async function dropOrphanInvoices(env, db) {
-  const orphans = await all(db, 'SELECT id, object_key FROM inv_invoices WHERE id NOT IN (SELECT invoice_id FROM inv_invoice_links l JOIN inv_tx t ON t.id = l.tx_id WHERE t.deleted_at IS NULL)');
+  // 지우거나 취소한 기록의 명세서도 증빙으로 남긴다(2026-11-11 사용자). 어느 기록에도 안 걸린 사진(사진 삭제)만 파일까지 지움.
+  const orphans = await all(db, 'SELECT id, object_key FROM inv_invoices WHERE id NOT IN (SELECT invoice_id FROM inv_invoice_links)');
   for (const o of orphans) {
     await db.batch([db.prepare('DELETE FROM inv_invoice_links WHERE invoice_id = ?').bind(o.id), db.prepare('DELETE FROM inv_invoices WHERE id = ?').bind(o.id)]);
     if (env.BUCKET) await env.BUCKET.delete(o.object_key).catch(() => {});
@@ -256,7 +257,7 @@ async function inventoryRoute(request, env, url, user, db, path, m) {
       const [vendors, items, orders] = await Promise.all([
         all(db, 'SELECT * FROM inv_vendors WHERE active = 1 ORDER BY sort, id'),
         itemsWithOptions(db),
-        all(db, `SELECT o.*, i.name AS item_name, i.stock_unit, (SELECT coalesce(sum(t.qty + t.bonus_qty), 0) FROM inv_tx t WHERE t.order_id = o.id AND t.deleted_at IS NULL AND t.kind = 'in') AS received_qty,
+        all(db, `SELECT o.*, i.name AS item_name, i.stock_unit, (SELECT coalesce(sum(t.qty + t.bonus_qty), 0) FROM inv_tx t WHERE t.order_id = o.id AND t.deleted_at IS NULL AND t.cancelled_at IS NULL AND t.kind = 'in') AS received_qty,
           (SELECT p.qty + p.bonus_qty FROM inv_orders p WHERE o.memo = 'from:' || p.id) AS contract_qty, (SELECT p.amount FROM inv_orders p WHERE o.memo = 'from:' || p.id) AS contract_amount FROM inv_orders o JOIN inv_items i ON i.id = o.item_id WHERE o.status = 'ordered' ORDER BY o.ordered_at, o.id`),
       ]);
       return json({ today: kstToday(), imported: imported?.value || null, vendors, items, orders });
@@ -380,7 +381,7 @@ async function inventoryRoute(request, env, url, user, db, path, m) {
     if (m === 'POST' && /^\/orders\/\d+\/cancel$/.test(path)) {
       // 일부라도 받은 주문은 '취소' 대신 받은 만큼으로 마감(나머지가 안 오는 경우)
       const oid = Number(path.split('/')[2]);
-      const got = await one(db, `SELECT count(*) AS n FROM inv_tx WHERE deleted_at IS NULL AND order_id = ? AND kind IN ('in','prepaid_in')`, oid);
+      const got = await one(db, `SELECT count(*) AS n FROM inv_tx WHERE deleted_at IS NULL AND cancelled_at IS NULL AND order_id = ? AND kind IN ('in','prepaid_in')`, oid);
       const r = await db.prepare(`UPDATE inv_orders SET status = ?, received_at = CASE WHEN ? = 'closed' THEN ? ELSE received_at END WHERE id = ? AND status = 'ordered'`)
         .bind(got?.n ? 'closed' : 'cancelled', got?.n ? 'closed' : 'cancelled', kstToday(), oid).run(); // 손으로 마감한 주문은 'closed' — 도착 기록을 지워도 다시 열리지 않음
       if (!r.meta?.changes) return bad('취소할 주문을 찾을 수 없어요.', 404);
@@ -423,7 +424,7 @@ async function inventoryRoute(request, env, url, user, db, path, m) {
         }
         // 나눠서 도착(2026-11-09 사용자 지정): 도착할 때마다 그날 날짜로 따로 기록. 결제금액은 처음 받은 기록에 한 번만,
         // 다음 도착분은 0원. 주문 수량을 다 받을 때까지 주문은 '받기 전'에 남는다(남은 것이 안 오면 주문 줄에서 '마감').
-        const got = await one(db, `SELECT coalesce(sum(qty + bonus_qty), 0) AS q, count(*) AS n FROM inv_tx WHERE deleted_at IS NULL AND order_id = ? AND kind = 'in'`, order.id);
+        const got = await one(db, `SELECT coalesce(sum(CASE WHEN cancelled_at IS NULL THEN qty + bonus_qty ELSE 0 END), 0) AS q, count(*) AS n FROM inv_tx WHERE deleted_at IS NULL AND order_id = ? AND kind = 'in'`, order.id);
         const total = round(order.qty + (order.bonus_qty || 0)), left = round(total - (got?.q || 0));
         const first = !(got?.n > 0);
         if (actual > left) return bad(`남은 수량(${left} ${item.stock_unit})보다 많이 받을 수 없어요. 더 온 것은 '증정·행사로 받기'로 적어 주세요.`);
@@ -502,8 +503,29 @@ async function inventoryRoute(request, env, url, user, db, path, m) {
       // 지운 기록 뒤에 이미 센 마감재고가 있으면 그 수량이 그대로 남게(일일재고 기록 자체를 지울 때는 빼고)
       const keep = tx.daily_date ? [] : await keepCountStmts(db, tx.item_id, tx.date, -tx.hospital_delta, user);
       await db.batch(ordered(-tx.hospital_delta, stmts, keep));
-      await dropOrphanInvoices(env, db);
       return json({ ok: true, item: await loadItem(db, tx.item_id) });
+    }
+    if (m === 'POST' && /^\/tx\/\d+\/cancel$/.test(path)) {
+      // 입고 취소(2026-11-11 사용자 문서): 그 입고로 늘었던 재고만 되돌리고 기록·명세서·결제금액은 그대로 '취소' 상태로 보관.
+      // 선결제 입고는 업체 보관 잔량도 같은 수량 복구. 이미 취소한 기록은 다시 반영하지 않음. 뒤에 센 일일재고 수량은 그대로(keepCountStmts).
+      const tx = await one(db, 'SELECT * FROM inv_tx WHERE id = ? AND deleted_at IS NULL', Number(path.split('/')[2]));
+      if (!tx) return bad('기록을 찾을 수 없어요.', 404);
+      if (!['in', 'prepaid_in'].includes(tx.kind) || tx.daily_date) return bad('입고 기록만 취소할 수 있어요.');
+      if (tx.cancelled_at) return json({ ok: true, unchanged: true });
+      const reason = String(body.reason || '').trim().slice(0, 200);
+      if (!reason) return bad('취소 사유를 적어 주세요.');
+      const item = await loadItem(db, tx.item_id);
+      const hd = -tx.hospital_delta, vd = -tx.vendor_delta;
+      if (round(item.hospital_stock + hd) < 0) return bad(`병원재고(${round(item.hospital_stock)} ${item.stock_unit})가 모자라요. 그 뒤 출고 기록을 먼저 확인해 주세요.`, 409);
+      const now = Date.now();
+      const stmts = [
+        db.prepare(`UPDATE inv_items SET hospital_stock = round(hospital_stock + ?, 3), vendor_stock = round(vendor_stock + ?, 3), updated_at = ? WHERE id = ?`).bind(hd, vd, now, item.id),
+        db.prepare(`UPDATE inv_tx SET hospital_delta = 0, vendor_delta = 0, memo = trim(coalesce(memo, '') || ' ' || ?), cancelled_at = ?, cancelled_by = ?, cancel_reason = ?, updated_at = ?, updated_by = ? WHERE id = ? AND cancelled_at IS NULL`)
+          .bind(`(입고 취소 ${fmtNum(Math.abs(tx.hospital_delta))}→0)`, now, user, reason, now, user, tx.id),
+      ];
+      if (tx.order_id) stmts.push(db.prepare(`UPDATE inv_orders SET status = 'ordered', received_at = NULL WHERE id = ? AND status = 'received'`).bind(tx.order_id));
+      await db.batch(ordered(hd, stmts, await keepCountStmts(db, item.id, tx.date, hd, user)));
+      return json({ ok: true, item: await loadItem(db, item.id) });
     }
     if (m === 'DELETE' && /^\/invoices\/\d+$/.test(path)) {
       // 명세서 사진 지우기(걸린 기록 모두에서 빠짐)
@@ -550,6 +572,7 @@ async function inventoryRoute(request, env, url, user, db, path, m) {
         if (!okDate(date) || date > kstToday()) return bad('날짜를 확인해 주세요.');
         const err = await moveTxDate(db, tx, date, user);
         if (err) return bad(err);
+        if (date !== tx.date) await db.prepare('UPDATE inv_tx SET updated_at = ?, updated_by = ? WHERE id = ?').bind(Date.now(), user, id).run();
         // 날짜가 바뀌면 다른 날 기록과 같이 건 명세서에서는 빠짐(명세서 = 같은 날·같은 업체). 혼자 걸린 사진은 그대로.
         const shared = date === tx.date ? [] : await all(db, 'SELECT invoice_id FROM inv_invoice_links l WHERE tx_id = ? AND EXISTS (SELECT 1 FROM inv_invoice_links l2 WHERE l2.invoice_id = l.invoice_id AND l2.tx_id <> l.tx_id)', id);
         if (shared.length) await db.batch([...shared.map(r => db.prepare('DELETE FROM inv_invoice_links WHERE invoice_id = ? AND tx_id = ?').bind(r.invoice_id, id)),
@@ -559,6 +582,7 @@ async function inventoryRoute(request, env, url, user, db, path, m) {
       if (body.actual_qty != null) {
         const tx = await one(db, 'SELECT * FROM inv_tx WHERE id = ? AND deleted_at IS NULL', id);
         if (!tx) return bad('기록을 찾을 수 없어요.', 404);
+        if (tx.cancelled_at) return bad('취소한 입고는 수량을 고칠 수 없어요.');
         if (!['in', 'out', 'prepaid_in'].includes(tx.kind) || tx.daily_date) return bad(tx.daily_date ? '일일 마감 소모는 일일재고에서 고쳐 주세요.' : '이 기록은 수량을 고칠 수 없어요.');
         const actual = num(body.actual_qty);
         if (!(actual > 0)) return bad('수량은 0보다 커야 해요.');
@@ -580,12 +604,12 @@ async function inventoryRoute(request, env, url, user, db, path, m) {
         await db.batch(ordered(hd, [
           db.prepare(`UPDATE inv_items SET hospital_stock = round(hospital_stock + ?, 3), vendor_stock = round(vendor_stock + ?, 3), updated_at = ? WHERE id = ?`).bind(hd, vd, Date.now(), item.id),
           db.prepare(`UPDATE inv_tx SET qty = ?, hospital_delta = round(hospital_delta + ?, 3), vendor_delta = round(vendor_delta + ?, 3), hospital_after = round(coalesce(hospital_after, 0) + ?, 3), vendor_after = round(coalesce(vendor_after, 0) + ?, 3),
-            memo = trim(coalesce(memo, '') || ' ' || ?) WHERE id = ? AND deleted_at IS NULL`).bind(qty, hd, vd, hd, vd, `(수량 ${fmtNum(old)}→${fmtNum(actual)} 수정 · ${user || ''})`.replace(' · )', ')'), id),
+            memo = trim(coalesce(memo, '') || ' ' || ?), updated_at = ?, updated_by = ? WHERE id = ? AND deleted_at IS NULL`).bind(qty, hd, vd, hd, vd, `(수량 ${fmtNum(old)}→${fmtNum(actual)} 수정 · ${user || ''})`.replace(' · )', ')'), Date.now(), user, id),
         ], await keepCountStmts(db, item.id, tx.date, hd, user)));
         return json({ ok: true, diff });
       }
-      await db.prepare('UPDATE inv_tx SET invoice = coalesce(?, invoice), memo = coalesce(?, memo) WHERE id = ? AND deleted_at IS NULL')
-        .bind(null, body.memo ?? null, id).run(); // 명세서 받음은 사진을 올려야만(2026-11-09 사용자)
+      if (body.memo != null) await db.prepare('UPDATE inv_tx SET memo = ?, updated_at = ?, updated_by = ? WHERE id = ? AND deleted_at IS NULL')
+        .bind(body.memo, Date.now(), user, id).run(); // 명세서 받음은 사진을 올려야만(2026-11-09 사용자)
       return json({ ok: true });
     }
     if (m === 'GET' && path === '/tx') {
@@ -728,7 +752,7 @@ async function monthReport(db, month, brief = false) {
   const spend = await one(db, `SELECT
       coalesce(sum(CASE WHEN kind = 'in' THEN amount END), 0) AS general,
       coalesce(sum(CASE WHEN kind = 'prepaid_buy' THEN amount END), 0) AS prepaid,
-      sum(CASE WHEN kind IN ('in','prepaid_in') THEN 1 ELSE 0 END) AS in_count,
+      sum(CASE WHEN kind IN ('in','prepaid_in') AND cancelled_at IS NULL THEN 1 ELSE 0 END) AS in_count,
       sum(CASE WHEN kind IN ('in','prepaid_buy') AND amount > 0 AND invoice = 0 AND NOT EXISTS (SELECT 1 FROM inv_invoice_links l WHERE l.tx_id = inv_tx.id) THEN 1 ELSE 0 END) AS no_invoice,
       sum(CASE WHEN kind = 'in' AND amount IS NULL THEN 1 ELSE 0 END) AS no_amount
     FROM inv_tx WHERE deleted_at IS NULL AND date BETWEEN ? AND ?`, from, to);
@@ -743,7 +767,7 @@ async function monthReport(db, month, brief = false) {
     usage: usage.map(u => ({ ...u, used: round(u.used), per_day: openDays ? Math.round((u.used / openDays) * 10) / 10 : null })),
   };
   if (brief) return out;
-  out.inbound = await all(db, `SELECT t.date, t.kind, t.qty, t.bonus_qty, t.amount, t.invoice, t.memo, i.name AS item_name, i.stock_unit, v.name AS vendor_name, v.payment_method
+  out.inbound = await all(db, `SELECT t.date, t.kind, t.qty, t.bonus_qty, t.amount, t.invoice, t.memo, t.cancelled_at, t.cancel_reason, v.bank, v.account, v.holder, i.name AS item_name, i.stock_unit, v.name AS vendor_name, v.payment_method
     FROM inv_tx t JOIN inv_items i ON i.id = t.item_id LEFT JOIN inv_vendors v ON v.id = i.vendor_id
     WHERE t.deleted_at IS NULL AND t.kind IN ('in','prepaid_buy','prepaid_in') AND t.date BETWEEN ? AND ? ORDER BY t.date, t.id`, from, to);
   // 지난달 보고서의 재고·업체 보관 잔량은 그 달 말 기준(지금 재고 − 그 뒤 기록 증감). 이번 달은 지금 그대로. (2026-11-11 사용자 '보고서 재고 수량이 원본 기록과 일치')

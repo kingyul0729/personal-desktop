@@ -2376,3 +2376,11 @@ input[type="date"]::-webkit-date-and-time-value, input[type="month"]::-webkit-da
 .sf-wrap .iv-ddiff { font-style: normal; font-weight: 700; color: #c2504a; }
 .sf-wrap .iv-d15 { margin: 2px 0 0; text-align: right; font-size: 13px; color: var(--text-sub, #7d838b); }
 .sf-wrap .iv-dcount { font-size: 13px; color: var(--text-sub, #7d838b); white-space: nowrap; align-self: center; }
+
+/* 입고 취소(2026-11-11): 취소한 줄은 흐리게, 수량은 줄긋기 */
+.sf-wrap .iv-txrow.is-cancelled { opacity: .62; }
+.sf-wrap .iv-cancel-tag { color: #c2504a; font-weight: 600; }
+.sf-wrap .iv-cancel-open { align-self: flex-start; }
+.sf-wrap .iv-cancel-box { display: flex; flex-direction: column; gap: 10px; padding-top: 10px; border-top: 1px solid #e6ecf2; }
+.sf-wrap .iv-paybox { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 13px; color: var(--text-sub, #7d838b); }
+.sf-wrap .iv-paybox b { color: var(--ui-ink, #2d3136); font-weight: 600; }

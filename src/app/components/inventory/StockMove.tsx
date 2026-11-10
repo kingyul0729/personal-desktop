@@ -96,8 +96,9 @@ export function TxLog({ notify }: { notify: (m: string) => void }) {
   const [rows, setRows] = useState<InvTx[] | null>(null);
   const [ask, setAsk] = useState<InvTx | null>(null);
   const [inv, setInv] = useState<number | null>(null);
-  const [edit, setEdit] = useState<{ tx: InvTx; v: string; d: string } | null>(null);
-  const editable = (t: InvTx) => (t.kind === 'in' || t.kind === 'out' || t.kind === 'prepaid_in') && !t.daily_date;
+  const [edit, setEdit] = useState<{ tx: InvTx; v: string; d: string; why?: string } | null>(null);
+  const editable = (t: InvTx) => (t.kind === 'in' || t.kind === 'out' || t.kind === 'prepaid_in') && !t.daily_date && !t.cancelled_at;
+  const stamp = (at: number, by?: string | null) => { const d = new Date(at); return `${d.getMonth() + 1}/${d.getDate()}${by ? ` ${String(by).split('@')[0]}` : ''}`; };
   const load = useCallback(async () => {
     const k = kind === 'in' ? 'in,prepaid_buy,prepaid_in' : kind === 'out' ? 'out' : undefined;
     try { setRows((await invGet('/tx', { from: `${month}-01`, to: `${month}-31`, kind: k })).rows); } catch (e) { notify(errText(e)); setRows([]); }
@@ -111,12 +112,12 @@ export function TxLog({ notify }: { notify: (m: string) => void }) {
       <Seg label="종류" value={kind} onChange={setKind} options={[['all', '전체'], ['in', <><i className="iv-dot is-in" aria-hidden="true" />입고</>], ['out', <><i className="iv-dot is-out" aria-hidden="true" />출고</>]]} /></div>
     {rows == null ? <LoadingBox /> : !rows.length ? <p className="sf-hint">이 달 기록이 없어요.</p> : <div className="iv-txwrap"><div className="iv-txgrid" role="table" aria-label="입출고 내역">
       <div className="iv-txrow is-head" role="row"><span role="columnheader">날짜</span><span role="columnheader">품목</span><span role="columnheader" className="mid">구분</span><span role="columnheader" className="num">수량</span><span role="columnheader" className="num">금액</span><span role="columnheader" className="num">병원재고</span><span role="columnheader" className="mid">명세서</span><span role="columnheader" aria-label="수정·삭제" /></div>
-      {rows.map(t => { const m = splitMemo(t.memo); const sub = [m.team, m.reason].filter(Boolean).join(' · ');
-        return <div key={t.id} className="iv-txrow" role="row">
+      {rows.map(t => { const m = splitMemo(t.memo); const sub = [t.cancelled_at ? `입고 취소 · ${t.cancel_reason || ''}` : '', m.team, t.cancelled_at ? '' : m.reason, t.updated_at ? `수정 ${stamp(t.updated_at, t.updated_by)}` : ''].filter(Boolean).join(' · ');
+        return <div key={t.id} className={`iv-txrow${t.cancelled_at ? ' is-cancelled' : ''}`} role="row">
         <span role="cell" className="c-date">{Number(t.date.slice(5, 7))}.{Number(t.date.slice(8))}</span>
         <span role="cell" className="iv-tx-item"><span className="iv-tx-l1"><b>{t.item_name}</b>{t.vendor_name && <em>{t.vendor_name}</em>}</span><small>{sub || ' '}</small></span>
         <span role="cell" className="mid"><i className={`iv-kdot is-${KIND_TONE[t.kind] || 'adj'}`} role="img" aria-label={KIND_LABEL[t.kind]} title={KIND_LABEL[t.kind]} /></span>
-        <span role="cell" className="num">{fmtQty(t.qty)}{t.bonus_qty ? <small> +{fmtQty(t.bonus_qty)}</small> : null}<small className="iv-unit-t"> {t.stock_unit}</small></span>
+        <span role="cell" className="num">{t.cancelled_at ? <small className="iv-cancel-tag">취소 </small> : null}{t.cancelled_at ? <s>{fmtQty(t.qty)}</s> : fmtQty(t.qty)}{t.bonus_qty ? <small> +{fmtQty(t.bonus_qty)}</small> : null}<small className="iv-unit-t"> {t.stock_unit}</small></span>
         <span role="cell" className="num">{t.kind === 'out' || t.kind === 'prepaid_in' || t.kind === 'adjust' ? <span className="iv-muted">—</span> : fmtWon(t.amount)}</span>
         <span role="cell" className="num">{fmtQty(t.stock_asof ?? t.hospital_after)}</span>
         <span role="cell" className="mid">{INVOICE_KINDS.includes(t.kind) ? <button type="button" className={`iv-inv-mini is-${invoiceState(t)}`} onClick={() => setInv(t.id)} aria-label={`명세서 ${INVOICE_LABEL[invoiceState(t)](t)}`}>
@@ -131,8 +132,16 @@ export function TxLog({ notify }: { notify: (m: string) => void }) {
       <label className="sf-input"><span>{edit.tx.kind === 'out' ? '출고 수량' : '받은 수량'}{edit.tx.bonus_qty ? ' (증정 포함)' : ''} ({edit.tx.stock_unit})</span><input type="number" min={0} inputMode="decimal" value={edit.v} onChange={e => setEdit({ ...edit, v: e.target.value })} /></label>
       {(() => { const d = Math.round(((Number(edit.v) || 0) - Math.abs(edit.tx.hospital_delta)) * 1000) / 1000; const h = edit.tx.kind === 'out' ? -d : d;
         return d ? <div className="iv-calc"><span>병원재고 <b>{h > 0 ? '+' : '−'}{fmtQty(Math.abs(h))}</b></span>{edit.tx.kind === 'prepaid_in' && <span>업체 보관 잔량 <b>{d > 0 ? '−' : '+'}{fmtQty(Math.abs(d))}</b></span>}</div> : null; })()}
-      <div className="sf-modal-foot"><button type="button" className="sf-btn" onClick={() => setEdit(null)}>취소</button>
-        <button type="button" className="sf-btn is-primary" disabled={!(Number(edit.v) > 0) || !edit.d} onClick={async () => { try { await invSend('PATCH', `/tx/${edit.tx.id}`, { actual_qty: Number(edit.v), ...(edit.d !== edit.tx.date ? { date: edit.d } : {}) }); notify('고쳤어요.'); setEdit(null); announceInventory(); void load(); } catch (e) { notify(errText(e)); } }}>저장</button></div>
+      {edit.tx.kind !== 'out' && (edit.why == null
+        ? <button type="button" className="sf-btn is-danger iv-cancel-open" onClick={() => setEdit({ ...edit, why: '' })}>입고 취소</button>
+        : <div className="iv-cancel-box">
+          <label className="sf-input"><span>취소 사유</span><input value={edit.why} onChange={e => setEdit({ ...edit, why: e.target.value })} placeholder="예: 반품, 잘못 받음" /></label>
+          <div className="iv-calc"><span>병원재고 <b>−{fmtQty(Math.abs(edit.tx.hospital_delta))}</b></span>{edit.tx.kind === 'prepaid_in' && <span>업체 보관 잔량 <b>+{fmtQty(Math.abs(edit.tx.vendor_delta))}</b></span>}</div>
+          <div className="sf-modal-foot"><button type="button" className="sf-btn" onClick={() => setEdit({ ...edit, why: undefined })}>아니요</button>
+            <button type="button" className="sf-btn is-danger" disabled={!edit.why.trim()} onClick={async () => { try { await invSend('POST', `/tx/${edit.tx.id}/cancel`, { reason: edit.why }); notify('입고를 취소했어요.'); setEdit(null); announceInventory(); void load(); } catch (e) { notify(errText(e)); } }}>입고 취소</button></div>
+        </div>)}
+      {edit.why == null && <div className="sf-modal-foot"><button type="button" className="sf-btn" onClick={() => setEdit(null)}>닫기</button>
+        <button type="button" className="sf-btn is-primary" disabled={!(Number(edit.v) > 0) || !edit.d} onClick={async () => { try { await invSend('PATCH', `/tx/${edit.tx.id}`, { actual_qty: Number(edit.v), ...(edit.d !== edit.tx.date ? { date: edit.d } : {}) }); notify('고쳤어요.'); setEdit(null); announceInventory(); void load(); } catch (e) { notify(errText(e)); } }}>저장</button></div>}
     </Modal>}
     {inv != null && rows && rows.find(r => r.id === inv) && <InvoiceDialog tx={rows.find(r => r.id === inv)!} rows={rows} notify={notify} onClose={() => setInv(null)} onChange={() => void load()} />}
     {ask && <Modal title="기록 삭제" onClose={() => setAsk(null)}>

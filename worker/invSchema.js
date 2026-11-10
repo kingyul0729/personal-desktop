@@ -100,6 +100,14 @@ export async function ensureInvSchema(db) {
   {
     // 기준 자료 고침을 한 번씩 적용(새 DB도 같은 길로 — 트리거는 exec 한 줄에 못 넣어서 여기서 만든다)
     let fixes = (await db.prepare(`SELECT value FROM inv_meta WHERE key = 'fixes'`).first())?.value || '';
+    if (!fixes.includes('txmeta1')) {
+      // 2026-11-11 사용자: 수정 과정 전부가 아니라 최종 수정일·수정자만, 입고 취소는 지우지 않고 취소 상태로(날짜·사유·작업자)
+      for (const col of ['updated_at INTEGER', 'updated_by TEXT', 'cancelled_at INTEGER', 'cancelled_by TEXT', 'cancel_reason TEXT']) {
+        try { await db.prepare(`ALTER TABLE inv_tx ADD COLUMN ${col}`).run(); } catch (e) { if (!/duplicate column/i.test(String(e?.message || e))) throw e; }
+      }
+      await db.prepare(`INSERT OR REPLACE INTO inv_meta (key, value) VALUES ('fixes', ?)`).bind(`${fixes} txmeta1`.trim()).run();
+      fixes = `${fixes} txmeta1`.trim();
+    }
     if (!fixes.includes('invoice1')) {
       // 이미 쓰던 DB에 명세서 사진 표만 더함(기존 자료는 그대로)
       await db.batch([...INV_INVOICE_SCHEMA.map(q => db.prepare(q)), db.prepare(`INSERT OR REPLACE INTO inv_meta (key, value) VALUES ('fixes', ?)`).bind(`${fixes} invoice1`.trim())]);

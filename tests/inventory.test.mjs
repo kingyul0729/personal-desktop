@@ -897,3 +897,57 @@ test('report: a past month shows stock and 업체 보관 잔량 at that month en
   assert.equal(v(oct), pp.vendor_stock);
   assert.ok(item(e, '보관용 3종 시트팩').vendor_stock > pp.vendor_stock); // 11월 선결제가 실제로 들어감
 });
+
+test('입고 취소: stock back only, record + invoice + payment kept, once only, counted day stays, prepaid restores 업체 보관 잔량', async () => {
+  const e = env(); const objects = new Map();
+  e.BUCKET = { async put(k, v) { objects.set(k, v); }, async get(k) { return objects.has(k) ? { body: objects.get(k) } : null; }, async delete(k) { objects.delete(k); } };
+  await call(e, '/state');
+  const g = item(e, 'GA20%'); const h0 = g.hospital_stock;
+  const r = await call(e, '/receive', 'POST', { item_id: g.id, actual_qty: 5, amount: 50000, date: '2026-11-03' });
+  const fd = new FormData(); fd.append('file', new File([new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3, 4, 5, 6, 7, 8])], 'a.jpg', { type: 'image/jpeg' })); fd.append('tx_ids', String(r.data.tx_id));
+  await handleApi(new Request('https://site.test/api/inventory/invoices', { method: 'POST', headers: authH(), body: fd }), e);
+  assert.equal((await call(e, `/tx/${r.data.tx_id}/cancel`, 'POST', {})).status, 400); // 사유 필수
+  assert.equal((await call(e, `/tx/${r.data.tx_id}/cancel`, 'POST', { reason: '반품' })).status, 200);
+  assert.equal(item(e, 'GA20%').hospital_stock, h0);
+  assert.equal((await call(e, `/tx/${r.data.tx_id}/cancel`, 'POST', { reason: '반품' })).data.unchanged, true); // 두 번째는 반영 안 함
+  assert.equal(item(e, 'GA20%').hospital_stock, h0);
+  const t = e.inv.prepare('SELECT * FROM inv_tx WHERE id = ?').get(r.data.tx_id);
+  assert.ok(t.cancelled_at); assert.equal(t.cancel_reason, '반품'); assert.equal(t.cancelled_by, 'u1'); assert.equal(t.deleted_at, null); assert.equal(t.amount, 50000);
+  assert.equal(objects.size, 1); // 명세서 그대로
+  const rep = (await call(e, '/report?month=2026-11')).data;
+  assert.equal(rep.spend_general, 50000); assert.equal(rep.in_count, 0); // 결제는 그대로, 입고 건수에서 빠짐
+  assert.ok(rep.inbound.find(x => x.cancelled_at));
+  assert.equal((await call(e, `/tx/${r.data.tx_id}`, 'PATCH', { actual_qty: 3 })).status, 400); // 취소한 줄은 수량 수정 안 됨
+  // 선결제 입고 취소 → 업체 보관 잔량 복구
+  const pp = item(e, '보관용 3종 시트팩');
+  const o300 = e.inv.prepare(`SELECT id FROM inv_options WHERE item_id = ? AND qty = 300`).get(pp.id);
+  await call(e, '/prepaid-order', 'POST', { item_id: pp.id, qty: pp.vendor_stock + 100, option_id: o300.id, date: '2026-11-04' });
+  const ord = (await call(e, '/state')).data.orders.find(o => o.item_id === pp.id && o.prepaid && o.status === 'ordered');
+  const before = item(e, '보관용 3종 시트팩');
+  const pr = await call(e, '/receive', 'POST', { order_id: ord.id, actual_qty: 100, date: '2026-11-05' });
+  assert.equal((await call(e, `/tx/${pr.data.tx_id}/cancel`, 'POST', { reason: '잘못 받음' })).status, 200);
+  const after = item(e, '보관용 3종 시트팩');
+  assert.deepEqual([after.hospital_stock, after.vendor_stock], [before.hospital_stock, before.vendor_stock]);
+  assert.equal(e.inv.prepare('SELECT status FROM inv_orders WHERE id = ?').get(ord.id).status, 'ordered'); // 다시 받을 수 있게
+  // 센 날 뒤 취소: 그 날 센 수량은 그대로
+  await call(e, '/receive', 'POST', { order_id: ord.id, actual_qty: 100, date: '2026-11-05' });
+  const r2 = e.inv.prepare(`SELECT max(id) AS id FROM inv_tx WHERE order_id = ?`).get(ord.id).id;
+  assert.equal((await call(e, '/daily', 'POST', { date: '2026-11-06', used: { [pp.id]: 0 }, closing: { [pp.id]: 50 }, opening: { [pp.id]: 50 } })).status, 200);
+  assert.equal(item(e, '보관용 3종 시트팩').hospital_stock, 50);
+  await call(e, `/tx/${r2}/cancel`, 'POST', { reason: '반품' });
+  assert.equal(item(e, '보관용 3종 시트팩').hospital_stock, 50);
+});
+
+test('최종 수정일·수정자: qty/date/memo edits stamp the row; delete keeps the row', async () => {
+  const e = env(); await call(e, '/state');
+  const g = item(e, 'GA20%');
+  const r = await call(e, '/receive', 'POST', { item_id: g.id, actual_qty: 5, amount: 1000, date: '2026-11-03' });
+  assert.equal(e.inv.prepare('SELECT updated_at FROM inv_tx WHERE id = ?').get(r.data.tx_id).updated_at, null);
+  await call(e, `/tx/${r.data.tx_id}`, 'PATCH', { actual_qty: 4 });
+  const t = e.inv.prepare('SELECT updated_at, updated_by FROM inv_tx WHERE id = ?').get(r.data.tx_id);
+  assert.ok(t.updated_at); assert.equal(t.updated_by, 'u1');
+  const row = (await call(e, '/tx?from=2026-11-01&to=2026-11-30')).data.rows.find(x => x.id === r.data.tx_id);
+  assert.equal(row.updated_by, 'u1');
+  await call(e, `/tx/${r.data.tx_id}`, 'DELETE');
+  assert.ok(e.inv.prepare('SELECT deleted_at FROM inv_tx WHERE id = ?').get(r.data.tx_id).deleted_at);
+});

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { LoadingBox, SavingMark } from '../Feedback';
 import { readWon } from '../../koreanAmount';
-import { type InvItem, type InvOption, type InvOrder, type InvState, announceInventory, fmtQty, fmtWon, invSend, invUploadInvoice, useInventory } from '../../inventoryApi';
+import { type InvItem, type InvOption, type InvOrder, type InvState, type InvVendor, announceInventory, fmtQty, fmtWon, invSend, invUploadInvoice, useInventory } from '../../inventoryApi';
 import { type Flag, FlagTag, Modal, PhotoPick, Problem, QtyInput, Seg, Shell, errText, flagOf, useToast, withUnit } from './shared';
 
 export function StockOrder() {
@@ -60,7 +60,7 @@ export function OrderBoard({ state, q, notify }: { state: InvState; q: string; n
             <div><dt>{item.prepaid ? '개당원가' : '구매단가'}</dt><dd>{item.prepaid ? (item.unit_cost != null ? `${item.unit_cost.toLocaleString('ko-KR')}원` : '—') : fmtWon(item.price)}</dd></div>
             {item.paid_unit_cost != null ? <div><dt>유상단가</dt><dd>{item.paid_unit_cost.toLocaleString('ko-KR')}원</dd></div> : null}
           </dl>
-          {item.prepaid ? <PrepaidOrder key={item.id} item={item} orders={state.orders} today={state.today} notify={notify} /> : <div className="iv-d-sec"><h4><i className="iv-step">1</i>주문</h4>
+          {item.prepaid ? <PrepaidOrder key={item.id} item={item} orders={state.orders} today={state.today} notify={notify} vendor={state.vendors.find(v => v.id === item.vendor_id) || null} /> : <div className="iv-d-sec"><h4><i className="iv-step">1</i>주문</h4>
             {!item.options.some(o => !o.prepaid) && <p className="iv-recv-none">구매조건 없음</p>}
             <ul className="iv-d-opts">{item.options.filter(o => !o.prepaid).map(o => <li key={o.id}>
               <div className="iv-d-opt-main"><b>{o.label || `${fmtQty(o.qty)} ${item.stock_unit}`}</b>
@@ -69,7 +69,7 @@ export function OrderBoard({ state, q, notify }: { state: InvState; q: string; n
               <button type="button" className="sf-btn is-primary" onClick={() => setPick({ item, opt: o })}>주문</button>
             </li>)}</ul>
           </div>}
-          <ReceiveHere key={`r${item.id}`} item={item} orders={waiting(item.id)} today={state.today} notify={notify} />
+          <ReceiveHere key={`r${item.id}`} item={item} orders={waiting(item.id)} today={state.today} notify={notify} vendor={state.vendors.find(v => v.id === item.vendor_id) || null} />
         </> : <p className="iv-split-empty">왼쪽에서 품목을 고르세요</p>}
       </section>
     </div>
@@ -79,7 +79,17 @@ export function OrderBoard({ state, q, notify }: { state: InvState; q: string; n
 
 // ② 받기: 고른 품목의 받기 전 주문만. 실제 도착 수량 + 명세서 사진 + 입고확정(사진은 그 입고 기록에 바로 올라가 '명세서 받음').
 // 선결제 품목은 잔량에서(잔량 −, 병원재고 +), 일반 품목은 나눠 받으면 날짜마다 따로. 아래에 일반 품목은 '증정·행사로 받기', 선결제 품목은 '잔량 고치기'.
-export function ReceiveHere({ item, orders, today, notify }: { item: InvItem; orders: InvOrder[]; today: string; notify: (m: string) => void }) {
+// 결제정보(2026-11-11 사용자 문서): 계좌입금 업체는 입금에 필요한 업체명·예금주·은행·계좌번호·총 결제금액, 카드·홈페이지·방문결제는 결제 방법·금액만(명세서는 입출고 내역).
+export function PayInfo({ vendor, amount }: { vendor: InvVendor | null; amount: number | null }) {
+  if (!vendor) return null;
+  const bank = /계좌|이체|입금/.test(vendor.payment_method || '');
+  return <div className="iv-paybox">
+    <span>{vendor.payment_method || '결제 방법 —'}</span>
+    {bank && <><span>{vendor.company || vendor.name}</span><span>예금주 <b>{vendor.holder || '—'}</b></span><span>{vendor.bank || '은행 —'} <b>{vendor.account || '—'}</b></span></>}
+    <span>총 결제금액 <b>{fmtWon(amount)}</b></span>
+  </div>;
+}
+export function ReceiveHere({ item, orders, today, notify, vendor = null }: { item: InvItem; orders: InvOrder[]; today: string; notify: (m: string) => void; vendor?: InvVendor | null }) {
   const [date, setDate] = useState(today);
   const [actual, setActual] = useState<Record<number, string>>({});
   const [photo, setPhoto] = useState<Record<string, File | undefined>>({});
@@ -114,6 +124,7 @@ export function ReceiveHere({ item, orders, today, notify }: { item: InvItem; or
     {orders.length ? <ul className="iv-recv-list">{orders.map(o => <li key={o.id}>
       <div className="iv-recv-what"><b>{o.ordered_at.slice(5).replace('-', '/')} 주문 · {o.prepaid ? '병원 입고 ' : ''}{fmtQty(o.qty)}{o.bonus_qty ? ` + 증정 ${fmtQty(o.bonus_qty)}` : ''} {u}</b>
         <small>{o.prepaid ? (o.contract_qty ? `선결제 계약 ${fmtQty(o.contract_qty)} ${u} · ${fmtWon(o.contract_amount ?? null)}` : '업체 보관 잔량에서') : `${o.option_label || ''} · ${fmtWon(o.amount)}`}{(o.received_qty || 0) > 0 ? ` · 받음 ${fmtQty(o.received_qty || 0)} · 남음 ${fmtQty(left(o))}` : ''}</small></div>
+      {!o.prepaid && !(o.received_qty || 0) && <PayInfo vendor={vendor} amount={o.amount} />}
       <label className="sf-input"><span>실제 입고 수량 ({u})</span><input type="number" min={0} inputMode="decimal" value={actual[o.id] ?? String(left(o))} onChange={e => setActual(a => ({ ...a, [o.id]: e.target.value }))} /></label>
       <PhotoPick file={photo[`o${o.id}`]} onPick={f => setPhoto(v => ({ ...v, [`o${o.id}`]: f }))} />
       <div className="iv-recv-acts">
@@ -154,7 +165,7 @@ export function ReceiveHere({ item, orders, today, notify }: { item: InvItem; or
 
 // 선결제 품목 주문(2026-11-09 사용자 지정, 사용자 문서의 '업체 보관 잔량' = 화면의 '업체 보관 잔량'): 주문수량 → 업체 보관 잔량을 먼저 모두 쓰고, 모자랄 때만 신규 선결제 옵션 하나(한 번에 결제).
 // 주문 후 업체 보관 잔량은 예상값. 실제 업체 보관 잔량 차감은 같은 화면 ② 받기의 입고확정 때만.
-export function PrepaidOrder({ item, orders, today, notify }: { item: InvItem; orders: InvOrder[]; today: string; notify: (m: string) => void }) {
+export function PrepaidOrder({ item, orders, today, notify, vendor = null }: { item: InvItem; orders: InvOrder[]; today: string; notify: (m: string) => void; vendor?: InvVendor | null }) {
   const [qty, setQty] = useState(''), [optId, setOptId] = useState<number | null>(null), [date, setDate] = useState(today), [busy, setBusy] = useState(false);
   const opts = item.options.filter(o => o.prepaid);
   const reserved = orders.filter(o => o.item_id === item.id && o.prepaid).reduce((a, o) => a + o.qty, 0);
@@ -190,6 +201,7 @@ export function PrepaidOrder({ item, orders, today, notify }: { item: InvItem; o
       <div><dt>주문 후 업체 보관 잔량</dt><dd className={short > 0 && !opt ? 'is-dim' : ''}>{short > 0 && !opt ? '—' : `${fmtQty(after)} ${u}`}</dd></div>
     </dl>
     {tooSmall && <p className="sf-hint is-warn">이 주문 구성으로는 {fmtQty(newQty - short)} {u} 모자라요.</p>}
+    {opt && <PayInfo vendor={vendor} amount={opt.amount} />}
     <div className="iv-pp-foot"><button type="button" className="sf-btn is-primary" disabled={!ready} onClick={() => void submit()}>{busy && <SavingMark />}주문</button></div>
   </div>;
 }
