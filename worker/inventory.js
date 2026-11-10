@@ -604,7 +604,9 @@ async function inventoryRoute(request, env, url, user, db, path, m) {
     if (m === 'GET' && path === '/tx') {
       const from = url.searchParams.get('from') || '0000-01-01', to = url.searchParams.get('to') || '9999-12-31';
       const kind = url.searchParams.get('kind'), itemId = url.searchParams.get('item_id');
-      const rows = await all(db, `SELECT t.*, i.name AS item_name, i.stock_unit, v.name AS vendor_name, (SELECT group_concat(l.invoice_id) FROM inv_invoice_links l WHERE l.tx_id = t.id) AS invoice_ids FROM inv_tx t JOIN inv_items i ON i.id = t.item_id LEFT JOIN inv_vendors v ON v.id = i.vendor_id
+      // 병원재고 칸 = 그 날짜(같은 날은 기록 순서)까지의 재고. 저장할 때의 재고(hospital_after)는 늦게 적은 기록이면 그때 재고라 날짜와 안 맞아서(2026-11-10 사용자 '10/31 시트팩 맞아?') 지금 재고에서 그 뒤 기록을 빼서 다시 계산.
+      const rows = await all(db, `SELECT t.*, round(i.hospital_stock - coalesce((SELECT sum(t2.hospital_delta) FROM inv_tx t2 WHERE t2.item_id = t.item_id AND t2.deleted_at IS NULL AND (t2.date > t.date OR (t2.date = t.date AND t2.id > t.id))), 0), 3) AS stock_asof,
+        i.name AS item_name, i.stock_unit, v.name AS vendor_name, (SELECT group_concat(l.invoice_id) FROM inv_invoice_links l WHERE l.tx_id = t.id) AS invoice_ids FROM inv_tx t JOIN inv_items i ON i.id = t.item_id LEFT JOIN inv_vendors v ON v.id = i.vendor_id
         WHERE t.deleted_at IS NULL AND NOT (t.daily_date IS NOT NULL AND t.hospital_delta = 0) AND t.date BETWEEN ? AND ? ${kind ? `AND t.kind IN (${kind.split(',').map(() => '?').join(',')})` : ''} ${itemId ? 'AND t.item_id = ?' : ''}
         ORDER BY t.date DESC, t.id DESC LIMIT 500`, from, to, ...(kind ? kind.split(',') : []), ...(itemId ? [Number(itemId)] : []));
       return json({ rows });

@@ -799,3 +799,15 @@ test('check: back-dated 입고·출고 add/edit/delete keep a later count and th
   await call(e, '/daily', 'POST', { date: '2026-11-03', closing: { [it.id]: 45 } });
   assert.equal(st(), 36); assert.deepEqual(await day6(), [40, 3]);
 });
+
+test('check: tx list stock column is the stock as of that date, also for records written later', async () => {
+  const e = env(); await call(e, '/state');
+  const it = item(e, '더마 하이드로 팩');
+  await call(e, '/receive', 'POST', { item_id: it.id, actual_qty: 30, amount: 1000, date: '2026-10-01' });
+  await call(e, '/daily', 'POST', { date: '2026-10-31', closing: { [it.id]: 26 }, opening: { [it.id]: 30 } });
+  await call(e, '/receive', 'POST', { item_id: it.id, actual_qty: 300, amount: 1000, date: '2026-11-06' });
+  const rows = (await call(e, `/tx?item_id=${it.id}`)).data.rows;
+  const oct31 = rows.filter(r => r.date === '2026-10-31');
+  assert.equal(Math.min(...oct31.map(r => r.stock_asof)), 26);
+  assert.equal(rows.find(r => r.date === '2026-11-06').stock_asof, 326);
+});

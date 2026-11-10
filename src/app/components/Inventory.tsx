@@ -689,7 +689,7 @@ function TxLog({ notify }: { notify: (m: string) => void }) {
         <span role="cell" className="mid"><i className={`iv-kdot is-${KIND_TONE[t.kind] || 'adj'}`} role="img" aria-label={KIND_LABEL[t.kind]} title={KIND_LABEL[t.kind]} /></span>
         <span role="cell" className="num">{fmtQty(t.qty)}{t.bonus_qty ? <small> +{fmtQty(t.bonus_qty)}</small> : null}<small className="iv-unit-t"> {t.stock_unit}</small></span>
         <span role="cell" className="num">{t.kind === 'out' || t.kind === 'prepaid_in' || t.kind === 'adjust' ? <span className="iv-muted">—</span> : fmtWon(t.amount)}</span>
-        <span role="cell" className="num">{fmtQty(t.hospital_after)}</span>
+        <span role="cell" className="num">{fmtQty(t.stock_asof ?? t.hospital_after)}</span>
         <span role="cell" className="mid">{INVOICE_KINDS.includes(t.kind) ? <button type="button" className={`iv-inv-mini is-${invoiceState(t)}`} onClick={() => setInv(t.id)} aria-label={`명세서 ${INVOICE_LABEL[invoiceState(t)](t)}`}>
           {invoiceState(t) === 'photo' ? <><Camera size={13} strokeWidth={2} />{photosOf(t).length}</> : INVOICE_LABEL[invoiceState(t)](t)}</button> : null}</span>
         <span role="cell" className="iv-row-btns">
