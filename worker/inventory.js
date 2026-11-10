@@ -18,7 +18,7 @@ import { isRedDay } from './redDays.js';
 import { dailyPatientsAuto } from './staff.js';
 import { ensureInvSchema, INV_TABLES } from './invSchema.js';
 import { moveTxDate } from './invTxDate.js';
-import { OLD_DAILY_COUNTS } from './invDailyFix.js';
+import { OLD_DAILY_COUNTS, OLD_DAILY_EXTRA, OLD_DAILY_MEMOS } from './invDailyFix.js';
 
 const json = (body, status = 200) => Response.json(body, { status, headers: { 'cache-control': 'no-store' } });
 const bad = (error, status = 400) => json({ error }, status);
@@ -609,10 +609,31 @@ async function inventoryRoute(request, env, url, user, db, path, m) {
         try { did = await applyOldDailyCounts(request, env, url, db); } catch { break; }
         if (!did) break;
       }
+      // dailyfix2(사용자가 목록 확인 뒤): 7/28 하이드로 한 칸 + 10월 안 적은 날 사유. 사유는 메모만(재고 그대로).
+      if (!env.SKIP_OLD_DAILY_FIX && await one(db, `SELECT value FROM inv_meta WHERE key = 'dailyfix1'`) && !(await one(db, `SELECT value FROM inv_meta WHERE key = 'dailyfix2'`))) {
+        let locked = true;
+        try { await db.prepare('INSERT INTO inv_requests (id, path, created_at) VALUES (?,?,?)').bind('fix:dailyfix2', 'dailyfix2', Date.now()).run(); } catch { locked = false; }
+        if (locked) {
+          const items = await all(db, 'SELECT id, name FROM inv_items');
+          const idOf = Object.fromEntries(items.map(i => [i.name, i.id]));
+          for (const day of OLD_DAILY_EXTRA) {
+            const row = await one(db, 'SELECT patients, status, extra FROM inv_daily WHERE date = ?', day.d);
+            const closing = {}, opening = {};
+            for (const [name, [close, used]] of Object.entries(day.i)) { const id = idOf[name]; if (id) { closing[id] = close; opening[id] = close + used; } }
+            let extra = {}; try { extra = row?.extra ? JSON.parse(row.extra) : {}; } catch { /* */ }
+            const req = new Request(url.origin + '/api/inventory/daily', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ date: day.d, patients: row?.patients ?? null, status: row?.status || null, extra, used: {}, closing, opening }) });
+            await inventoryRoute(req, env, new URL(req.url), '예전 앱 일일재고', db, '/daily', 'POST');
+          }
+          await db.batch(OLD_DAILY_MEMOS.map(([d, memo]) => db.prepare(`INSERT INTO inv_daily (date, patients, status, extra, updated_by, updated_at) VALUES (?, NULL, ?, '{}', '예전 앱 일일재고', ?)
+            ON CONFLICT(date) DO UPDATE SET status = excluded.status`).bind(d, memo, Date.now())));
+          await db.prepare(`INSERT OR REPLACE INTO inv_meta (key, value) VALUES ('dailyfix2', ?)`).bind(String(Date.now())).run();
+        }
+      }
       const done = await one(db, `SELECT value FROM inv_meta WHERE key = 'dailyfix1'`);
       const imported = await one(db, `SELECT value FROM inv_meta WHERE key = 'import'`);
       const next = Number((await one(db, `SELECT value FROM inv_meta WHERE key = 'dailyfix1_next'`))?.value || 0);
-      return json({ left: done || !imported || env.SKIP_OLD_DAILY_FIX ? 0 : Math.max(0, OLD_DAILY_COUNTS.length - next) });
+      const done2 = await one(db, `SELECT value FROM inv_meta WHERE key = 'dailyfix2'`);
+      return json({ left: !imported || env.SKIP_OLD_DAILY_FIX ? 0 : done ? (done2 ? 0 : 1) : Math.max(0, OLD_DAILY_COUNTS.length - next) + 1 });
     }
     if (m === 'GET' && path === '/daily') {
       const date = okDate(url.searchParams.get('date')) ? url.searchParams.get('date') : kstToday();

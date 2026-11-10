@@ -704,6 +704,11 @@ test('check: old app daily counts (dailyfix1) put each photo day exactly as writ
   }
   const before = item(e, '보관용 3종 시트팩').hospital_stock;
   await call(e, '/state'); assert.equal(item(e, '보관용 3종 시트팩').hospital_stock, before); // 두 번 안 함
+  const d728 = (await call(e, '/daily?date=2026-07-28')).data.items.find(x => x.name === '더마 하이드로 팩');
+  assert.equal(d728.stock_at, 13);
+  assert.equal((await call(e, '/daily?date=2026-10-02')).data.day.status, '휴무');
+  assert.equal((await call(e, '/daily?date=2026-10-27')).data.day.status, '상담');
+  assert.equal((await call(e, '/fix-left')).data.left, 0);
 });
 
 test('check: dailyfix1 keeps a November count the team lead already wrote', async () => {
@@ -737,4 +742,32 @@ test('check: dailyfix1 finishes with the photo 10/31 and keeps the lead\'s 11/2�
   assert.deepEqual(r(await day('2026-11-02')), { close: 24, used: 2 });
   assert.deepEqual(r(await day('2026-11-03')), { close: 17, used: 6 });
   assert.equal(item(e, '보관용 3종 시트팩').hospital_stock, 17);
+});
+
+test('user spec 11-10: skipped days change nothing, the next count sets hospital stock exactly once', async () => {
+  const e = env(); await call(e, '/state');
+  const it = item(e, '더마 하이드로 팩');
+  const stock = () => item(e, '더마 하이드로 팩');
+  assert.equal((await call(e, '/receive', 'POST', { item_id: it.id, actual_qty: 100, amount: 1000, date: '2026-11-01' })).status, 200);
+  const base = stock().hospital_stock, vendor = stock().vendor_stock;
+  // 0~3 미기록·휴무·연차·상담 날은 아무것도 안 적음 → 다른 화면을 열어도 그대로
+  for (const d of ['2026-11-02', '2026-11-03', '2026-11-04']) await call(e, `/daily?date=${d}`);
+  await call(e, '/state'); assert.equal(stock().hospital_stock, base);
+  // 4 다음 근무일 실사 80 → 80 (20을 따로 다시 빼지 않음)
+  const save = q => call(e, '/daily', 'POST', { date: '2026-11-05', closing: { [it.id]: q } });
+  assert.equal((await save(base - 20)).status, 200); assert.equal(stock().hospital_stock, base - 20);
+  // 5 같은 기록 다시 저장 → 그대로
+  await save(base - 20); assert.equal(stock().hospital_stock, base - 20);
+  // 6 마감재고 고침 → 고친 수량 그대로
+  await save(base - 25); assert.equal(stock().hospital_stock, base - 25);
+  await save(base - 20); assert.equal(stock().hospital_stock, base - 20);
+  // 9 사이에 출고가 있어도 그 기록은 그대로, 다음 실사와의 차이만 한 번
+  assert.equal((await call(e, '/out', 'POST', { item_id: it.id, qty: 5, date: '2026-11-06' })).status, 200);
+  assert.equal(stock().hospital_stock, base - 25);
+  assert.equal((await call(e, '/daily', 'POST', { date: '2026-11-07', closing: { [it.id]: base - 30 } })).status, 200);
+  assert.equal(stock().hospital_stock, base - 30);
+  const outs = e.inv.prepare(`SELECT count(*) AS n FROM inv_tx WHERE item_id = ? AND kind = 'out' AND daily_date IS NULL AND deleted_at IS NULL`).get(it.id).n;
+  assert.equal(outs, 1);
+  // 8 일일재고는 업체재고를 바꾸지 않음
+  assert.equal(stock().vendor_stock, vendor);
 });
