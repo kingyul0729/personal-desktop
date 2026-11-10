@@ -1,4 +1,5 @@
 import { VENDOR_BASE, ITEMS, EXTRA_ITEMS } from './invMaster.js';
+import { moveTxDate } from './invTxDate.js';
 // 예전 재고관리 앱의 직원 표 구조(마이그레이션 0009·0010·0014·0022) — tests/fixtures/inv-staff.sql 에서 만든 것.
 // 빈 데이터베이스에 직원 표가 없을 때 한 번만 실행한다.
 const INV_STAFF_SCHEMA = [
@@ -135,6 +136,16 @@ export async function ensureInvSchema(db) {
       }
       await db.prepare(`INSERT OR REPLACE INTO inv_meta (key, value) VALUES ('fixes', ?)`).bind(`${fixes} negfix1`.trim()).run();
       fixes = `${fixes} negfix1`.trim();
+    }
+    if (!fixes.includes('datefix1')) {
+      // 2026-11-10 사용자 '너가 해줘': 11/6에 들어온 보관용 3종 시트팩 300장이 11/9로 입고확정돼 11/6 실사(290)와 두 번 더해진 것(590)을 한 번 바로잡는다.
+      // 정확히 그 기록(11/9 선결제 입고 +300)이 있고 11/6에 센 기록이 있을 때만 날짜를 11/6으로 옮긴다(화면 '기록 수정'과 같은 계산).
+      const tx = await db.prepare(`SELECT t.* FROM inv_tx t JOIN inv_items i ON i.id = t.item_id WHERE i.name = '보관용 3종 시트팩' AND t.kind = 'prepaid_in' AND t.date = '2026-11-09'
+        AND t.deleted_at IS NULL AND abs(t.hospital_delta - 300) < 0.0005 ORDER BY t.id LIMIT 1`).first();
+      const counted = tx ? await db.prepare(`SELECT 1 AS ok FROM inv_tx WHERE deleted_at IS NULL AND item_id = ? AND daily_date = '2026-11-06' LIMIT 1`).bind(tx.item_id).first() : null;
+      if (tx && counted) await moveTxDate(db, tx, '2026-11-06', 'system');
+      await db.prepare(`INSERT OR REPLACE INTO inv_meta (key, value) VALUES ('fixes', ?)`).bind(`${fixes} datefix1`.trim()).run();
+      fixes = `${fixes} datefix1`.trim();
     }
   }
   ready = db;

@@ -666,3 +666,22 @@ test('check: moving a receipt date before a counted day keeps that count (no dou
   assert.equal((await call(e, `/tx/${tx.id}`, 'PATCH', { date: '2026-11-09' })).status, 200);
   assert.equal(item(e, '더마 하이드로 팩').hospital_stock, 590);
 });
+
+test('check: one-time datefix1 moves the 11/9 prepaid receipt of 3종 시트팩 to 11/6 (590 → 290)', async () => {
+  const e = env(); await call(e, '/state');
+  const it = item(e, '보관용 3종 시트팩');
+  e.inv.prepare('UPDATE inv_items SET hospital_stock = 6 WHERE id = ?').run(it.id);
+  assert.equal((await call(e, '/daily', 'POST', { date: '2026-11-06', closing: { [it.id]: 290 }, opening: { [it.id]: 296 } })).status, 200);
+  e.inv.prepare(`INSERT INTO inv_tx (date, kind, item_id, qty, hospital_delta, vendor_delta, memo, created_at) VALUES ('2026-11-09', 'prepaid_in', ?, 300, 300, -300, '입고', 1)`).run(it.id);
+  e.inv.prepare('UPDATE inv_items SET hospital_stock = hospital_stock + 300 WHERE id = ?').run(it.id);
+  assert.equal(item(e, '보관용 3종 시트팩').hospital_stock, 590);
+  const f = e.inv.prepare(`SELECT value FROM inv_meta WHERE key = 'fixes'`).get().value;
+  e.inv.prepare(`UPDATE inv_meta SET value = ? WHERE key = 'fixes'`).run(f.replace('datefix1', '').trim());
+  const { resetInvSchemaCache } = await import('../worker/invSchema.js'); resetInvSchemaCache();
+  await call(e, '/state');
+  assert.equal(item(e, '보관용 3종 시트팩').hospital_stock, 290);
+  const d = (await call(e, '/daily?date=2026-11-06')).data.items.find(x => x.id === it.id);
+  assert.equal(d.stock_at, 290);
+  resetInvSchemaCache(); await call(e, '/state'); // 두 번 돌지 않음
+  assert.equal(item(e, '보관용 3종 시트팩').hospital_stock, 290);
+});

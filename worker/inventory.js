@@ -17,6 +17,7 @@
 import { isRedDay } from './redDays.js';
 import { dailyPatientsAuto } from './staff.js';
 import { ensureInvSchema, INV_TABLES } from './invSchema.js';
+import { moveTxDate } from './invTxDate.js';
 
 const json = (body, status = 200) => Response.json(body, { status, headers: { 'cache-control': 'no-store' } });
 const bad = (error, status = 400) => json({ error }, status);
@@ -515,21 +516,8 @@ async function inventoryRoute(request, env, url, user, db, path, m) {
         if (!['in', 'out', 'prepaid_in', 'prepaid_buy'].includes(tx.kind) || tx.daily_date) return bad('이 기록은 날짜를 고칠 수 없어요.');
         const date = String(body.date);
         if (!okDate(date) || date > kstToday()) return bad('날짜를 확인해 주세요.');
-        if (date !== tx.date) {
-          const lo = date < tx.date ? date : tx.date, hi = date < tx.date ? tx.date : date;
-          const h = round(tx.hospital_delta || 0), comp = round(date < tx.date ? -h : h);
-          const counted = h ? await one(db, `SELECT min(daily_date) AS d FROM inv_tx WHERE deleted_at IS NULL AND item_id = ? AND daily_date IS NOT NULL AND daily_date >= ? AND daily_date < ?`, tx.item_id, lo, hi) : null;
-          const stmts = [db.prepare(`UPDATE inv_tx SET date = ?, memo = trim(coalesce(memo, '') || ' ' || ?) WHERE id = ?`).bind(date, `(날짜 ${Number(tx.date.slice(5, 7))}/${Number(tx.date.slice(8))}→${Number(date.slice(5, 7))}/${Number(date.slice(8))} 수정)`, id)];
-          if (counted?.d && comp) {
-            const item = await loadItem(db, tx.item_id);
-            if (round(item.hospital_stock + comp) < 0) return bad(`병원재고(${round(item.hospital_stock)} ${item.stock_unit})가 모자라요.`);
-            const fix = await one(db, `SELECT id FROM inv_tx WHERE deleted_at IS NULL AND item_id = ? AND daily_date = ? AND kind = 'adjust' AND memo LIKE '마감 전 재고 고침%' ORDER BY id LIMIT 1`, tx.item_id, counted.d);
-            stmts.push(db.prepare(`UPDATE inv_items SET hospital_stock = round(hospital_stock + ?, 3), updated_at = ? WHERE id = ?`).bind(comp, Date.now(), tx.item_id));
-            stmts.push(fix ? db.prepare(`UPDATE inv_tx SET hospital_delta = round(hospital_delta + ?, 3), qty = abs(round(hospital_delta + ?, 3)) WHERE id = ?`).bind(comp, comp, fix.id)
-              : db.prepare(`INSERT INTO inv_tx (item_id, kind, date, qty, hospital_delta, vendor_delta, memo, daily_date, created_by, created_at) VALUES (?, 'adjust', ?, ?, ?, 0, ?, ?, ?, ?)`).bind(tx.item_id, counted.d, Math.abs(comp), comp, '마감 전 재고 고침 · 입고 날짜 수정', counted.d, user || null, Date.now()));
-          }
-          await db.batch(stmts);
-        }
+        const err = await moveTxDate(db, tx, date, user);
+        if (err) return bad(err);
         if (body.actual_qty == null) return json({ ok: true });
       }
       if (body.actual_qty != null) {
