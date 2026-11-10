@@ -2250,3 +2250,103 @@ input[type="date"]::-webkit-date-and-time-value, input[type="month"]::-webkit-da
 .iv-kdot.is-pp { background: #557591; }
 .iv-kdot.is-adj { background: #c3c9d0; }
 .sf-seg .iv-dot.is-out { background: #d9736e; }
+
+/* ───────── 디자인 다듬기 v6 (2026-11-10 사용자 '현재 구조 기반으로 완성도': 기능은 그대로, 모양만) ─────────
+   한 규칙: 화면 여백 위 24·옆 28(휴대폰 16) / 탭은 모두 알약 탭 / 카드 안에 또 회색 상자 넣지 않기 / 상태 표시는 작은 태그 하나 모양 */
+:root { --pg-x: 28px; --pg-top: 24px; --pg-bottom: 32px; --ui-line: #e1e4e8; --ui-line-soft: #e6ebf1; --ui-muted: #7d838b; }
+.app-finder .sf-wrap, .app-finder .sf-wrap.sf-leave, .app-finder .iv-wrap:has(.iv-split) { padding: var(--pg-top) var(--pg-x) var(--pg-bottom); gap: 20px; }
+.app-finder .price-program .pc-page { padding: var(--pg-top) var(--pg-x) var(--pg-bottom); }
+
+/* 알약 탭 하나로: 계산(일반 금액 계산·선불권 P)·환경설정(글씨체·파일·보안)도 재고·직원 탭과 같은 모양 */
+.app-finder .pc-mode-tabs, .app-finder .settings-nav { display: inline-flex; gap: 4px; padding: 0; margin: 0; border: 0; border-radius: 0; background: none; box-shadow: none; width: auto; }
+.app-finder .pc-mode-tabs button, .app-finder .settings-nav button { height: 36px; min-height: 36px; padding: 0 16px; margin: 0; border: 1px solid transparent; border-radius: 999px; background: none; box-shadow: none; color: #5f636a; font-size: 14px; font-weight: 500; white-space: nowrap; }
+.app-finder .pc-mode-tabs button:hover:not(.active), .app-finder .settings-nav button:hover { background: #e8edf2; color: #2d3136; }
+.app-finder .pc-mode-tabs button.active, .app-finder .settings-nav button[aria-selected="true"] { background: #ecf1f6; border-color: #c9d6e3; color: #44617c; font-weight: 600; box-shadow: none; }
+.app-finder .pc-mode-tabs button::after, .app-finder .settings-nav button::after { display: none; }
+.app-finder .settings-nav { margin: var(--pg-top) var(--pg-x) 0; border-bottom: 0; }
+.app-finder .settings-body { padding: 20px var(--pg-x) var(--pg-bottom); }
+
+/* 월 넘김 버튼: 직원·재고 모두 같은 선 아이콘 */
+.sf-month button svg { display: block; }
+
+/* 재고체크: 기록 상태와 팀장 근태를 같은 작은 태그로(버튼처럼 보이지 않게) */
+.sf-wrap .iv-row-acts { align-items: center; }
+.sf-wrap .iv-off-tag, .sf-wrap .iv-dstate { height: 26px; display: inline-flex; align-items: center; padding: 0 10px; border-radius: 999px; font-size: 12px; font-weight: 600; border: 1px solid #dfe5ec; background: #f3f5f8; color: #5d646d; }
+.sf-wrap .iv-dstate.is-done { background: #ecf1f6; border-color: #c9d6e3; color: #44617c; }
+.sf-wrap .iv-dstate.is-missing { background: #fbeceb; border-color: #f1cfcc; color: #c2504a; }
+.sf-wrap .iv-dstate.is-skip { background: transparent; color: #7d838b; }
+
+/* 재고주문: '2 받기' 제목을 입고일 칸과 같은 줄 가운데에 */
+.iv-recv-head h4 { margin: 0 0 8px; }
+
+/* 월말 보고: 숫자 타일은 카드 안 회색 상자 대신 얇은 세로선으로만 나눔, 6개가 한 줄(아이패드 가로) */
+.iv-tiles { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 16px 0; }
+.iv-tiles > div, .iv-tiles > div.is-main { background: none; border: 0; border-left: 1px solid var(--ui-line-soft); border-radius: 0; padding: 2px 18px; }
+.iv-tiles > div:first-child { border-left: 0; padding-left: 0; }
+@container sfw (max-width: 900px) {
+  .iv-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .iv-tiles > div:nth-child(3n+1) { border-left: 0; padding-left: 0; }
+}
+@container sfw (max-width: 520px) {
+  .iv-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .iv-tiles > div:nth-child(n) { border-left: 1px solid var(--ui-line-soft); padding-left: 14px; }
+  .iv-tiles > div:nth-child(2n+1) { border-left: 0; padding-left: 0; }
+}
+
+/* 메모: 위 회색 막대 두 줄(창 제목 + 도구) → 도구만 여백 맞춰 한 줄, 쓰는 칸은 흰 카드 */
+.app-finder .notepad { background: transparent; }
+.app-finder .notepad > .border-b { background: transparent; border: 0; padding: 16px var(--pg-x) 0; gap: 4px; }
+.app-finder .notepad > .border-t { background: transparent; border-top: 1px solid var(--ui-line); padding: 8px var(--pg-x); font-size: 12.5px; }
+.app-finder .notepad > .border-t span { color: var(--ui-muted); }
+.app-finder .notepad > .flex-1 { padding: 12px var(--pg-x) 16px; gap: 10px; }
+.app-finder .notepad .notepad-title { height: 44px; padding: 0 14px; border: 1px solid var(--ui-line); border-radius: 10px; background: #fff; font-size: 16px; font-weight: 600; }
+.app-finder .notepad textarea { padding: 14px; border: 1px solid var(--ui-line) !important; border-radius: 12px; background: #fff; font-family: inherit; font-size: 15px; line-height: 1.7; }
+.app-finder .notepad .notepad-list { padding: 12px var(--pg-x) 16px; }
+
+/* 휴지통: 회색 상자 속 회색 막대 → 화면 여백 맞춘 제목 줄 + 흰 목록 */
+.app-finder .trash-window { background: transparent; padding: var(--pg-top) var(--pg-x) var(--pg-bottom); }
+.app-finder .trash-window .file-window-bar { padding: 0 0 12px; background: transparent; border-bottom: 1px solid var(--ui-line); }
+.app-finder .trash-window .file-window-path { font-size: 15px; font-weight: 600; color: #2d3136; }
+.app-finder .trash-window .trash-list { padding: 12px 0 0; }
+.app-finder .trash-window .trash-list li { padding: 12px 14px; border-color: var(--ui-line-soft); border-radius: 12px; background: #fff; }
+.app-finder .trash-window .settings-empty { padding: 16px 0; color: var(--ui-muted); }
+
+@container sfw (max-width: 520px) {
+  .app-finder .sf-wrap, .app-finder .sf-wrap.sf-leave, .app-finder .iv-wrap:has(.iv-split) { padding: 16px 16px 28px; }
+}
+@media (max-width: 600px) {
+  :root { --pg-x: 16px; --pg-top: 16px; }
+  .app-finder .price-program .pc-page { padding: 16px 16px 28px; }
+}
+.app-finder .app-pane-trash .finder-body { padding: 0; }
+/* 환경설정 글씨체: 고른 것 표시를 다른 화면의 선택 표시(연한 청회색 + 테두리)와 같게 */
+.app-finder .settings-body .font-preview { border: 1px solid var(--ui-line-soft); border-radius: 12px; background: #fff; }
+.app-finder .settings-body .font-preview[aria-pressed="true"] { background: #ecf1f6; border-color: #c9d6e3; outline: 0; box-shadow: none; }
+/* 보고서 휴대폰 폭: 제목 옆 작은 글자는 아래 줄로(제목·섹션 이름이 눌려 잘리지 않게) */
+@container sfw (max-width: 520px) {
+  .iv-paper h2 { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; font-size: 19px; }
+  .iv-paper h2 small { margin: 0; }
+  .iv-block .iv-num { flex-wrap: wrap; row-gap: 4px; }
+  .iv-block .iv-num small { flex-basis: 100%; margin-left: 0; text-align: left; }
+}
+/* 표 머리: 카드 안 회색 띠 대신 글자 + 아래 선만(성과표·전체 재고·보고서 모두 같게) */
+.sf-wrap .sf-table th { background: none; border-bottom: 1px solid #dfe5ec; }
+/* 품목·구매조건: 주문·받기와 같은 흰 카드 목록(둥근 줄, 고른 줄 연한 청회색), '+ 새 품목'은 글자 길이 버튼 */
+.sf-wrap .iv-split > .iv-side { background: #fff; border: 1px solid #e0e6ed; border-radius: 16px; padding: 12px 8px 8px; gap: 6px; max-height: calc(100vh - 230px); overflow: hidden; position: sticky; top: 0; }
+.sf-wrap .iv-side > .sf-btn { align-self: flex-start; margin: 0 4px 4px; }
+.sf-wrap .iv-ilist { border: 0; border-radius: 0; background: none; max-height: none; overflow-y: auto; }
+.sf-wrap .iv-ilist button { border: 0; border-radius: 10px; padding: 10px 12px; gap: 3px; }
+.sf-wrap .iv-ilist button:hover { background: #f3f6f9; }
+.sf-wrap .iv-ilist button[aria-pressed="true"] { background: #ecf1f6; }
+.sf-wrap .iv-ilist b { font-size: 14px; font-weight: 600; }
+.sf-wrap .iv-main > .sf-hint { padding: 12px 4px; }
+/* 품목 고친 칸도 아래 구매조건과 같은 흰 카드 */
+.sf-wrap .iv-main > .iv-form { background: #fff; border: 1px solid #e0e6ed; border-radius: 16px; padding: 20px 24px; display: flex; flex-direction: column; gap: 16px; }
+.app-finder .notepad .notepad-empty { text-align: left; color: var(--ui-muted); }
+.sf-wrap .iv-form > .iv-sec { background: none; border: 0; border-top: 1px solid #e6ebf1; border-radius: 0; padding: 20px 0 0; }
+.sf-wrap .iv-form > .iv-sec .sf-table td, .sf-wrap .iv-form > .iv-sec .sf-table th { white-space: nowrap; }
+/* 재고주문 숫자 줄 휴대폰 폭: 4칸이면 2×2로(한 칸만 아래로 떨어지지 않게) */
+@container sfw (max-width: 520px) {
+  .iv-d-stats:has(> div:nth-child(4)) { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 14px; }
+  .iv-d-stats:has(> div:nth-child(4)) > div:nth-child(odd) { border-left: 0; }
+}

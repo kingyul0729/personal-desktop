@@ -380,7 +380,7 @@ function ReceiveHere({ item, orders, today, notify }: { item: InvItem; orders: I
         <span>병원재고 {fmtQty(item.hospital_stock)} → <b>{fmtQty(Math.round((item.hospital_stock + a) * 1000) / 1000)} {u}</b></span>
         <span>업체 보관 잔량 {fmtQty(item.vendor_stock)} → <b className={a > item.vendor_stock ? 'is-warn' : ''}>{fmtQty(Math.round((item.vendor_stock - a) * 1000) / 1000)} {u}</b></span></div>; })() : null}
     </li>)}</ul> : <p className="iv-recv-none">받을 주문 없음</p>}
-    {item.prepaid && orders.length > 0 && <p className="iv-recv-note">입고확정 시 실제 입고 수량만큼 병원재고가 증가하고, 업체 보관 잔량은 같은 수량만큼 감소합니다.<br />업체 보관 잔량을 별도로 수정할 필요는 없습니다.</p>}
+    {!!item.prepaid && orders.length > 0 && <p className="iv-recv-note">입고확정 시 실제 입고 수량만큼 병원재고가 증가하고, 업체 보관 잔량은 같은 수량만큼 감소합니다.<br />업체 보관 잔량을 별도로 수정할 필요는 없습니다.</p>}
     <div className="iv-recv-more">
       {item.prepaid
         ? <button type="button" className={`sf-btn${extra === 'fix' ? ' is-on' : ''}`} onClick={() => { setExtra(extra === 'fix' ? null : 'fix'); setFixV(String(item.vendor_stock)); }}>잔량 고치기</button>
@@ -462,8 +462,8 @@ function OrderDialog({ item, opt, today, onClose, onDone }: { item: InvItem; opt
   return <Modal title={`${item.name} 주문`} onClose={onClose}>
     <dl className="sf-dl"><dt>구매조건</dt><dd>{opt.label || '-'}</dd><dt>1회 수량</dt><dd>{fmtQty(opt.qty)} {item.stock_unit}{opt.bonus_qty ? ` + 증정 ${fmtQty(opt.bonus_qty)}` : ''}</dd><dt>1회 결제금액</dt><dd>{fmtWon(opt.amount)}</dd></dl>
     <label className="sf-input"><span>주문 개수</span><input type="number" min={1} step={1} inputMode="numeric" value={count} onChange={e => setCount(e.target.value)} /></label>
-    {opt.prepaid && <label className="sf-input"><span>병원 입고 수량 (전체 {fmtQty(totalQty)} {item.stock_unit} 중)</span><input type="number" min={0} max={totalQty} inputMode="decimal" value={ship} onChange={e => setShip(e.target.value)} placeholder="0" /></label>}
-    {opt.prepaid && shipQty > 0 && <div className="iv-calc"><span>병원 입고 예정 <b>{withUnit(shipQty, item.stock_unit)}</b></span><span>업체 보관 <b className={shipQty > totalQty ? 'is-warn' : ''}>{withUnit(Math.round((totalQty - shipQty) * 1000) / 1000, item.stock_unit)}</b></span></div>}
+    {!!opt.prepaid && <label className="sf-input"><span>병원 입고 수량 (전체 {fmtQty(totalQty)} {item.stock_unit} 중)</span><input type="number" min={0} max={totalQty} inputMode="decimal" value={ship} onChange={e => setShip(e.target.value)} placeholder="0" /></label>}
+    {!!opt.prepaid && shipQty > 0 && <div className="iv-calc"><span>병원 입고 예정 <b>{withUnit(shipQty, item.stock_unit)}</b></span><span>업체 보관 <b className={shipQty > totalQty ? 'is-warn' : ''}>{withUnit(Math.round((totalQty - shipQty) * 1000) / 1000, item.stock_unit)}</b></span></div>}
     <label className="sf-input"><span>{opt.prepaid ? '결제일' : '주문일'}</span><input type="date" value={date} onChange={e => setDate(e.target.value)} /></label>
     <label className="sf-input"><span>메모</span><input type="text" value={memo} onChange={e => setMemo(e.target.value)} placeholder="선택" /></label>
     <div className="iv-total"><span>{opt.prepaid ? '선결제 금액' : '결제금액'}</span><b>{fmtWon(total)}</b>{total != null && total >= 10000 && <small>{readWon(total)}</small>}</div>
@@ -515,15 +515,14 @@ function ItemForm({ item, state, notify, onSaved, onDeleted }: { item: InvItem |
       <label className="sf-input"><span>구성수량(주문단위 1개 = 재고단위 몇 개)</span><input type="number" min={0} value={f.pack_qty} onChange={set('pack_qty')} /></label>
       <label className="sf-input"><span>주문단위 가격(원, 비우면 단가 미확인)</span><input type="number" min={0} value={f.price} onChange={set('price')} /></label>
       <label className="sf-input"><span>위험 기준(재고단위)</span><input type="number" min={0} value={f.min_stock} onChange={set('min_stock')} /></label>
-      <label className="sf-input"><span>일일 마감</span><select value={f.daily_mode} onChange={set('daily_mode')}><option value="">안 함</option><option value="usage">사용량 입력</option><option value="count">남은 수량 입력</option></select></label>
+      <label className="sf-input"><span>일일 마감</span><select value={f.daily_mode} onChange={set('daily_mode')}><option value="">안 함</option><option value="usage">사용량 입력</option><option value="count">마감재고 입력</option></select></label>
       <label className="iv-check"><input type="checkbox" checked={f.prepaid} onChange={set('prepaid')} /> 선결제 품목</label>
       <label className="sf-input iv-wide"><span>메모</span><input value={f.memo} onChange={set('memo')} /></label>
     </div>
     <div className="sf-modal-foot">{item && (askDel ? <span className="iv-inline">이 품목을 목록에서 뺄까요? 기록은 남아요.
       <button type="button" className="sf-btn" onClick={() => setAskDel(false)}>취소</button><button type="button" className="sf-btn is-danger" onClick={async () => { try { await invSend('DELETE', `/items/${item.id}`); notify('품목을 뺐어요.'); onDeleted(); } catch (e) { notify(errText(e)); } }}>빼기</button></span>
       : <button type="button" className="sf-btn" onClick={() => setAskDel(true)}>품목 빼기</button>)}
-      {off ? <span className="iv-tag iv-off-tag">{data.check?.label}</span>
-        : <button type="button" className="sf-btn is-primary" disabled={busy} onClick={() => void save()}>{busy && <SavingMark />}저장</button>}</div>
+      <button type="button" className="sf-btn is-primary" disabled={busy} onClick={() => void save()}>{busy && <SavingMark />}저장</button></div>
     {item && <Options item={item} notify={notify} onSaved={onSaved} />}
   </div>;
 }
@@ -744,7 +743,7 @@ export function StockReport() {
   </div>;
 }
 
-const won = (v: number) => `₩${Math.round(v).toLocaleString('ko-KR')}`;
+const won = (v: number) => `${Math.round(v).toLocaleString('ko-KR')}원`;
 const diff = (a: number, b: number, f: (v: number) => string) => { const d = a - b; return d === 0 ? '0' : `${d > 0 ? '+' : '−'}${f(Math.abs(d))}`; };
 // 월말·연말 보고: 번호 붙은 흰 카드 섹션(2026-11-08 사용자 지정 '10월 피부팀 월 정리' 형식)
 function Block({ n, title, sub, children }: { n: number; title: string; sub?: string; children: React.ReactNode }) {
@@ -774,7 +773,7 @@ function MonthReport({ a, b }: { a: MonthRep; b: MonthRep }) {
     <Block n={++n} title="재고 확인" sub={`품목별 하루 평균 사용량 · 영업일 ${mm(b.month)} ${b.open_days}일 / ${mm(a.month)} ${a.open_days}일`}>
       {!names.length ? <p className="sf-hint">기록 없음</p> : <table className="sf-table"><thead><tr><th>품목</th><th className="num">{mm(b.month)}</th><th className="num">{mm(a.month)}</th><th className="num">차이</th></tr></thead>
         <tbody>{names.map(nm => { const x = a.usage.find(u => u.name === nm), y = b.usage.find(u => u.name === nm); const unit = (x || y)!.stock_unit; return <tr key={nm}><td>{nm} <small>{unit}/일</small></td>
-          <td className="num">{y?.per_day ?? <small>기록 없음</small>}</td><td className="num"><b>{x?.per_day ?? '기록 없음'}</b></td><td className="num">{x?.per_day != null && y?.per_day != null ? diff(x.per_day, y.per_day, v => String(Math.round(v * 10) / 10)) : '-'}</td></tr>; })}</tbody></table>}
+          <td className="num">{y?.per_day ?? <small>기록 없음</small>}</td><td className="num">{x?.per_day != null ? <b>{x.per_day}</b> : <small>기록 없음</small>}</td><td className="num">{x?.per_day != null && y?.per_day != null ? diff(x.per_day, y.per_day, v => String(Math.round(v * 10) / 10)) : '—'}</td></tr>; })}</tbody></table>}
     </Block>
     {a.prepaid && a.prepaid.length > 0 && <Block n={++n} title="업체 보관 잔량" sub="현재">
       <table className="sf-table"><thead><tr><th>품목</th><th className="num">업체 보관 잔량</th><th className="num">병원재고</th></tr></thead>

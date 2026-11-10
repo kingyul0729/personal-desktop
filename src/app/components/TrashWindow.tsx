@@ -53,7 +53,7 @@ export function TrashWindow() {
   };
   return <div className="trash-window">
     <div className="file-window-bar">
-      <span className="file-window-path">휴지통 {total}개 · 모든 메뉴에서 지운 항목</span>
+      <span className="file-window-path">휴지통 {total}개</span>
       <button type="button" disabled={!total || busy} onClick={() => { setError(''); setConfirm('all'); }}>휴지통 비우기</button>
     </div>
     {total ? <ul className="trash-list">

@@ -83,7 +83,6 @@ function FontSettings() {
   const current = data.settings.font ?? DEFAULT_FONT;
   const choose = (font: string, label: string) => current !== font && feedback.run(() => act({ action: 'set-font', font }), `글씨체를 ${label.replace(' (기본)', '')}(으)로 바꿨습니다.`);
   return <>
-    <p className="settings-hint">고른 글씨체는 바탕화면과 모든 창에 적용되고, 다른 기기에서도 그대로 보입니다.</p>
     <div className="font-options" role="group" aria-label="글씨체">
       {FONTS.map(font => <button key={font.id} type="button" className="font-preview" aria-pressed={current === font.id} disabled={feedback.busy} onClick={() => choose(font.id, font.label)}>
         <strong>{font.label}</strong><span style={{ fontFamily: `"${font.family}", Pretendard, "Noto Sans KR", system-ui, sans-serif` }}>{FONT_SAMPLE}</span>

@@ -1,3 +1,4 @@
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { LoadingBox, SavingMark } from './Feedback';
 import { OldDataBanner } from './Inventory';
@@ -72,9 +73,9 @@ export default function StaffSchedule() {
     <OldDataBanner />
     <div className="sf-bar">
       <div className="sf-month">
-        <button type="button" aria-label="이전 달" onClick={() => setMonth(m => shiftMonth(m, -1))}>‹</button>
+        <button type="button" aria-label="이전 달" onClick={() => setMonth(m => shiftMonth(m, -1))}><ChevronLeft size={18} strokeWidth={2} /></button>
         <strong>{monthLabel(month)}</strong>
-        <button type="button" aria-label="다음 달" onClick={() => setMonth(m => shiftMonth(m, 1))}>›</button>
+        <button type="button" aria-label="다음 달" onClick={() => setMonth(m => shiftMonth(m, 1))}><ChevronRight size={18} strokeWidth={2} /></button>
         <button type="button" className="sf-today" onClick={() => setMonth(todayLocal().slice(0, 7))}>오늘</button>
       </div>
       <div className="sf-seg" role="tablist" aria-label="보기">
@@ -379,7 +380,7 @@ function Performance({ month, data, notify }: { month: string; data: Data; notif
     ? !fullConsult && !(leaderOff && !s.is_leader) && (r.attendance === '정상근무' || isTimeEtc(r))
     : !((r.attendance === '기타' && r.etc_type === 'unpaid') || ['병원휴무', '휴무', '연차', '공휴일'].includes(r.attendance));
   const n = daysInMonth(month);
-  const dash = (v: unknown, unit = '') => (v == null || v === '' ? '-' : `${v}${unit}`);
+  const dash = (v: unknown, unit = '') => (v == null || v === '' ? '—' : `${v}${unit}`);
   return <div className="sf-perf">
     <section className="sf-perf-in">
     <div className="sf-perf-head"><h3>날짜별 입력</h3>

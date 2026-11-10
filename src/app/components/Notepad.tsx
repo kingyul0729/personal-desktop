@@ -165,11 +165,11 @@ export function Notepad() {
         </Button>
         <Button variant="ghost" size="sm" className="gap-2" onClick={startNew} disabled={busy || !ready}>
           <File className="h-4 w-4" />
-          New
+          새 메모
         </Button>
         <Button variant="ghost" size="sm" className="gap-2" onClick={() => void save()} disabled={busy || !ready || !authenticated || view !== 'editor'}>
           <Save className="h-4 w-4" />
-          {busy ? 'Saving…' : 'Save'}
+          {busy ? '저장 중…' : '저장'}
         </Button>
         {ready && !authenticated && <a className="notepad-signin" href="/signin-with-chatgpt?return_to=%2F" target="_top">로그인하면 메모가 저장됩니다</a>}
       </div>
@@ -183,7 +183,7 @@ export function Notepad() {
           <Textarea
             value={content}
             onChange={(e) => { setContent(e.target.value); setRestoredAt(0); }}
-            placeholder="Start typing..."
+            placeholder="내용"
             aria-label="메모 내용"
             className="w-full flex-1 resize-none border-none focus-visible:ring-0 font-mono"
           />
@@ -202,14 +202,14 @@ export function Notepad() {
                 <Trash2 size={17} />
               </button>
             </li>
-          ))}</ul> : <p className="notepad-empty">{authenticated ? '아직 저장한 메모가 없습니다. 메모를 쓰고 Save를 누르면 여기에 쌓입니다.' : '로그인하면 저장한 메모를 볼 수 있습니다.'}</p>}
+          ))}</ul> : <p className="notepad-empty">{authenticated ? '저장한 메모 없음' : '로그인하면 저장한 메모를 볼 수 있습니다.'}</p>}
         </div>
       )}
 
       {/* Status Bar */}
       <div className="border-t border-gray-300 bg-gray-50 px-4 py-1 flex items-center justify-between gap-3">
         <span className="text-gray-600">
-          {view === 'editor' ? `Length: ${content.length} characters · Lines: ${content.split('\n').length}` : `저장된 메모 ${memos.length}개`}
+          {view === 'editor' ? `${content.length.toLocaleString('ko-KR')}자 · ${content.split('\n').length}줄` : `저장된 메모 ${memos.length}개`}
         </span>
         <span className="text-gray-600" role="status">{view === 'editor' ? statusText : ''}</span>
       </div>
