@@ -144,7 +144,6 @@ function DailyClose({ today, notify, onSaved }: { items: InvItem[]; today: strin
       }
     }
     // 마감재고 + 사용량이 마감 전 재고와 다르면 고치기 전에 한 번 묻는다(사용량 오타로 월말 사용량이 틀어지지 않게)
-    if (changes.length && !confirmed) { setAsk({ lines: changes, run: () => { setAsk(null); void save(true); } }); return; }
     setBusy(true);
     try { await invSend('POST', '/daily', { date, patients: patients === '' ? null : Number(patients), status: status || null, extra: { modeling_people: off ? (data.day?.extra?.modeling_people ?? null) : people === '' ? null : Number(people) }, used, closing, opening }); notify('마감을 저장했어요.'); announceInventory(); onSaved(); await load(); }
     catch (e) { notify(errText(e)); } finally { setBusy(false); }
@@ -174,14 +173,14 @@ function DailyClose({ today, notify, onSaved }: { items: InvItem[]; today: strin
       const before = left != null && use != null ? r3(left + use) : ledger; // 둘 다 적으면 고친 마감 전 재고
       return <div key={it.id} className="iv-dcard">
         <div className="iv-dcard-head"><b>{it.name}</b><span className="iv-unit">{it.stock_unit}</span></div>
-        <dl className="iv-dbefore"><dt>마감 전 재고</dt><dd>{before !== ledger ? <><s>{fmtQty(ledger)}</s> → </> : null}{withUnit(before, it.stock_unit)}</dd></dl>
+        <dl className="iv-dbefore"><dt>마감 전 재고</dt><dd>{withUnit(before, it.stock_unit)}</dd></dl>
         <div className="iv-dpair">
           <label className="sf-input"><span>마감재고</span>
             <input type="number" min={0} inputMode="decimal" value={vals[it.id] ?? ''} onChange={e => setVals(v => ({ ...v, [it.id]: e.target.value }))}
-              placeholder={use != null && ledger - use >= 0 ? fmtQty(r3(ledger - use)) : it.stock_unit} aria-label={`${it.name} 마감재고`} /></label>
+              placeholder={it.stock_unit} aria-label={`${it.name} 마감재고`} /></label>
           <label className="sf-input"><span>당일 사용량</span>
             <input type="number" min={0} inputMode="decimal" value={uses[it.id] ?? ''} onChange={e => setUses(v => ({ ...v, [it.id]: e.target.value }))}
-              placeholder={left != null && ledger - left >= 0 ? fmtQty(r3(ledger - left)) : it.stock_unit} aria-label={`${it.name} 당일 사용량`} /></label>
+              placeholder={it.stock_unit} aria-label={`${it.name} 당일 사용량`} /></label>
         </div>
         {it.name.includes('모델링') && !off && <label className="sf-input"><span>사용 인원</span><input type="number" min={0} inputMode="numeric" value={people} onChange={e => setPeople(e.target.value)} placeholder="명" /></label>}
         <dl><dt>최근 15일 사용</dt><dd>{withUnit(it.used15, it.stock_unit)}</dd></dl>
