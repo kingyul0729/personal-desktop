@@ -643,3 +643,26 @@ test('daily: correcting 마감 전 재고 makes the month usage right; hospital 
   const at = d => call(e, `/daily?date=${d}`).then(r => r.data.items.find(x => x.id === it.id).stock_at);
   assert.deepEqual([await at('2026-11-04'), await at('2026-11-07'), item(e, '일회용해면').hospital_stock], [15, 12, 12]);
 });
+
+test('check: moving a receipt date before a counted day keeps that count (no double add)', async () => {
+  const e = env(); await call(e, '/state');
+  const it = item(e, '더마 하이드로 팩');
+  assert.equal((await call(e, '/receive', 'POST', { item_id: it.id, actual_qty: 6, amount: 1000, date: '2026-11-01' })).status, 200);
+  // 11/6 실사: 300장이 이미 들어와 있었는데 입고 기록이 없어 마감재고 290 + 사용 6
+  assert.equal((await call(e, '/daily', 'POST', { date: '2026-11-06', closing: { [it.id]: 290 }, opening: { [it.id]: 296 } })).status, 200);
+  assert.equal(item(e, '더마 하이드로 팩').hospital_stock, 290);
+  // 같은 300장을 11/9로 입고확정 → 두 번 더해짐
+  const r = await call(e, '/receive', 'POST', { item_id: it.id, actual_qty: 300, amount: 1000, date: '2026-11-09' });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.equal(item(e, '더마 하이드로 팩').hospital_stock, 590);
+  const tx = e.inv.prepare(`SELECT id FROM inv_tx WHERE item_id = ? AND kind = 'in' AND date = '2026-11-09'`).get(it.id);
+  const p = await call(e, `/tx/${tx.id}`, 'PATCH', { date: '2026-11-06' });
+  assert.equal(p.status, 200, JSON.stringify(p.data));
+  assert.equal(item(e, '더마 하이드로 팩').hospital_stock, 290);
+  const d = (await call(e, '/daily?date=2026-11-06')).data.items.find(x => x.id === it.id);
+  assert.equal(d.stock_at, 290);
+  assert.equal(Math.round((d.used + d.open_fix) * 1000) / 1000, 6); // 사용량은 적은 그대로
+  // 되돌려 옮기면 다시 590
+  assert.equal((await call(e, `/tx/${tx.id}`, 'PATCH', { date: '2026-11-09' })).status, 200);
+  assert.equal(item(e, '더마 하이드로 팩').hospital_stock, 590);
+});

@@ -666,7 +666,7 @@ function TxLog({ notify }: { notify: (m: string) => void }) {
   const [rows, setRows] = useState<InvTx[] | null>(null);
   const [ask, setAsk] = useState<InvTx | null>(null);
   const [inv, setInv] = useState<number | null>(null);
-  const [edit, setEdit] = useState<{ tx: InvTx; v: string } | null>(null);
+  const [edit, setEdit] = useState<{ tx: InvTx; v: string; d: string } | null>(null);
   const editable = (t: InvTx) => (t.kind === 'in' || t.kind === 'out' || t.kind === 'prepaid_in') && !t.daily_date;
   const load = useCallback(async () => {
     const k = kind === 'in' ? 'in,prepaid_buy,prepaid_in' : kind === 'out' ? 'out' : undefined;
@@ -692,16 +692,17 @@ function TxLog({ notify }: { notify: (m: string) => void }) {
         <span role="cell" className="mid">{INVOICE_KINDS.includes(t.kind) ? <button type="button" className={`iv-inv-mini is-${invoiceState(t)}`} onClick={() => setInv(t.id)} aria-label={`명세서 ${INVOICE_LABEL[invoiceState(t)](t)}`}>
           {invoiceState(t) === 'photo' ? <><Camera size={13} strokeWidth={2} />{photosOf(t).length}</> : INVOICE_LABEL[invoiceState(t)](t)}</button> : null}</span>
         <span role="cell" className="iv-row-btns">
-          {editable(t) ? <button type="button" className="iv-icon-btn" aria-label="수정" title="수정" onClick={() => setEdit({ tx: t, v: String(Math.abs(t.hospital_delta)) })}><Pencil size={16} strokeWidth={1.8} /></button> : <span className="iv-icon-btn is-empty" aria-hidden="true" />}
+          {editable(t) ? <button type="button" className="iv-icon-btn" aria-label="수정" title="수정" onClick={() => setEdit({ tx: t, v: String(Math.abs(t.hospital_delta)), d: t.date })}><Pencil size={16} strokeWidth={1.8} /></button> : <span className="iv-icon-btn is-empty" aria-hidden="true" />}
           <button type="button" className="iv-icon-btn is-danger" aria-label="삭제" title="삭제" onClick={() => setAsk(t)}><Trash2 size={16} strokeWidth={1.8} /></button></span>
       </div>; })}</div></div>}
-    {edit && <Modal title="수량 수정" onClose={() => setEdit(null)}>
+    {edit && <Modal title="기록 수정" onClose={() => setEdit(null)}>
       <p>{Number(edit.tx.date.slice(5, 7))}월 {Number(edit.tx.date.slice(8))}일 {edit.tx.item_name} {KIND_LABEL[edit.tx.kind]}</p>
+      <label className="sf-input"><span>{edit.tx.kind === 'out' ? '출고일' : '입고일'}</span><input type="date" max={todayLocal()} value={edit.d} onChange={e => setEdit({ ...edit, d: e.target.value })} /></label>
       <label className="sf-input"><span>{edit.tx.kind === 'out' ? '출고 수량' : '받은 수량'}{edit.tx.bonus_qty ? ' (증정 포함)' : ''} ({edit.tx.stock_unit})</span><input type="number" min={0} inputMode="decimal" value={edit.v} onChange={e => setEdit({ ...edit, v: e.target.value })} /></label>
       {(() => { const d = Math.round(((Number(edit.v) || 0) - Math.abs(edit.tx.hospital_delta)) * 1000) / 1000; const h = edit.tx.kind === 'out' ? -d : d;
         return d ? <div className="iv-calc"><span>병원재고 <b>{h > 0 ? '+' : '−'}{fmtQty(Math.abs(h))}</b></span>{edit.tx.kind === 'prepaid_in' && <span>업체 보관 잔량 <b>{d > 0 ? '−' : '+'}{fmtQty(Math.abs(d))}</b></span>}</div> : null; })()}
       <div className="sf-modal-foot"><button type="button" className="sf-btn" onClick={() => setEdit(null)}>취소</button>
-        <button type="button" className="sf-btn is-primary" disabled={!(Number(edit.v) > 0)} onClick={async () => { try { await invSend('PATCH', `/tx/${edit.tx.id}`, { actual_qty: Number(edit.v) }); notify('수량을 고쳤어요.'); setEdit(null); announceInventory(); void load(); } catch (e) { notify(errText(e)); } }}>저장</button></div>
+        <button type="button" className="sf-btn is-primary" disabled={!(Number(edit.v) > 0) || !edit.d} onClick={async () => { try { await invSend('PATCH', `/tx/${edit.tx.id}`, { actual_qty: Number(edit.v), ...(edit.d !== edit.tx.date ? { date: edit.d } : {}) }); notify('고쳤어요.'); setEdit(null); announceInventory(); void load(); } catch (e) { notify(errText(e)); } }}>저장</button></div>
     </Modal>}
     {inv != null && rows && rows.find(r => r.id === inv) && <InvoiceDialog tx={rows.find(r => r.id === inv)!} rows={rows} notify={notify} onClose={() => setInv(null)} onChange={() => void load()} />}
     {ask && <Modal title="기록 삭제" onClose={() => setAsk(null)}>
