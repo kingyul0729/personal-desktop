@@ -181,6 +181,7 @@ async function applyOldDailyCounts(request, env, url, db) {
   const res = await inventoryRoute(req, env, new URL(req.url), '예전 앱 일일재고', db, '/daily', 'POST');
   if (!res.ok) console.log('dailyfix1', day.d, await res.text());
   await db.prepare(`INSERT OR REPLACE INTO inv_meta (key, value) VALUES ('dailyfix1_next', ?)`).bind(String(next + 1)).run();
+  return true;
 }
 
 export async function handleInventory(request, env, url, user) {
@@ -190,7 +191,6 @@ export async function handleInventory(request, env, url, user) {
   catch { return json({ error: '재고 자료를 잠시 불러오지 못했어요. 새로고침해 주세요.' }, 503); }
   const path = url.pathname.slice('/api/inventory'.length) || '/';
   const m = request.method;
-  await applyOldDailyCounts(request, env, url, db);
   // 같은 요청 두 번 받기 방지(2026-11-09 사용자 문서 8번): 화면이 저장 한 번마다 고유 번호(x-req-id)를 붙인다.
   // 같은 번호가 다시 오면(재시도·두 번 누름) 처음 결과만 돌려주고 재고·결제는 다시 바꾸지 않는다.
   const reqId = m === 'GET' ? null : request.headers.get('x-req-id');
@@ -602,6 +602,13 @@ async function inventoryRoute(request, env, url, user, db, path, m) {
 
     // ── 일일 재고(마감) ──
     if (m === 'GET' && path === '/fix-left') { // 예전 일일재고 넣기가 몇 날 남았는지(화면이 다 끝날 때까지 불러 마저 넣음)
+      // 다른 화면 요청은 느려지지 않게 여기서만 넣는다. 한 번에 여러 날(최대 20초) — 요청당 쿼리 한도에 걸리면 거기서 멈추고 다음 부름에서 이어서.
+      const t0 = Date.now();
+      for (let k = 0; k < 46 && Date.now() - t0 < 20000; k++) {
+        let did = false;
+        try { did = await applyOldDailyCounts(request, env, url, db); } catch { break; }
+        if (!did) break;
+      }
       const done = await one(db, `SELECT value FROM inv_meta WHERE key = 'dailyfix1'`);
       const imported = await one(db, `SELECT value FROM inv_meta WHERE key = 'import'`);
       const next = Number((await one(db, `SELECT value FROM inv_meta WHERE key = 'dailyfix1_next'`))?.value || 0);

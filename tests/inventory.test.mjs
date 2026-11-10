@@ -691,7 +691,7 @@ test('check: old app daily counts (dailyfix1) put each photo day exactly as writ
   e.inv.prepare(`UPDATE inv_items SET daily_mode = CASE WHEN name IN ('보관용 모델링팩','일회용해면') THEN 'count' ELSE 'usage' END WHERE name IN ('보관용 3종 시트팩','더마 하이드로 팩','더마 리바이브 팩','보관용 모델링팩','일회용해면')`).run();
   e.inv.prepare(`UPDATE inv_items SET hospital_stock = 400 WHERE name IN ('보관용 3종 시트팩','더마 하이드로 팩','더마 리바이브 팩','보관용 모델링팩','일회용해면')`).run();
   e.inv.prepare(`INSERT OR REPLACE INTO inv_meta (key, value) VALUES ('import', 'old-app-data.json')`).run(); // 예전 자료를 넣은 곳
-  for (let k = 0; k < 50; k++) await call(e, '/state'); // 요청마다 하루씩
+  for (let k = 0; k < 5; k++) await call(e, '/fix-left');
   const { OLD_DAILY_COUNTS } = await import('../worker/invDailyFix.js');
   for (const day of OLD_DAILY_COUNTS) {
     const d = (await call(e, `/daily?date=${day.d}`)).data;
@@ -713,7 +713,7 @@ test('check: dailyfix1 keeps a November count the team lead already wrote', asyn
   assert.equal((await call(e, '/daily', 'POST', { date: '2026-11-06', closing: { [id]: 290 }, opening: { [id]: 296 } })).status, 200);
   e.inv.prepare(`INSERT OR REPLACE INTO inv_meta (key, value) VALUES ('import', 'old-app-data.json')`).run();
   e.inv.prepare(`DELETE FROM inv_meta WHERE key = 'dailyfix1'`).run();
-  for (let k = 0; k < 50; k++) await call(e, '/state');
+  for (let k = 0; k < 5; k++) await call(e, '/fix-left');
   const d6 = (await call(e, '/daily?date=2026-11-06')).data.items.find(x => x.id === id);
   const d31 = (await call(e, '/daily?date=2026-10-31')).data.items.find(x => x.id === id);
   assert.equal(d31.stock_at, 26);
@@ -730,7 +730,7 @@ test('check: dailyfix1 finishes with the photo 10/31 and keeps the lead\'s 11/2�
   await call(e, '/daily', 'POST', { date: '2026-11-02', closing: { [id]: 24 }, opening: { [id]: 26 } });
   await call(e, '/daily', 'POST', { date: '2026-11-03', closing: { [id]: 17 }, opening: { [id]: 23 } });
   e.inv.prepare(`INSERT OR REPLACE INTO inv_meta (key, value) VALUES ('import', 'old-app-data.json')`).run();
-  for (let k = 0; k < 50; k++) await call(e, '/state');
+  for (let k = 0; k < 5; k++) await call(e, '/fix-left');
   const day = async d => (await call(e, `/daily?date=${d}`)).data.items.find(x => x.id === id);
   const r = d => ({ close: d.stock_at, used: Math.round((d.used + (d.open_fix || 0)) * 1000) / 1000 });
   assert.deepEqual(r(await day('2026-10-31')), { close: 26, used: 4 });
