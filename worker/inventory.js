@@ -552,7 +552,7 @@ async function inventoryRoute(request, env, url, user, db, path, m) {
     if (m === 'GET' && path === '/daily') {
       const date = okDate(url.searchParams.get('date')) ? url.searchParams.get('date') : kstToday();
       const day = await one(db, 'SELECT * FROM inv_daily WHERE date = ?', date);
-      const items = await all(db, `SELECT id, name, stock_unit, hospital_stock, daily_mode, vendor_id FROM inv_items WHERE active = 1 AND daily_mode IS NOT NULL ORDER BY sort, id`);
+      const items = await all(db, `SELECT i.id, i.name, i.stock_unit, i.hospital_stock, i.daily_mode, i.vendor_id, v.name AS vendor_name FROM inv_items i LEFT JOIN inv_vendors v ON v.id = i.vendor_id WHERE i.active = 1 AND i.daily_mode IS NOT NULL ORDER BY i.sort, i.id`);
       // 그날 일일재고가 바꾼 병원재고(소모 −, 실사가 더 많아 늘린 것 +)를 합친 순 사용량
       const used = await all(db, `SELECT item_id, round(sum(-hospital_delta), 3) AS qty FROM inv_tx WHERE deleted_at IS NULL AND daily_date = ? AND kind IN ('out', 'adjust') GROUP BY item_id`, date);
       const fixes = await all(db, `SELECT item_id, round(sum(hospital_delta), 3) AS q FROM inv_tx WHERE deleted_at IS NULL AND daily_date = ? AND kind = 'adjust' AND memo LIKE '마감 전 재고 고침%' GROUP BY item_id`, date);

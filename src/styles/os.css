@@ -2359,3 +2359,19 @@ input[type="date"]::-webkit-date-and-time-value, input[type="month"]::-webkit-da
 /* 월말 숫자 타일 비교 줄(2026-11-10): '9월 값'과 차이가 중간에서 끊기지 않게 각각 한 덩어리 */
 .sf-wrap .iv-tiles .iv-tile-cmp i { font-style: normal; white-space: nowrap; }
 .sf-wrap .iv-tiles .iv-tile-cmp span { white-space: nowrap; }
+
+/* 일일재고 카드 = 예전 앱 방식(2026-11-10 사용자 지정): 이름·업체 / 남은 수량 / 당일 사용량 / 마감재고(차이는 빨간 괄호) / 15일 사용 */
+.sf-wrap .iv-dcard { display: flex; flex-direction: column; gap: 10px; }
+.sf-wrap .iv-dcard-head { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
+.sf-wrap .iv-dcard-head b { font-size: 17px; }
+.sf-wrap .iv-dcard-head small { font-size: 13px; color: var(--text-sub, #7d838b); }
+.sf-wrap .iv-drow { display: grid; grid-template-columns: minmax(0, 1fr) 88px 36px; align-items: center; gap: 8px; margin: 0; }
+.sf-wrap .iv-drow > span { font-size: 14px; color: var(--text-sub, #7d838b); white-space: nowrap; }
+.sf-wrap .iv-drow > input { width: 100%; min-width: 0; height: 44px; padding: 0 12px; border: 1px solid #d9dee4; border-radius: 10px; background: #fff; font-size: 20px; font-weight: 600; text-align: right; appearance: none; -moz-appearance: textfield; }
+.sf-wrap .iv-drow > input::-webkit-outer-spin-button, .sf-wrap .iv-drow > input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.sf-wrap .iv-drow > input:focus { outline: none; border: 2px solid var(--sage, #557591); padding: 0 11px; }
+.sf-wrap .iv-drow > em { font-style: normal; font-size: 13px; color: var(--text-sub, #7d838b); }
+.sf-wrap .iv-drow.is-text > b { text-align: right; font-size: 18px; padding-right: 13px; }
+.sf-wrap .iv-ddiff { font-style: normal; font-weight: 700; color: #c2504a; }
+.sf-wrap .iv-d15 { margin: 2px 0 0; text-align: right; font-size: 13px; color: var(--text-sub, #7d838b); }
+.sf-wrap .iv-dcount { font-size: 13px; color: var(--text-sub, #7d838b); white-space: nowrap; align-self: center; }
