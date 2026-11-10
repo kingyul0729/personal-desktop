@@ -5,6 +5,7 @@ import test from 'node:test';
 import { DatabaseSync } from 'node:sqlite';
 
 const FIXED = Date.parse('2027-02-01T03:00:00Z');
+const SHOW = process.argv.includes('--sim-report'); // 결과 숫자 보기: node --test tests/sim-2027-01.test.mjs -- --sim-report
 const RealDate = Date;
 globalThis.Date = class extends RealDate { constructor(...a) { super(...(a.length ? a : [FIXED])); } static now() { return FIXED; } };
 const { handleApi } = await import('../worker/index.js');
@@ -73,6 +74,7 @@ test('2027-01 가상 운영', async t => {
     const sun = inv.prepare(`SELECT managed_count, designated_count FROM staff_attendance WHERE staff_id = 2 AND work_date = '2027-01-10'`).get();
     assert.deepEqual([sun.managed_count, sun.designated_count], [null, null]);
     const perf = await ok('/staff/performance?month=2027-01');
+    if (SHOW) console.log('PERF', JSON.stringify(perf.map(p => [p.id, p.work_days, p.total_hours, p.total_managed, p.avg_managed, p.total_designated, p.consult_count])));
     assert.ok(perf.find(x => x.id === 2).exclusions.some(x => x.date === '2027-01-10' && x.reason.includes('휴일')));
     for (const id of [1, 2, 3, 4, 5]) {
       let mins = 0, mg = 0, mgN = 0, dg = 0, dgN = 0, workDays = 0;
@@ -229,6 +231,7 @@ test('2027-01 가상 운영', async t => {
 
   await t.test('5. 월말보고 = 입력 기록', async () => {
     const rep = await ok('/inventory/report?month=2027-01');
+    if (SHOW) console.log('REP', JSON.stringify({ spend: [rep.spend_total, rep.spend_general, rep.spend_prepaid], in: rep.in_count, patients: rep.patients, usage: rep.usage.map(u => [u.name, u.used]), pays: rep.payments.map(p => [p.name, p.when, p.amount]), pp: rep.prepaid.filter(x => x.name.includes('3종')).map(x => [x.hospital_stock, x.vendor_stock]), stock: [item(S).hospital_stock, item(G).hospital_stock] }));
     assert.equal(rep.as_of, '2027-01-31');
     assert.equal(rep.spend_prepaid, spendPrepaid);
     assert.equal(rep.spend_general, spendGeneral);
