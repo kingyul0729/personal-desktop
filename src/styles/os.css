@@ -2350,3 +2350,8 @@ input[type="date"]::-webkit-date-and-time-value, input[type="month"]::-webkit-da
   .iv-d-stats:has(> div:nth-child(4)) { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 14px; }
   .iv-d-stats:has(> div:nth-child(4)) > div:nth-child(odd) { border-left: 0; }
 }
+/* 일일재고 카드: 마감 전 재고는 글자, 적는 칸은 마감재고 | 당일 사용량 두 칸(2026-11-10 사용자) */
+.iv-dcard .iv-dpair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.iv-dcard .iv-dpair .sf-input input { width: 100%; min-width: 0; }
+.iv-dcard .iv-dpair input::placeholder { color: #a8afb7; }
+.iv-dcard .iv-dbefore dd s { color: #a8afb7; font-weight: 400; }

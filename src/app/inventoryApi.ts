@@ -46,6 +46,7 @@ export const invoiceSrc = (id: number | string) => `/api/inventory/invoices/${id
 // 여러 화면이 같은 재고 상태를 보도록 저장 후 알림
 const listeners = new Set<() => void>();
 export const announceInventory = () => listeners.forEach(fn => fn());
+export const subscribeInventory = (fn: () => void) => { listeners.add(fn); return () => { listeners.delete(fn); }; };
 export function useInventory() {
   const [state, setState] = useState<InvState | null>(null);
   const [error, setError] = useState<InvError | null>(null);

@@ -2,9 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Camera, ChevronLeft, ChevronRight, Pencil, Trash2, X } from 'lucide-react';
 import { LoadingBox, SavingMark } from './Feedback';
 import { readWon } from '../koreanAmount';
-import {
-  type InvItem, type InvOption, type InvOrder, type InvState, type InvTx, InvError, KIND_LABEL, announceInventory, fmtQty, fmtWon, invGet, invSend, invUploadInvoice, invoiceSrc, shiftMonth, todayLocal, unitHint, useInventory,
-} from '../inventoryApi';
+import { type InvItem, type InvOption, type InvOrder, type InvState, type InvTx, InvError, KIND_LABEL, announceInventory, fmtQty, fmtWon, invGet, invSend, invUploadInvoice, invoiceSrc, shiftMonth, todayLocal, unitHint, useInventory, subscribeInventory } from '../inventoryApi';
 
 // 재고 화면 4개(재고체크·재고주문·재고입출고·월말/연말보고서). 숫자는 예전 앱에서, 화면은 새로 만듦.
 
@@ -105,40 +103,37 @@ function DailyClose({ today, notify, onSaved }: { items: InvItem[]; today: strin
   const [date, setDate] = useState(today);
   const [data, setData] = useState<{ record?: DailyRecord; check?: { ok: boolean; label: string | null }; patients_auto?: number | null; day: { patients: number | null; status: string | null; extra: Record<string, unknown> } | null; items: DailyItem[] } | null>(null);
   const [patients, setPatients] = useState(''), [status, setStatus] = useState(''), [vals, setVals] = useState<Record<number, string>>({}), [people, setPeople] = useState('');
-  const [busy, setBusy] = useState(false), [hist, setHist] = useState(false), [cnt, setCnt] = useState<Record<number, boolean>>({}), [opens, setOpens] = useState<Record<number, string>>({});
+  const [busy, setBusy] = useState(false), [hist, setHist] = useState(false), [uses, setUses] = useState<Record<number, string>>({});
   const load = useCallback(async () => {
     const d = await invGet('/daily', { date });
-    const off = d.check ? !d.check.ok : false;
     setData(d); setPatients(d.day?.patients == null ? '' : String(d.day.patients)); setStatus(d.day?.status || ''); setPeople(d.day?.extra?.modeling_people == null ? '' : String(d.day.extra.modeling_people));
-    // 마감재고 칸은 마감일 기준 재고(stock_at: 그 날짜 뒤 기록은 빼고 계산)
+    // 이미 적은 날은 두 칸 모두 다시 보여 준다: 마감재고 = 마감일 기준 재고(stock_at), 당일 사용량 = 그날 쓴 양(마감 전 재고를 고쳤으면 고친 값 기준)
     setVals(Object.fromEntries(d.items.map((it: DailyItem) => [it.id, it.used == null ? '' : String(it.stock_at)])));
-    // 고친 마감 전 재고가 있으면 그 값(장부 + 고친 양)을 칸에 다시 보여 준다
-    setOpens(Object.fromEntries(d.items.filter((it: DailyItem) => it.open_fix != null).map((it: DailyItem) => [it.id, String(Math.round((it.stock_at + (it.used || 0) + (it.open_fix || 0)) * 1000) / 1000)])));
+    setUses(Object.fromEntries(d.items.map((it: DailyItem) => [it.id, it.used == null ? '' : String(Math.round(((it.used || 0) + (it.open_fix || 0)) * 1000) / 1000)])));
   }, [date]);
-  useEffect(() => { setData(null); setCnt({}); load().catch(e => notify(errText(e))); }, [load, notify]);
+  useEffect(() => { setData(null); load().catch(e => notify(errText(e))); }, [load, notify]);
   // 성과에 관리 인원을 적으면 총 피부관리 인원이 바뀌므로 다시 불러온다
   useEffect(() => { const on = () => { load().catch(() => undefined); }; window.addEventListener('staff-data-changed', on); return () => window.removeEventListener('staff-data-changed', on); }, [load]);
   if (!data) return <LoadingBox />;
   const off = data.check ? !data.check.ok : false;
-  // 팩 종류(사용량 품목)도 기본은 마감재고(2026-11-09 사용자 '팩종류도 동일하게'), '사용량'을 누를 때만 사용량으로
-  const byCount = (it: DailyItem) => off || it.daily_mode === 'count' || cnt[it.id] !== false;
-  const usedOf = (it: DailyItem) => {
-    const v = vals[it.id];
-    if (v === '' || v == null) return null;
-    if (!byCount(it)) return Number(v);
-    const before = opens[it.id] ? Number(opens[it.id]) : it.stock_at + (it.used || 0); // 마감 전 재고(고쳤으면 고친 값)
-    return Math.round((before - Number(v)) * 1000) / 1000;
-  };
+  // 일일재고 카드 = 적는 칸 두 개(2026-11-10 사용자 '작성칸은 마감재고·당일 사용량'): 마감재고 | 당일 사용량.
+  //  하나만 적으면 다른 하나는 장부(마감 전 재고)로 계산해 흐리게 보여 주고, 둘 다 적으면 마감 전 재고 = 마감재고 + 사용량으로 고쳐 저장(월말 사용량 정확).
+  const r3 = (n: number) => Math.round(n * 1000) / 1000;
+  const num = (v: string | undefined) => (v === '' || v == null ? null : Number(v));
+  const ledgerOf = (it: DailyItem) => r3(it.stock_at + (it.used || 0));
   const save = async () => {
     const used: Record<number, number | null> = {}, closing: Record<number, number> = {}, opening: Record<number, number> = {};
     for (const it of data.items) {
-      const v = vals[it.id];
-      if ((v === '' || v == null) && byCount(it) && opens[it.id]) { notify(`${it.name}: 마감재고도 적어 주세요.`); return; }
-      if (v === '' || v == null) continue; // 비운 칸 = 이번에 안 셈 → 그대로 둠
-      if (byCount(it) && opens[it.id]) { if (Number(v) > Number(opens[it.id])) { notify(`${it.name}: 마감재고가 마감 전 재고보다 많아요.`); return; } opening[it.id] = Number(opens[it.id]); }
-      if (!Number.isFinite(Number(v)) || Number(v) < 0) { notify(`${it.name}: 0 이상으로 적어 주세요.`); return; }
-      // 마감재고로 적은 품목은 센 수량을 그대로 보내고 서버가 마감일 기준으로 병원재고를 그 수량에 맞춘다
-      if (byCount(it)) closing[it.id] = Number(v); else used[it.id] = Number(v);
+      const left = num(vals[it.id]), use = num(uses[it.id]), ledger = ledgerOf(it);
+      if (left == null && use == null) continue; // 둘 다 비움 = 이번에 안 셈 → 그대로 둠
+      if ((left != null && (!Number.isFinite(left) || left < 0)) || (use != null && (!Number.isFinite(use) || use < 0))) { notify(`${it.name}: 0 이상으로 적어 주세요.`); return; }
+      if (left != null) {
+        closing[it.id] = left;
+        if (use != null && r3(left + use) !== ledger) opening[it.id] = r3(left + use);
+      } else if (use != null) {
+        if (use > ledger) { notify(`${it.name}: 당일 사용량이 마감 전 재고(${withUnit(ledger, it.stock_unit)})보다 많아요. 마감재고도 같이 적어 주세요.`); return; }
+        if (it.daily_mode === 'usage' && !off) used[it.id] = use; else closing[it.id] = r3(ledger - use);
+      }
     }
     setBusy(true);
     try { await invSend('POST', '/daily', { date, patients: patients === '' ? null : Number(patients), status: status || null, extra: { modeling_people: off ? (data.day?.extra?.modeling_people ?? null) : people === '' ? null : Number(people) }, used, closing, opening }); notify('마감을 저장했어요.'); announceInventory(); onSaved(); await load(); }
@@ -161,20 +156,21 @@ function DailyClose({ today, notify, onSaved }: { items: InvItem[]; today: strin
         <span>{[l.patients != null ? `총 피부관리 인원 ${l.patients}명` : '', ...Object.entries(l.items || {}).map(([n, v]) => `${n} ${v.left != null ? `마감재고 ${fmtQty(v.left)} · ` : ''}사용 ${fmtQty(v.used)}${v.before ? ` (전 ${fmtQty(v.before)})` : ''} ${v.unit}`)].filter(Boolean).join(' · ') || '—'}</span></li>)}</ul>
     </Modal>}
     <div className="iv-grid">{data.items.map(it => {
-      const ledger = Math.round((it.stock_at + (it.used || 0)) * 1000) / 1000, count = byCount(it);
-      const u = usedOf(it), before = count && opens[it.id] ? Number(opens[it.id]) : ledger;
+      const ledger = ledgerOf(it), left = num(vals[it.id]), use = num(uses[it.id]);
+      const before = left != null && use != null ? r3(left + use) : ledger; // 둘 다 적으면 고친 마감 전 재고
       return <div key={it.id} className="iv-dcard">
         <div className="iv-dcard-head"><b>{it.name}</b><span className="iv-unit">{it.stock_unit}</span></div>
-        {!off && it.daily_mode === 'usage' && <div className="iv-dmode" role="group" aria-label={`${it.name} 입력 방식`}>{[true, false].map(c => <button key={String(c)} type="button" className={(cnt[it.id] !== false) === c ? 'is-on' : ''}
-          onClick={() => { setCnt(m => ({ ...m, [it.id]: c })); setVals(v => ({ ...v, [it.id]: it.used == null ? '' : c ? String(it.stock_at) : String(it.used) })); }}>{c ? '마감재고' : '사용량'}</button>)}</div>}
-        {count ? <label className="iv-open"><span>마감 전 재고</span>
-            <input type="number" inputMode="decimal" value={opens[it.id] ?? ''} placeholder={withUnit(ledger, it.stock_unit)} aria-label={`${it.name} 마감 전 재고`}
-              onChange={e => setOpens(o => ({ ...o, [it.id]: e.target.value }))} /></label>
-          : <dl><dt>마감 전 재고</dt><dd>{withUnit(before, it.stock_unit)}</dd></dl>}
-        <label className="sf-input"><span>{count ? '마감재고' : '당일 사용량'}</span>
-          <input type="number" min={0} inputMode="decimal" value={vals[it.id] ?? ''} onChange={e => setVals(v => ({ ...v, [it.id]: e.target.value }))} placeholder={it.stock_unit} /></label>
+        <dl className="iv-dbefore"><dt>마감 전 재고</dt><dd>{before !== ledger ? <><s>{fmtQty(ledger)}</s> → </> : null}{withUnit(before, it.stock_unit)}</dd></dl>
+        <div className="iv-dpair">
+          <label className="sf-input"><span>마감재고</span>
+            <input type="number" min={0} inputMode="decimal" value={vals[it.id] ?? ''} onChange={e => setVals(v => ({ ...v, [it.id]: e.target.value }))}
+              placeholder={use != null && ledger - use >= 0 ? fmtQty(r3(ledger - use)) : it.stock_unit} aria-label={`${it.name} 마감재고`} /></label>
+          <label className="sf-input"><span>당일 사용량</span>
+            <input type="number" min={0} inputMode="decimal" value={uses[it.id] ?? ''} onChange={e => setUses(v => ({ ...v, [it.id]: e.target.value }))}
+              placeholder={left != null && ledger - left >= 0 ? fmtQty(r3(ledger - left)) : it.stock_unit} aria-label={`${it.name} 당일 사용량`} /></label>
+        </div>
         {it.name.includes('모델링') && !off && <label className="sf-input"><span>사용 인원</span><input type="number" min={0} inputMode="numeric" value={people} onChange={e => setPeople(e.target.value)} placeholder="명" /></label>}
-        <dl>{!off && <><dt>{count ? (u != null && u < 0 ? '재고 증가' : '당일 사용량') : '마감재고'}</dt><dd>{u == null ? '—' : count && u < 0 ? `+${withUnit(-u, it.stock_unit)}` : withUnit(count ? u : before - u, it.stock_unit)}</dd></>}<dt>최근 15일 사용</dt><dd>{withUnit(it.used15, it.stock_unit)}</dd></dl>
+        <dl><dt>최근 15일 사용</dt><dd>{withUnit(it.used15, it.stock_unit)}</dd></dl>
       </div>;
     })}</div>
   </div>;
@@ -673,6 +669,8 @@ function TxLog({ notify }: { notify: (m: string) => void }) {
     try { setRows((await invGet('/tx', { from: `${month}-01`, to: `${month}-31`, kind: k })).rows); } catch (e) { notify(errText(e)); setRows([]); }
   }, [month, kind, notify]);
   useEffect(() => { setRows(null); void load(); }, [load]);
+  // 다른 화면(일일재고·주문·받기)에서 저장하면 내역도 새로 받음
+  useEffect(() => subscribeInventory(() => { void load(); }), [load]);
   const effect = (t: InvTx) => [t.hospital_delta ? `병원재고 ${t.hospital_delta > 0 ? '−' : '+'}${fmtQty(Math.abs(t.hospital_delta))}` : '', t.vendor_delta ? `업체 보관 잔량 ${t.vendor_delta > 0 ? '−' : '+'}${fmtQty(Math.abs(t.vendor_delta))}` : ''].filter(Boolean).join(' · ');
   return <>
     <div className="sf-bar"><div className="sf-month"><button type="button" aria-label="이전 달" onClick={() => setMonth(m => shiftMonth(m, -1))}><ChevronLeft size={18} strokeWidth={2} /></button><strong>{month.slice(0, 4)}년 {Number(month.slice(5))}월</strong><button type="button" aria-label="다음 달" onClick={() => setMonth(m => shiftMonth(m, 1))}><ChevronRight size={18} strokeWidth={2} /></button></div>
