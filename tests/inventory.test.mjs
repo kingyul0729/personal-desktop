@@ -881,3 +881,19 @@ test('splitfix1: 10/22 lumped 피부미소 입고 is split into 4 items as on th
   await call({ ...e, INV_DB: d1(e.inv) }, '/state');
   assert.equal(e.inv.prepare(`SELECT count(*) AS n FROM inv_tx WHERE deleted_at IS NULL AND date = '2026-10-22' AND kind = 'in'`).get().n, 4);
 });
+
+test('report: a past month shows stock and 업체 보관 잔량 at that month end, this month shows now', async () => {
+  const e = env(); await call(e, '/state');
+  const g = item(e, 'GA20%');
+  await call(e, '/receive', 'POST', { item_id: g.id, actual_qty: 3, amount: 1000, date: '2026-10-05' });
+  await call(e, '/receive', 'POST', { item_id: g.id, actual_qty: 4, amount: 1000, date: '2026-11-02' });
+  const pp = item(e, '보관용 3종 시트팩');
+  const o300 = e.inv.prepare(`SELECT id FROM inv_options WHERE item_id = ? AND qty = 300`).get(pp.id);
+  await call(e, '/prepaid-order', 'POST', { item_id: pp.id, qty: pp.vendor_stock + 10, option_id: o300.id, date: '2026-11-03' });
+  const oct = (await call(e, '/report?month=2026-10')).data, nov = (await call(e, '/report?month=2026-11')).data;
+  assert.equal(oct.as_of, '2026-10-31'); assert.equal(nov.as_of, null);
+  const v = r => r.prepaid.find(p => p.id === pp.id).vendor_stock;
+  assert.equal(v(nov) - v(oct), item(e, '보관용 3종 시트팩').vendor_stock - pp.vendor_stock); // 11월 선결제는 10월 말 잔량에 안 들어감
+  assert.equal(v(oct), pp.vendor_stock);
+  assert.ok(item(e, '보관용 3종 시트팩').vendor_stock > pp.vendor_stock); // 11월 선결제가 실제로 들어감
+});

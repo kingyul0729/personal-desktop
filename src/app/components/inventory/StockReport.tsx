@@ -8,7 +8,7 @@ export type MonthRep = { month: string; spend_total: number; spend_general: numb
   usage: { id: number; name: string; stock_unit: string; used: number; per_day: number | null }[];
   inbound?: { date: string; kind: string; qty: number; bonus_qty: number; amount: number | null; invoice: number; memo: string | null; item_name: string; stock_unit: string; vendor_name: string | null; payment_method: string | null }[];
   prepaid?: { id: number; name: string; stock_unit: string; vendor_stock: number; hospital_stock: number }[];
-  stock?: { id: number; name: string; stock_unit: string; hospital_stock: number; min_stock: number }[] };
+  stock?: { id: number; name: string; stock_unit: string; hospital_stock: number; min_stock: number }[]; as_of?: string | null };
 
 export function StockReport() {
   const [tab, setTab] = useState<'month' | 'year'>('month');
@@ -67,12 +67,12 @@ export function MonthReport({ a, b }: { a: MonthRep; b: MonthRep }) {
         <tbody>{names.map(nm => { const x = a.usage.find(u => u.name === nm), y = b.usage.find(u => u.name === nm); const unit = (x || y)!.stock_unit; return <tr key={nm}><td>{nm} <small>{unit}/일</small></td>
           <td className="num">{y?.per_day ?? <small>기록 없음</small>}</td><td className="num">{x?.per_day != null ? <b>{x.per_day}</b> : <small>기록 없음</small>}</td><td className="num">{x?.per_day != null && y?.per_day != null ? diff(x.per_day, y.per_day, v => String(Math.round(v * 10) / 10)) : '—'}</td></tr>; })}</tbody></table>}
     </Block>
-    {a.prepaid && a.prepaid.length > 0 && <Block n={++n} title="업체 보관 잔량" sub="현재">
+    {a.prepaid && a.prepaid.length > 0 && <Block n={++n} title="업체 보관 잔량" sub={a.as_of ? `${mm(a.month)} 말` : '현재'}>
       <table className="sf-table"><thead><tr><th>품목</th><th className="num">업체 보관 잔량</th><th className="num">병원재고</th></tr></thead>
         <tbody>{a.prepaid.map(p => <tr key={p.id}><td>{p.name}</td><td className="num"><b>{withUnit(p.vendor_stock, p.stock_unit)}</b></td><td className="num">{withUnit(p.hospital_stock, p.stock_unit)}</td></tr>)}</tbody></table></Block>}
     {a.inbound && <Block n={++n} title="입고·구매 내역">{!a.inbound.length ? <p className="sf-hint">기록 없음</p> : <table className="sf-table"><thead><tr><th>날짜</th><th>품목</th><th>구분</th><th className="num">수량</th><th className="num">금액</th><th>명세서</th></tr></thead>
       <tbody>{a.inbound.map((r, i) => <tr key={i}><td>{Number(r.date.slice(5, 7))}.{Number(r.date.slice(8))}</td><td>{r.item_name} <small>{r.vendor_name}{r.payment_method ? ` · ${r.payment_method}` : ''}</small></td><td><small>{KIND_LABEL[r.kind]}</small></td>
-        <td className="num">{fmtQty(r.qty)}{r.bonus_qty ? ` (+${fmtQty(r.bonus_qty)})` : ''} {r.stock_unit}</td><td className="num">{r.kind === 'prepaid_in' ? '—' : fmtWon(r.amount)}</td><td>{r.invoice ? '등록' : <span className="is-warn">미등록</span>}</td></tr>)}</tbody></table>}</Block>}
+        <td className="num">{fmtQty(r.qty)}{r.bonus_qty ? ` (+${fmtQty(r.bonus_qty)})` : ''} {r.stock_unit}</td><td className="num">{r.kind === 'prepaid_in' ? '—' : fmtWon(r.amount)}</td><td>{r.invoice ? '등록' : (r.amount || 0) > 0 ? <span className="is-warn">미등록</span> : '—'}</td></tr>)}</tbody></table>}</Block>}
     <p className="iv-foot">출력 {new Date().toLocaleString('ko-KR')}</p>
   </article>;
 }

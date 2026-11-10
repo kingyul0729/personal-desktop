@@ -746,7 +746,11 @@ async function monthReport(db, month, brief = false) {
   out.inbound = await all(db, `SELECT t.date, t.kind, t.qty, t.bonus_qty, t.amount, t.invoice, t.memo, i.name AS item_name, i.stock_unit, v.name AS vendor_name, v.payment_method
     FROM inv_tx t JOIN inv_items i ON i.id = t.item_id LEFT JOIN inv_vendors v ON v.id = i.vendor_id
     WHERE t.deleted_at IS NULL AND t.kind IN ('in','prepaid_buy','prepaid_in') AND t.date BETWEEN ? AND ? ORDER BY t.date, t.id`, from, to);
-  out.prepaid = await all(db, `SELECT id, name, stock_unit, vendor_stock, hospital_stock FROM inv_items WHERE active = 1 AND prepaid = 1 ORDER BY sort, id`);
-  out.stock = await all(db, `SELECT id, name, stock_unit, hospital_stock, min_stock, price, pack_qty, order_unit FROM inv_items WHERE active = 1 AND daily_mode IS NOT NULL ORDER BY sort, id`);
+  // 지난달 보고서의 재고·업체 보관 잔량은 그 달 말 기준(지금 재고 − 그 뒤 기록 증감). 이번 달은 지금 그대로. (2026-11-11 사용자 '보고서 재고 수량이 원본 기록과 일치')
+  const after = `round(hospital_stock - coalesce((SELECT sum(t.hospital_delta) FROM inv_tx t WHERE t.item_id = inv_items.id AND t.deleted_at IS NULL AND t.date > ?), 0), 3)`;
+  const afterV = `round(vendor_stock - coalesce((SELECT sum(t.vendor_delta) FROM inv_tx t WHERE t.item_id = inv_items.id AND t.deleted_at IS NULL AND t.date > ?), 0), 3)`;
+  out.as_of = to < kstToday() ? to : null;
+  out.prepaid = await all(db, `SELECT id, name, stock_unit, ${afterV} AS vendor_stock, ${after} AS hospital_stock FROM inv_items WHERE active = 1 AND prepaid = 1 ORDER BY sort, id`, to, to);
+  out.stock = await all(db, `SELECT id, name, stock_unit, ${after} AS hospital_stock, min_stock, price, pack_qty, order_unit FROM inv_items WHERE active = 1 AND daily_mode IS NOT NULL ORDER BY sort, id`, to);
   return out;
 }
