@@ -1,5 +1,5 @@
 import { VENDOR_BASE, ITEMS, EXTRA_ITEMS } from './invMaster.js';
-import { moveTxDate } from './invTxDate.js';
+import { moveTxDate, keepCountStmts } from './invTxDate.js';
 // 예전 재고관리 앱의 직원 표 구조(마이그레이션 0009·0010·0014·0022) — tests/fixtures/inv-staff.sql 에서 만든 것.
 // 빈 데이터베이스에 직원 표가 없을 때 한 번만 실행한다.
 const INV_STAFF_SCHEMA = [
@@ -155,6 +155,32 @@ export async function ensureInvSchema(db) {
       if (rows.length === 1 && rows[0].date !== '2026-11-06') await moveTxDate(db, rows[0], '2026-11-06', 'system');
       await db.prepare(`INSERT OR REPLACE INTO inv_meta (key, value) VALUES ('fixes', ?)`).bind(`${fixes} datefix2`.trim()).run();
       fixes = `${fixes} datefix2`.trim();
+    }
+    if (!fixes.includes('splitfix1')) {
+      // 2026-11-11 사용자 '10/22로 해줘': 예전 앱에서 '받기 목록: 절단솜 4×6 외 3건(4개 품목)' 수량 0 · 67,500원 한 줄로 옮겨진 10/22 피부미소 입고를
+      // 사용자가 보낸 거래명세서(일회용해면 60·거즈 2·절단솜 4x6 5·비절단솜 4x30 1, 합계 334,000원)대로 품목마다 따로 10/22 입고로 나눈다.
+      // 그 뒤 일일재고로 센 날이 있으면 그 날 센 수량은 그대로(keepCountStmts). 원래 한 줄은 지운 기록으로(재고 증감 0이라 재고 영향 없음), 명세서 사진·받음은 새 줄로.
+      const old = await db.prepare(`SELECT * FROM inv_tx WHERE deleted_at IS NULL AND date = '2026-10-22' AND kind = 'in' AND hospital_delta = 0 AND memo LIKE '받기 목록: 절단솜 4×6 외 3건%'`).first();
+      const lines = [['일회용해면', 60, 270000], ['거즈30x35', 2, 13000], ['절단솜4x6', 5, 42500], ['비절단솜4x30', 1, 8500]];
+      const items = [];
+      for (const [name, qty, amount] of lines) { const it = await db.prepare('SELECT id, hospital_stock, vendor_stock FROM inv_items WHERE name = ?').bind(name).first(); if (it) items.push({ it, qty, amount }); }
+      if (old && items.length === lines.length) {
+        const links = (await db.prepare('SELECT invoice_id FROM inv_invoice_links WHERE tx_id = ?').bind(old.id).all()).results || [];
+        const now = Date.now();
+        await db.prepare('UPDATE inv_tx SET deleted_at = ?, deleted_by = ? WHERE id = ?').bind(now, 'system', old.id).run();
+        for (const { it, qty, amount } of items) {
+          const keep = await keepCountStmts(db, it.id, '2026-10-22', qty, 'system');
+          await db.batch([
+            db.prepare('UPDATE inv_items SET hospital_stock = round(hospital_stock + ?, 3), updated_at = ? WHERE id = ?').bind(qty, now, it.id),
+            db.prepare(`INSERT INTO inv_tx (date, kind, item_id, qty, bonus_qty, amount, hospital_delta, vendor_delta, hospital_after, vendor_after, order_id, daily_date, invoice, memo, created_by, created_at)
+              VALUES ('2026-10-22', 'in', ?, ?, 0, ?, ?, 0, ?, ?, NULL, NULL, ?, '받기 목록 · 거래명세서대로 나눔', 'system', ?)`).bind(it.id, qty, amount, qty, Math.round(((it.hospital_stock || 0) + qty) * 1000) / 1000, it.vendor_stock || 0, old.invoice ? 1 : 0, now),
+            ...keep]);
+          const t = await db.prepare(`SELECT max(id) AS id FROM inv_tx WHERE item_id = ? AND date = '2026-10-22' AND kind = 'in'`).bind(it.id).first();
+          if (links.length) await db.batch(links.map(l => db.prepare('INSERT OR IGNORE INTO inv_invoice_links (invoice_id, tx_id) VALUES (?, ?)').bind(l.invoice_id, t.id)));
+        }
+      }
+      await db.prepare(`INSERT OR REPLACE INTO inv_meta (key, value) VALUES ('fixes', ?)`).bind(`${fixes} splitfix1`.trim()).run();
+      fixes = `${fixes} splitfix1`.trim();
     }
   }
   ready = db;

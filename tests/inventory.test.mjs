@@ -860,3 +860,24 @@ test('invoice = same day + same vendor: one photo for many items, other vendor o
   assert.equal((await call(e, '/invoices/join', 'POST', { tx_id: tOther })).data.linked, false);
   assert.equal(objects.size, 1); // 사진은 한 번만
 });
+
+test('splitfix1: 10/22 lumped 피부미소 입고 is split into 4 items as on the invoice, counted 해면 stays', async () => {
+  const e = env(); await call(e, '/state');
+  const sp = item(e, '일회용해면');
+  assert.equal((await call(e, '/daily', 'POST', { date: '2026-10-21', closing: { [sp.id]: 2 } })).status, 200);
+  assert.equal((await call(e, '/daily', 'POST', { date: '2026-10-26', closing: { [sp.id]: 35 } })).status, 200);
+  const cut = item(e, '절단솜4x6');
+  e.inv.prepare(`INSERT INTO inv_tx (date, kind, item_id, qty, bonus_qty, amount, hospital_delta, vendor_delta, invoice, memo, created_by, created_at) VALUES ('2026-10-22', 'in', ?, 0, 0, 67500, 0, 0, 1, '받기 목록: 절단솜 4×6 외 3건(4개 품목) · 품목별 수량 확인 필요', '예전 앱', 1)`).run(cut.id);
+  const before = Object.fromEntries(['거즈30x35', '절단솜4x6', '비절단솜4x30'].map(n => [n, item(e, n).hospital_stock]));
+  e.inv.prepare(`UPDATE inv_meta SET value = replace(value, 'splitfix1', '') WHERE key = 'fixes'`).run();
+  await call({ ...e, INV_DB: d1(e.inv) }, '/state');
+  const rows = e.inv.prepare(`SELECT i.name, t.qty, t.amount, t.invoice FROM inv_tx t JOIN inv_items i ON i.id = t.item_id WHERE t.deleted_at IS NULL AND t.date = '2026-10-22' AND t.kind = 'in' ORDER BY t.id`).all().map(r => ({ ...r }));
+  assert.deepEqual(rows, [{ name: '일회용해면', qty: 60, amount: 270000, invoice: 1 }, { name: '거즈30x35', qty: 2, amount: 13000, invoice: 1 }, { name: '절단솜4x6', qty: 5, amount: 42500, invoice: 1 }, { name: '비절단솜4x30', qty: 1, amount: 8500, invoice: 1 }]);
+  assert.equal(item(e, '일회용해면').hospital_stock, 35); // 10/26에 센 수량 그대로
+  assert.equal(item(e, '거즈30x35').hospital_stock, before['거즈30x35'] + 2);
+  assert.equal(item(e, '절단솜4x6').hospital_stock, before['절단솜4x6'] + 5);
+  assert.equal(item(e, '비절단솜4x30').hospital_stock, before['비절단솜4x30'] + 1);
+  // 한 번만
+  await call({ ...e, INV_DB: d1(e.inv) }, '/state');
+  assert.equal(e.inv.prepare(`SELECT count(*) AS n FROM inv_tx WHERE deleted_at IS NULL AND date = '2026-10-22' AND kind = 'in'`).get().n, 4);
+});
