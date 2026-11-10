@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Camera, ChevronLeft, ChevronRight, Pencil, Trash2, X } from 'lucide-react';
 import { LoadingBox, SavingMark } from './Feedback';
 import { readWon } from '../koreanAmount';
-import { type InvItem, type InvOption, type InvOrder, type InvState, type InvTx, InvError, KIND_LABEL, announceInventory, fmtQty, fmtWon, invGet, invSend, invUploadInvoice, invoiceSrc, shiftMonth, todayLocal, unitHint, useInventory, subscribeInventory } from '../inventoryApi';
+import { type InvItem, type InvOption, type InvOrder, type InvState, type InvTx, InvError, KIND_LABEL, announceInventory, fmtQty, fmtWon, invGet, invSend, invUploadInvoice, invoiceSrc, shiftMonth, todayLocal, unitHint, useInventory, subscribeInventory, finishOldFix } from '../inventoryApi';
 
 // 재고 화면 4개(재고체크·재고주문·재고입출고·월말/연말보고서). 숫자는 예전 앱에서, 화면은 새로 만듦.
 
@@ -105,6 +105,7 @@ function DailyClose({ today, notify, onSaved }: { items: InvItem[]; today: strin
   const [patients, setPatients] = useState(''), [status, setStatus] = useState(''), [vals, setVals] = useState<Record<number, string>>({}), [people, setPeople] = useState('');
   const [busy, setBusy] = useState(false), [hist, setHist] = useState(false), [uses, setUses] = useState<Record<number, string>>({});
   const load = useCallback(async () => {
+    await finishOldFix();
     const d = await invGet('/daily', { date });
     setData(d); setPatients(d.day?.patients == null ? '' : String(d.day.patients)); setStatus(d.day?.status || ''); setPeople(d.day?.extra?.modeling_people == null ? '' : String(d.day.extra.modeling_people));
     // 이미 적은 날: 마감재고 칸에 그날 마감 수량(stock_at). 당일 사용량 칸은 마감 전 재고를 고친 날만 채우고(고친 값 − 마감재고),
@@ -114,6 +115,7 @@ function DailyClose({ today, notify, onSaved }: { items: InvItem[]; today: strin
     setUses(Object.fromEntries(d.items.map((it: DailyItem) => [it.id, it.used == null ? '' : String(Math.round(((it.used || 0) + (it.open_fix || 0)) * 1000) / 1000)])));
   }, [date]);
   useEffect(() => { setData(null); load().catch(e => notify(errText(e))); }, [load, notify]);
+  useEffect(() => subscribeInventory(() => { void load().catch(() => undefined); }), [load]);
   // 성과에 관리 인원을 적으면 총 피부관리 인원이 바뀌므로 다시 불러온다
   useEffect(() => { const on = () => { load().catch(() => undefined); }; window.addEventListener('staff-data-changed', on); return () => window.removeEventListener('staff-data-changed', on); }, [load]);
   if (!data) return <LoadingBox />;

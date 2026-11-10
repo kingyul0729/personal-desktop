@@ -720,3 +720,21 @@ test('check: dailyfix1 keeps a November count the team lead already wrote', asyn
   assert.equal(d6.stock_at, 290);
   assert.equal(item(e, '보관용 3종 시트팩').hospital_stock, 290);
 });
+
+test('check: dailyfix1 finishes with the photo 10/31 and keeps the lead\'s 11/2·11/3 counts', async () => {
+  const e = env({ oldDailyFix: true }); await call(e, '/state');
+  const id = item(e, '보관용 3종 시트팩').id;
+  e.inv.prepare('UPDATE inv_items SET hospital_stock = 25 WHERE id = ?').run(id);
+  // 새 앱에서 팀장이 적은 날들(사진 넣기 전)
+  await call(e, '/daily', 'POST', { date: '2026-10-31', closing: { [id]: 21 }, opening: { [id]: 25 } });
+  await call(e, '/daily', 'POST', { date: '2026-11-02', closing: { [id]: 24 }, opening: { [id]: 26 } });
+  await call(e, '/daily', 'POST', { date: '2026-11-03', closing: { [id]: 17 }, opening: { [id]: 23 } });
+  e.inv.prepare(`INSERT OR REPLACE INTO inv_meta (key, value) VALUES ('import', 'old-app-data.json')`).run();
+  for (let k = 0; k < 50; k++) await call(e, '/state');
+  const day = async d => (await call(e, `/daily?date=${d}`)).data.items.find(x => x.id === id);
+  const r = d => ({ close: d.stock_at, used: Math.round((d.used + (d.open_fix || 0)) * 1000) / 1000 });
+  assert.deepEqual(r(await day('2026-10-31')), { close: 26, used: 4 });
+  assert.deepEqual(r(await day('2026-11-02')), { close: 24, used: 2 });
+  assert.deepEqual(r(await day('2026-11-03')), { close: 17, used: 6 });
+  assert.equal(item(e, '보관용 3종 시트팩').hospital_stock, 17);
+});

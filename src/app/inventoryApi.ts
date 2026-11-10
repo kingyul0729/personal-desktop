@@ -46,6 +46,17 @@ export const invoiceSrc = (id: number | string) => `/api/inventory/invoices/${id
 // 여러 화면이 같은 재고 상태를 보도록 저장 후 알림
 const listeners = new Set<() => void>();
 export const announceInventory = () => listeners.forEach(fn => fn());
+// 예전 일일재고 사진 숫자 넣기(서버가 요청마다 하루씩)를 화면을 열 때 끝까지 마저 한다 — 중간 상태가 보이지 않게 끝난 뒤 다시 불러옴
+let fixing: Promise<void> | null = null;
+export const finishOldFix = () => (fixing ??= (async () => {
+  let worked = false;
+  for (let i = 0; i < 80; i++) {
+    const r = await invGet('/fix-left').catch(() => ({ left: 0 }));
+    if (!r.left) break;
+    worked = true;
+  }
+  if (worked) announceInventory();
+})());
 export const subscribeInventory = (fn: () => void) => { listeners.add(fn); return () => { listeners.delete(fn); }; };
 export function useInventory() {
   const [state, setState] = useState<InvState | null>(null);
@@ -54,7 +65,7 @@ export function useInventory() {
     try { setState(await invGet('/state')); setError(null); }
     catch (e) { setError(e instanceof InvError ? e : new InvError('재고 자료를 불러오지 못했어요.')); }
   }, []);
-  useEffect(() => { void load(); listeners.add(load); return () => { listeners.delete(load); }; }, [load]);
+  useEffect(() => { void finishOldFix().then(load); listeners.add(load); return () => { listeners.delete(load); }; }, [load]);
   return { state, error, reload: load };
 }
 

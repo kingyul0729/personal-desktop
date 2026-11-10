@@ -601,6 +601,12 @@ async function inventoryRoute(request, env, url, user, db, path, m) {
     }
 
     // ── 일일 재고(마감) ──
+    if (m === 'GET' && path === '/fix-left') { // 예전 일일재고 넣기가 몇 날 남았는지(화면이 다 끝날 때까지 불러 마저 넣음)
+      const done = await one(db, `SELECT value FROM inv_meta WHERE key = 'dailyfix1'`);
+      const imported = await one(db, `SELECT value FROM inv_meta WHERE key = 'import'`);
+      const next = Number((await one(db, `SELECT value FROM inv_meta WHERE key = 'dailyfix1_next'`))?.value || 0);
+      return json({ left: done || !imported || env.SKIP_OLD_DAILY_FIX ? 0 : Math.max(0, OLD_DAILY_COUNTS.length - next) });
+    }
     if (m === 'GET' && path === '/daily') {
       const date = okDate(url.searchParams.get('date')) ? url.searchParams.get('date') : kstToday();
       const day = await one(db, 'SELECT * FROM inv_daily WHERE date = ?', date);
