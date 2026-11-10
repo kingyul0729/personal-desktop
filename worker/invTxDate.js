@@ -25,7 +25,9 @@ export async function moveTxDate(db, tx, date, user) {
 // 사용량 품목: 팀장이 적은 당일 사용량(출고 기록)은 그대로 두고 그 날 '마감 전 재고 고침'(재고 차이)만 반대로 맞춘다.
 // 마감재고 품목: 사용량이 마감재고로 계산되는 품목이라 그 날 사용량을 다시 계산한다(한 줄로).
 // strict = 같은 날은 빼고 다음 날부터(일일재고 저장 자체가 그 날의 기록일 때).
-export async function keepCountStmts(db, itemId, date, change, user, strict = false) {
+// asDiff(입고 취소, 2026-11-11 사용자 '취소로 생긴 차이가 사용량으로 잘못 계산되지 않게'): 마감재고 품목도 사용량을 다시 계산하지 않고
+// 그 센 날의 '마감 전 재고 고침'(재고 차이)으로만 남긴다. 돌려주는 배열의 kept = 수량을 지킨 센 날.
+export async function keepCountStmts(db, itemId, date, change, user, strict = false, asDiff = false) {
   change = round(change || 0);
   if (!change) return [];
   const item = await db.prepare('SELECT id, hospital_stock, daily_mode FROM inv_items WHERE id = ?').bind(itemId).first();
@@ -33,10 +35,12 @@ export async function keepCountStmts(db, itemId, date, change, user, strict = fa
   const next = await db.prepare(`SELECT daily_date AS d FROM inv_tx WHERE deleted_at IS NULL AND item_id = ? AND daily_date ${strict ? '>' : '>='} ? AND kind IN ('out', 'adjust') AND (memo LIKE '%마감재고%' OR ? = 'count') ORDER BY daily_date LIMIT 1`).bind(item.id, date, item.daily_mode).first();
   if (!next) return [];
   const now = Date.now(), out = [db.prepare('UPDATE inv_items SET hospital_stock = round(hospital_stock - ?, 3), updated_at = ? WHERE id = ?').bind(change, now, item.id)];
-  if (item.daily_mode === 'usage') {
-    const fix = await db.prepare(`SELECT id FROM inv_tx WHERE deleted_at IS NULL AND item_id = ? AND daily_date = ? AND kind = 'adjust' AND (memo LIKE '마감 전 재고 고침%' OR memo LIKE '일일 마감재고 확인%') ORDER BY id LIMIT 1`).bind(item.id, next.d).first();
+  out.kept = next.d;
+  if (item.daily_mode === 'usage' || asDiff) {
+    // 마감재고 품목의 입고 취소 차이는 따로 한 줄('입고 취소' 메모)로 — 일일재고를 다시 저장해도 사용량으로 바뀌지 않게 알아볼 수 있도록
+    const fix = await db.prepare(`SELECT id FROM inv_tx WHERE deleted_at IS NULL AND item_id = ? AND daily_date = ? AND kind = 'adjust' AND ${item.daily_mode === 'usage' ? "(memo LIKE '마감 전 재고 고침%' OR memo LIKE '일일 마감재고 확인%')" : "memo LIKE '%입고 취소%'"} ORDER BY id LIMIT 1`).bind(item.id, next.d).first();
     out.push(fix ? db.prepare('UPDATE inv_tx SET hospital_delta = round(hospital_delta - ?, 3), qty = abs(round(hospital_delta - ?, 3)) WHERE id = ?').bind(change, change, fix.id)
-      : db.prepare(`INSERT INTO inv_tx (item_id, kind, date, qty, hospital_delta, vendor_delta, memo, daily_date, created_by, created_at) VALUES (?, 'adjust', ?, ?, ?, 0, '마감 전 재고 고침 · 마감재고', ?, ?, ?)`).bind(item.id, next.d, Math.abs(change), -change, next.d, user || null, now));
+      : db.prepare(`INSERT INTO inv_tx (item_id, kind, date, qty, hospital_delta, vendor_delta, memo, daily_date, created_by, created_at) VALUES (?, 'adjust', ?, ?, ?, 0, ?, ?, ?, ?)`).bind(item.id, next.d, Math.abs(change), -change, asDiff ? '마감 전 재고 고침 · 입고 취소 · 마감재고' : '마감 전 재고 고침 · 마감재고', next.d, user || null, now));
     return out;
   }
   const rows = (await db.prepare(`SELECT id, hospital_delta FROM inv_tx WHERE deleted_at IS NULL AND item_id = ? AND daily_date = ? AND kind IN ('out', 'adjust')`).bind(item.id, next.d).all()).results || [];

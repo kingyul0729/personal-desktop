@@ -33,21 +33,24 @@ const days = Array.from({ length: 31 }, (_, i) => `2027-01-${String(i + 1).padSt
 const dow = d => new RealDate(`${d}T00:00:00Z`).getUTCDay();
 const min = t => Number(t.slice(0, 2)) * 60 + Number(t.slice(3));
 
-// ── 1. 스케줄: 모두 주 5일(일요일 포함), 그중 1일은 상담, 2일은 휴무 ──
-// 요일 0=일 … 6=토
-const PLAN = { 1: { off: [1, 4], consult: 3 }, 2: { off: [1, 2], consult: 3 }, 3: { off: [4, 5], consult: 6 }, 4: { off: [6, 0], consult: 1 }, 5: { off: [2, 3], consult: 5 } };
-const SPECIAL = { '2-2027-01-14': ['기타', '14:00', '19:30', '2시 출근'], '1-2027-01-22': ['기타', '10:00', '15:00', '조퇴'] };
+// ── 1. 스케줄(2026-11-11 사용자 기준): 빨간 날(일요일·1/1 신정)은 병원 휴무 — 아무도 근무·성과 대상 아님.
+// 그 밖에 모두 주 5일(월~토 중 하루 휴무), 그중 1일은 상담. 팀장 1/26 미기록(작성 제외), 직원3 1/12 미기록(지정 환자 수만 적음).
+const { isRedDay } = await import('../worker/redDays.js');
+const PLAN = { 1: { off: [4], consult: 3 }, 2: { off: [1], consult: 2 }, 3: { off: [5], consult: 6 }, 4: { off: [6], consult: 1 }, 5: { off: [2], consult: 4 } };
+const SPECIAL = { '2-2027-01-14': ['기타', '14:00', '19:30', '2시 출근'], '1-2027-01-22': ['기타', '10:00', '15:00', '조퇴'], '1-2027-01-26': ['미기록'], '3-2027-01-12': ['미기록'] };
 const sched = {}; // `${id}-${date}` → { att, s, e, mg, dg }
 for (const id of [1, 2, 3, 4, 5]) for (const d of days) {
   const p = PLAN[id], w = dow(d), k = `${id}-${d}`, n = Number(d.slice(8));
   const mg = 4 + ((n * 7 + id * 3) % 6), dg = (n + id) % 3;
-  if (SPECIAL[k]) { const [att, s, e, det] = SPECIAL[k]; sched[k] = { att, s, e, det, mg: Math.max(1, mg - 3), dg: Math.min(dg, 1) }; }
+  if (isRedDay(d)) sched[k] = { att: null }; // 휴일: 적지 않음
+  else if (SPECIAL[k]?.[0] === '미기록') sched[k] = { att: '미기록', dg: 2 };
+  else if (SPECIAL[k]) { const [att, s, e, det] = SPECIAL[k]; sched[k] = { att, s, e, det, mg: Math.max(1, mg - 3), dg: Math.min(dg, 1) }; }
   else if (p.off.includes(w)) sched[k] = { att: '휴무' };
   else if (w === p.consult) sched[k] = { att: '상담', dg };
   else sched[k] = { att: '정상근무', s: '10:00', e: '19:30', mg, dg };
 }
 const leader = d => sched[`1-${d}`];
-const leaderWorks = d => ['정상근무', '기타'].includes(leader(d).att);
+const leaderWorks = d => !isRedDay(d) && ['정상근무', '기타'].includes(leader(d).att);
 
 test('2027-01 가상 운영', async t => {
   const list = await ok('/staff/list');
@@ -57,6 +60,7 @@ test('2027-01 가상 운영', async t => {
   await t.test('1·2. 스케줄 입력 → 성과표 계산이 손계산과 같음', async () => {
     for (const id of [1, 2, 3, 4, 5]) for (const d of days) { // 팀장 먼저
       const r = sched[`${id}-${d}`];
+      if (!r.att) continue;
       const body = { staff_id: id, work_date: d, attendance: r.att };
       if (r.att === '기타') Object.assign(body, { etc_type: 'time', etc_detail: r.det, start_time: r.s, end_time: r.e });
       if (r.att === '정상근무') Object.assign(body, { start_time: r.s, end_time: r.e });
@@ -64,7 +68,12 @@ test('2027-01 가상 운영', async t => {
       if (r.dg != null) body.designated_count = r.dg;
       await ok('/staff/attendance', 'POST', body);
     }
+    // 빨간 날에 근무를 적어도(1/10 일요일) 관리수·지정 환자 수는 받지 않고 성과에서도 빠짐
+    await ok('/staff/attendance', 'POST', { staff_id: 2, work_date: '2027-01-10', attendance: '정상근무', start_time: '10:00', end_time: '19:30', managed_count: 9, designated_count: 3 });
+    const sun = inv.prepare(`SELECT managed_count, designated_count FROM staff_attendance WHERE staff_id = 2 AND work_date = '2027-01-10'`).get();
+    assert.deepEqual([sun.managed_count, sun.designated_count], [null, null]);
     const perf = await ok('/staff/performance?month=2027-01');
+    assert.ok(perf.find(x => x.id === 2).exclusions.some(x => x.date === '2027-01-10' && x.reason.includes('휴일')));
     for (const id of [1, 2, 3, 4, 5]) {
       let mins = 0, mg = 0, mgN = 0, dg = 0, dgN = 0, workDays = 0;
       for (const d of days) {
@@ -74,7 +83,7 @@ test('2027-01 가상 운영', async t => {
         else if (own && leaderWorks(d)) credited = Math.max(0, Math.min(min(r.e), min(leader(d).e)) - Math.max(min(r.s), min(leader(d).s)));
         if (credited > 0) { mins += credited; workDays++; }
         if (own && (id === 1 || leaderWorks(d)) && r.mg != null) { mg += r.mg; mgN++; }
-        if ((own || r.att === '상담') && r.dg != null) { dg += r.dg; dgN++; }
+        if ((own || r.att === '상담' || r.att === '미기록') && r.dg != null) { dg += r.dg; dgN++; }
       }
       const p = perf.find(x => x.id === id);
       const want = { work_days: workDays, total_hours: Math.round(mins / 6) / 10, total_managed: mgN ? mg : null, total_designated: dgN ? dg : null, avg_managed: mgN && mins ? Math.round(mg / (mins / 60) * 10) / 10 : null };
@@ -83,11 +92,13 @@ test('2027-01 가상 운영', async t => {
       // 지정 환자 수는 관리수에 더하지 않음
       assert.ok(p.total_managed == null || p.total_designated == null || p.total_managed !== p.total_managed + p.total_designated || p.total_designated === 0);
     }
-    // 주 5일(휴무 2일/주) 확인
+    // 주 5일: 월~토 중 하루 휴무(빨간 날 제외)
     for (const id of [1, 2, 3, 4, 5]) {
-      const off = days.filter(d => sched[`${id}-${d}`].att === '휴무').length;
-      assert.ok(off >= 8 && off <= 10, `직원 ${id} 휴무 ${off}일`);
+      const work = days.filter(d => sched[`${id}-${d}`].att && sched[`${id}-${d}`].att !== '휴무').length;
+      assert.ok(work >= 20 && work <= 22, `직원 ${id} 근무 ${work}일`);
     }
+    assert.ok(!days.some(d => isRedDay(d) && sched[`1-${d}`].att), '빨간 날에는 근무 없음');
+    assert.equal(isRedDay('2027-01-01'), true);
     // 총 피부관리 인원(일일재고) = 그날 직원 관리 인원 합계
     const d = '2027-01-05';
     const want = [1, 2, 3, 4, 5].map(id => sched[`${id}-${d}`]).filter(r => r.mg != null).reduce((a, r) => a + r.mg, 0);
@@ -95,7 +106,7 @@ test('2027-01 가상 운영', async t => {
   });
 
   // ── 3·4. 재고 ──
-  const P = '보관용 3종 시트팩', S = '일회용해면', G = 'GA20%';
+  const P = '보관용 3종 시트팩', S = '일회용해면', G = 'GA20%', C = '클렌징 젤 300ml';
   const ledger = {}; // 손으로 따라가는 병원재고·업체 보관 잔량
   const expectStock = (name, h, v) => { const it = item(name); assert.equal(it.hospital_stock, h, `${name} 병원재고`); if (v != null) assert.equal(it.vendor_stock, v, `${name} 업체 보관 잔량`); };
   let spendGeneral = 0, spendPrepaid = 0, inCount = 0;
@@ -157,12 +168,19 @@ test('2027-01 가상 운영', async t => {
       expectStock(G, ledger[G][0]);
       assert.equal((await api('/inventory/out', 'POST', { item_id: item(G).id, qty: 9999, date: '2027-01-13' })).status, 400);
     },
+    '2027-01-29': async () => { // 카드결제 업체(더마소드) 주문 → 주문할 때 결제(1월), 물건은 2/2 도착
+      const c = item(C), opt = inv.prepare('SELECT * FROM inv_options WHERE item_id = ? AND prepaid = 0 LIMIT 1').get(c.id);
+      await ok('/inventory/orders', 'POST', { item_id: c.id, option_id: opt.id, count: 1, date: '2027-01-29' });
+      cardOrder = (await ok('/inventory/state')).orders.find(o => o.item_id === c.id && o.status === 'ordered');
+      spendGeneral += cardOrder.amount;
+      expectStock(C, item(C).hospital_stock);
+    },
     '2027-01-15': async () => { // 해면 입고(주문 없이) — 같은 날 센 뒤 1/19에 취소
       await ok('/inventory/receive', 'POST', { item_id: item(S).id, actual_qty: 10, amount: 45000, date: '2027-01-15' });
       ledger[S][0] += 10; spendGeneral += 45000; inCount++;
     },
   };
-  let gOrder = null, gFirst = 0;
+  let gOrder = null, gFirst = 0, cardOrder = null;
 
   await t.test('3·4. 날짜순 입출고 + 일일재고(근무일만), 건너뛴 날 재고 그대로, 실사는 그 수량으로 한 번만, 입고 취소', async () => {
     const p = item(P), s = item(S);
@@ -188,11 +206,17 @@ test('2027-01 가상 운영', async t => {
       if (d === '2027-01-19') {
         const tx = inv.prepare(`SELECT id FROM inv_tx WHERE item_id = ? AND date = '2027-01-15' AND kind = 'in'`).get(s.id).id;
         const sBefore = item(S).hospital_stock;
-        await ok(`/inventory/tx/${tx}/cancel`, 'POST', { reason: '가상: 반품' });
+        const cr = await ok(`/inventory/tx/${tx}/cancel`, 'POST', { reason: '가상: 반품' });
+        assert.deepEqual([cr.kept, cr.diff], ['2027-01-15', 10]);
         assert.equal(item(S).hospital_stock, sBefore, '입고한 날·그 뒤에 센 수량이 있으므로 재고는 그대로');
         assert.equal((await api(`/inventory/tx/${tx}/cancel`, 'POST', { reason: '두 번' })).data.unchanged, true);
         inCount--; // 취소한 입고는 건수에서 빠지고 결제는 남음
-        used[S] -= 1; // 1/15(입고한 날)에 센 수량이 그대로 → 그날 기록은 '사용 1'에서 '재고 차이 +9'로 다시 계산됨(사용량 아님)
+        // 1/15(입고한 날)에 센 수량은 그대로, 취소로 생긴 10은 그날 '재고 차이'로만 — 사용량(1)은 그대로
+        assert.equal(inv.prepare(`SELECT count(*) AS n FROM inv_tx WHERE item_id = ? AND daily_date = '2027-01-15' AND memo LIKE '%입고 취소%' AND hospital_delta = 10 AND deleted_at IS NULL`).get(s.id).n, 1);
+        // 그 날 일일재고를 다시 저장해도 차이가 사용량으로 바뀌지 않음
+        const sc15 = inv.prepare(`SELECT round(hospital_stock - coalesce((SELECT sum(hospital_delta) FROM inv_tx t WHERE t.item_id = inv_items.id AND t.deleted_at IS NULL AND t.date > '2027-01-15'), 0), 3) AS q FROM inv_items WHERE id = ?`).get(s.id).q;
+        await daily('2027-01-15', { closing: { [s.id]: sc15 } });
+        assert.equal(inv.prepare(`SELECT coalesce(sum(qty), 0) AS q FROM inv_tx WHERE item_id = ? AND daily_date = '2027-01-15' AND kind = 'out' AND deleted_at IS NULL`).get(s.id).q, 1);
         // 실사 수정(이후 거래 없음): +5 고치면 최종도 +5
         const fix = { used: { [p.id]: pUse }, closing: { [p.id]: pClose + 5, [s.id]: sCount }, opening: { [p.id]: pClose + 5 + pUse } };
         await daily(d, fix); ledger[P][0] = pClose + 5;
@@ -216,6 +240,19 @@ test('2027-01 가상 운영', async t => {
     assert.equal(u(G), used[G]);
     assert.equal(u(P), used[P]); // 사용량(재고 차이 −2·+5는 사용량이 아님)
     assert.equal(u(S), used[S]); // 마감재고 품목: 센 수량 차이가 사용량
+    // 결제 내역: 업체별 합계 = 지출 합계, 계좌이체 업체는 예금주·은행·계좌번호 칸, 결제 시점 구분
+    const pay = n => rep.payments.find(x => x.name === n);
+    assert.equal(rep.payments.reduce((a, x) => a + x.amount, 0), rep.spend_total);
+    assert.equal(pay('하라셀').when, '월말 결제'); assert.equal(pay('하라셀').amount, 450000);
+    assert.equal(pay('더마소드').when, '주문 시 결제'); assert.equal(pay('더마소드').amount, cardOrder.amount);
+    for (const n of ['피부미소', '중외']) { assert.equal(pay(n).when, '월말 결제'); assert.ok('holder' in pay(n) && 'bank' in pay(n) && 'account' in pay(n), n); }
+    assert.ok(!('account' in pay('더마소드')));
+    assert.equal(pay('피부미소').amount, 45000); // 입고를 취소해도 결제는 그대로
+    // 카드 주문 물건이 2/2에 와도 2월에 다시 세지 않음
+    await ok('/inventory/receive', 'POST', { order_id: cardOrder.id, actual_qty: cardOrder.qty + cardOrder.bonus_qty, date: '2027-02-02' });
+    const feb = await ok('/inventory/report?month=2027-02');
+    assert.equal(feb.spend_general, 0); assert.equal(feb.in_count, 1);
+    assert.equal((await ok('/inventory/report?month=2027-01')).spend_general, spendGeneral);
     // 연간 표 1월 = 월말보고
     const yr = (await ok('/inventory/report-year?year=2027')).months.find(m => m.month === '2027-01');
     for (const k of ['spend_total', 'spend_general', 'spend_prepaid', 'in_count', 'patients']) assert.equal(yr[k], rep[k], k);

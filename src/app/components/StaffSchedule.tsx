@@ -376,7 +376,8 @@ function Performance({ month, data, notify }: { month: string; data: Data; notif
   const leaderRec = leaderId != null ? recOf(leaderId) : null;
   const leaderOff = !!leaderRec && !(leaderRec.attendance === '정상근무' || isTimeEtc(leaderRec)) && leaderRec.attendance !== '상담';
   // 본인이 휴무·연차·휴일이면 지정 환자 수도 닫는다(팀장·직원 공통)
-  const can = (r: AttendanceRecord, field: string, s: StaffMember) => field === 'managed_count'
+  // 빨간 날은 병원 휴무 — 관리수·지정 환자 수 모두 닫음(2026-11-11 사용자)
+  const can = (r: AttendanceRecord, field: string, s: StaffMember) => isRedDay(date) ? false : field === 'managed_count'
     ? !fullConsult && !(leaderOff && !s.is_leader) && (r.attendance === '정상근무' || isTimeEtc(r))
     : !((r.attendance === '기타' && r.etc_type === 'unpaid') || ['병원휴무', '휴무', '연차', '공휴일'].includes(r.attendance));
   const n = daysInMonth(month);

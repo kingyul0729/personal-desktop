@@ -8,7 +8,8 @@ export type MonthRep = { month: string; spend_total: number; spend_general: numb
   usage: { id: number; name: string; stock_unit: string; used: number; per_day: number | null }[];
   inbound?: { date: string; kind: string; qty: number; bonus_qty: number; amount: number | null; invoice: number; memo: string | null; item_name: string; stock_unit: string; vendor_name: string | null; payment_method: string | null; cancelled_at?: number | null; cancel_reason?: string | null }[];
   prepaid?: { id: number; name: string; stock_unit: string; vendor_stock: number; hospital_stock: number }[];
-  stock?: { id: number; name: string; stock_unit: string; hospital_stock: number; min_stock: number }[]; as_of?: string | null };
+  stock?: { id: number; name: string; stock_unit: string; hospital_stock: number; min_stock: number }[]; as_of?: string | null;
+  payments?: { vendor_id: number; name: string; company: string | null; payment_method: string | null; when: string; amount: number; holder?: string | null; bank?: string | null; account?: string | null }[] };
 
 export function StockReport() {
   const [tab, setTab] = useState<'month' | 'year'>('month');
@@ -73,6 +74,8 @@ export function MonthReport({ a, b }: { a: MonthRep; b: MonthRep }) {
     {a.inbound && <Block n={++n} title="입고·구매 내역">{!a.inbound.length ? <p className="sf-hint">기록 없음</p> : <table className="sf-table"><thead><tr><th>날짜</th><th>품목</th><th>구분</th><th className="num">수량</th><th className="num">금액</th><th>명세서</th></tr></thead>
       <tbody>{a.inbound.map((r, i) => <tr key={i}><td>{Number(r.date.slice(5, 7))}.{Number(r.date.slice(8))}</td><td>{r.item_name} <small>{r.vendor_name}{r.payment_method ? ` · ${r.payment_method}` : ''}</small></td><td><small>{KIND_LABEL[r.kind]}{r.cancelled_at ? <b className="is-warn"> 취소</b> : null}</small></td>
         <td className="num">{fmtQty(r.qty)}{r.bonus_qty ? ` (+${fmtQty(r.bonus_qty)})` : ''} {r.stock_unit}</td><td className="num">{r.kind === 'prepaid_in' ? '—' : fmtWon(r.amount)}</td><td>{r.invoice ? '등록' : (r.amount || 0) > 0 ? <span className="is-warn">미등록</span> : '—'}</td></tr>)}</tbody></table>}</Block>}
+    {a.payments && <Block n={++n} title="결제 내역" sub={a.payments.length ? `합계 ${won(a.payments.reduce((x, p) => x + p.amount, 0))}` : undefined}>{!a.payments.length ? <p className="sf-hint">기록 없음</p> : <table className="sf-table"><thead><tr><th>업체</th><th>결제</th><th className="num">결제금액</th></tr></thead>
+      <tbody>{a.payments.map(p => <tr key={p.vendor_id}><td><b>{p.name}</b>{p.bank !== undefined ? <><br /><small>{p.company || p.name} · 예금주 {p.holder || '—'} · {p.bank || '은행 —'} {p.account || '계좌 —'}</small></> : null}</td><td><small>{p.payment_method || '—'} · {p.when}</small></td><td className="num"><b>{won(p.amount)}</b></td></tr>)}</tbody></table>}</Block>}
     <p className="iv-foot">출력 {new Date().toLocaleString('ko-KR')}</p>
   </article>;
 }

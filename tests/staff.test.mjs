@@ -68,11 +68,11 @@ test('full consultation day: leader managed stays empty, designated is recorded 
   const e = env(); await call(e, '/api/staff/list');
   const post = body => call(e, '/api/staff/attendance', { method: 'POST', body });
   // 팀장 풀상담, 관리인원 넣어도 저장 안 됨(0도 아님), 지정환자수는 기록
-  await post({ staff_id: 1, work_date: '2026-10-05', attendance: '상담', managed_count: 4, designated_count: 3 });
-  const lead = e.inv.prepare(`SELECT managed_count, designated_count FROM staff_attendance WHERE staff_id = 1 AND work_date = '2026-10-05'`).get();
+  await post({ staff_id: 1, work_date: '2026-10-13', attendance: '상담', managed_count: 4, designated_count: 3 });
+  const lead = e.inv.prepare(`SELECT managed_count, designated_count FROM staff_attendance WHERE staff_id = 1 AND work_date = '2026-10-13'`).get();
   assert.deepEqual([lead.managed_count, lead.designated_count], [null, 3]);
   // 같은 날 직원 기록도 성과에서 빠짐
-  await post({ staff_id: 2, work_date: '2026-10-05', attendance: '정상근무', start_time: '10:00', end_time: '19:30', managed_count: 5, designated_count: 2 });
+  await post({ staff_id: 2, work_date: '2026-10-13', attendance: '정상근무', start_time: '10:00', end_time: '19:30', managed_count: 5, designated_count: 2 });
   // 평소 날
   await post({ staff_id: 1, work_date: '2026-10-06', attendance: '정상근무', start_time: '10:00', end_time: '19:30', managed_count: 6, designated_count: 1 });
   await post({ staff_id: 2, work_date: '2026-10-06', attendance: '정상근무', start_time: '10:00', end_time: '19:30', managed_count: 4, designated_count: 1 });
@@ -145,9 +145,9 @@ test('performance follows the leader: designated is counted apart and never adde
 test('on a full consultation day staff managed count is not taken either; designated is still recorded', async () => {
   const e = env(); await call(e, '/api/staff/list');
   const post = body => call(e, '/api/staff/attendance', { method: 'POST', body });
-  await post({ staff_id: 1, work_date: '2027-05-03', attendance: '상담' });
-  await post({ staff_id: 2, work_date: '2027-05-03', attendance: '정상근무', start_time: '10:00', end_time: '19:30', managed_count: 7, designated_count: 2 });
-  const r = e.inv.prepare(`SELECT managed_count, designated_count FROM staff_attendance WHERE staff_id = 2 AND work_date = '2027-05-03'`).get();
+  await post({ staff_id: 1, work_date: '2027-05-04', attendance: '상담' });
+  await post({ staff_id: 2, work_date: '2027-05-04', attendance: '정상근무', start_time: '10:00', end_time: '19:30', managed_count: 7, designated_count: 2 });
+  const r = e.inv.prepare(`SELECT managed_count, designated_count FROM staff_attendance WHERE staff_id = 2 AND work_date = '2027-05-04'`).get();
   assert.deepEqual([r.managed_count, r.designated_count], [null, 2]);
 });
 

@@ -1,4 +1,5 @@
 import { ensureInvSchema } from './invSchema.js';
+import { isRedDay } from './redDays.js';
 // 직원 스케줄·성과·연차 — 예전 재고관리 앱(webapp, src/staff.ts)의 서버 계산을 그대로 옮김.
 // 데이터는 팀 공용 D1(바인딩 INV_DB, 표는 invSchema.js가 만든다). 주문·결제 표는 없다.
 // 근무시간·연차 차감은 원본과 같다. 성과 집계는 사용자 규칙(2026-11-08: 풀상담일 제외·원본 보존)만 반영했다.
@@ -301,9 +302,11 @@ staff.post("/attendance", async (c) => {
   const fullConsultDay = att === "\uC0C1\uB2F4" && sf.is_leader === 1 || leaderDay?.attendance === "\uC0C1\uB2F4" && sf.is_leader !== 1;
   // 팀장이 휴무·연차 등으로 근무하지 않은 날에는 직원 관리 인원도 받지 않는다(0 처리). 팀장 근태가 아직 없으면 막지 않는다(입력 순서 때문)
   const leaderOff = sf.is_leader !== 1 && !!leaderDay && !(leaderDay.attendance === "\uC815\uC0C1\uADFC\uBB34" || leaderDay.attendance === "\uAE30\uD0C0" && leaderDay.etc_type === "time") && leaderDay.attendance !== "\uC0C1\uB2F4";
-  const allowMg = allowManagedInput(att, etcType) && !fullConsultDay && !leaderOff;
+  // 빨간 날(일요일·공휴일·대체공휴일)은 병원 휴무(2026-11-11 사용자 '무조건'): 근무·성과 작성 대상이 아님 — 새 관리 인원·지정 환자 수는 받지 않고 기존 값만 보존
+  const redDay = isRedDay(workDate);
+  const allowMg = allowManagedInput(att, etcType) && !fullConsultDay && !leaderOff && !redDay;
   const managed = allowMg && b.managed_count !== undefined ? numOrNull(b.managed_count) : prior?.managed_count ?? null;
-  const allowDg = allowDesignatedInput(att, etcType);
+  const allowDg = allowDesignatedInput(att, etcType) && !redDay;
   const designated = allowDg && b.designated_count !== undefined ? numOrNull(b.designated_count) : prior?.designated_count ?? null;
   const workTime = att === "\uC815\uC0C1\uADFC\uBB34" || isTimeEtc;
   const startT = workTime ? b.start_time || null : prior?.start_time ?? null;
@@ -637,11 +640,13 @@ staff.get("/performance", async (c) => {
     `SELECT work_date FROM staff_day_status WHERE status='clinic_off' AND work_date BETWEEN ? AND ?`
   ).bind(from, to).all()).results;
   const clinicOff = new Set(clinicOffRows.map((r) => r.work_date));
+  // 빨간 날은 무조건 병원 휴무(2026-11-11 사용자): 근무·성과에서 빼고 사유 '휴일'
+  for (let d = new Date(from + 'T00:00:00Z'); d.toISOString().slice(0, 10) <= to && d.toISOString().slice(0, 7) === month; d.setUTCDate(d.getUTCDate() + 1)) { const k = d.toISOString().slice(0, 10); if (isRedDay(k)) clinicOff.add(k); }
   const isFullConsultDay = (date) => leaderAtt[date]?.attendance === "\uC0C1\uB2F4";
   // 팀장 그날 상태 이름(성과 확인 사유에 그대로 보여 줌)
   const leaderLabel = (date) => {
     const l = leaderAtt[date];
-    if (clinicOff.has(date)) return "병원휴무일";
+    if (clinicOff.has(date)) return isRedDay(date) ? "휴일" : "병원휴무일";
     if (!l) return "팀장 근태 미입력";
     if (l.attendance === "기타" && l.etc_type === "time") return l.etc_detail === "2시 출근" ? "팀장 2출" : "팀장 출퇴근 기타";
     if (l.attendance === "공휴일") return "팀장 휴일";
@@ -688,6 +693,7 @@ staff.get("/performance", async (c) => {
         if (r.attendance === "\uAE30\uD0C0" && r.etc_type === "unpaid") unpaidCount++;
       }
       const ctx = isLeaderSelf ? (() => {
+        if (clinicOff.has(r.work_date)) return { intervals: [], designatedEligible: false };
         const a = r.attendance;
         const eligible2 = a === "\uC815\uC0C1\uADFC\uBB34" || a === "\uAE30\uD0C0" && r.etc_type === "time";
         return eligible2 ? { intervals: [DAY_FULL], designatedEligible: true } : { intervals: [], designatedEligible: false };
@@ -698,7 +704,9 @@ staff.get("/performance", async (c) => {
         const isUnpaidEtc = a === "\uAE30\uD0C0" && r.etc_type === "unpaid";
         const selfEligibleStatus = a === "\uC815\uC0C1\uADFC\uBB34" || a === "\uAE30\uD0C0" && r.etc_type === "time";
         let reason = null;
-        if (a === "\uC0C1\uB2F4") {
+        if (isRedDay(r.work_date) && (selfEligibleStatus || a === "\uC0C1\uB2F4")) {
+          reason = "휴일 · 병원 휴무";
+        } else if (a === "\uC0C1\uB2F4") {
           reason = "\uC0C1\uB2F4 \uC81C\uC678";
         } else if (a === "\uBBF8\uAE30\uB85D") {
           reason = "\uBBF8\uAE30\uB85D \uD655\uC778 \uD544\uC694";
@@ -737,7 +745,8 @@ staff.get("/performance", async (c) => {
       }
       // 지정 환자 수 월 합계(원장님 확인용): 본인이 근무(정상근무·출퇴근 기타)했거나 상담한 날의 값. 풀상담일 값도 같은 칸에 합친다(2026-11-10 '풀상담 지정' 열 없앰).
       // 휴무·연차·휴일·병원휴무·미기록·무급 날의 보존된 값은 넣지 않는다
-      const dgCounts = ownWork || r.attendance === "\uC0C1\uB2F4";
+      // 미기록 날도 지정 환자 수는 따로 적을 수 있다(2026-11-11 사용자). 빨간 날(병원 휴무)은 넣지 않는다.
+      const dgCounts = (ownWork || r.attendance === "\uC0C1\uB2F4" || r.attendance === "\uBBF8\uAE30\uB85D") && !isRedDay(r.work_date);
       if (dgCounts && r.designated_count != null) {
         dgSum += r.designated_count;
         dgCnt++;

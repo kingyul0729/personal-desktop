@@ -90,9 +90,10 @@ async function dailyCheck(db, date) {
   const att = lead?.attendance || null;
   const works = att === '정상근무' || (att === '기타' && lead?.etc_type === 'time');
   const label = works ? null : att ? (att === '상담' ? '풀상담일' : att === '공휴일' ? '휴일' : att === '기타' ? '무급' : `팀장 ${att}`) : isRedDay(date) ? '휴일' : '팀장 근태 미입력';
-  // 작성제외(2026-11-09 사용자 문서 17번): 팀장 휴무·연차·상담·병원휴무·휴일, 빨간 날. 미기록·근태 미입력은 작성 대상.
-  const skip = !works && (isRedDay(date) || ['휴무', '연차', '상담', '병원휴무', '휴일', '공휴일'].includes(att));
-  return { ok: works, label, skip };
+  // 작성제외: 빨간 날은 무조건(병원 휴무, 2026-11-11 사용자), 팀장 휴무·연차·미기록·풀상담·병원휴무·휴일. 근태 미입력은 작성 대상.
+  const red = isRedDay(date);
+  const skip = red || (!works && ['휴무', '연차', '미기록', '상담', '병원휴무', '휴일', '공휴일'].includes(att));
+  return { ok: works && !red, label: red ? '휴일' : label, skip };
 }
 
 // ── 거래명세서 사진(2026-11-09 사용자 지정) ──
@@ -524,8 +525,10 @@ async function inventoryRoute(request, env, url, user, db, path, m) {
           .bind(`(입고 취소 ${fmtNum(Math.abs(tx.hospital_delta))}→0)`, now, user, reason, now, user, tx.id),
       ];
       if (tx.order_id) stmts.push(db.prepare(`UPDATE inv_orders SET status = 'ordered', received_at = NULL WHERE id = ? AND status = 'received'`).bind(tx.order_id));
-      await db.batch(ordered(hd, stmts, await keepCountStmts(db, item.id, tx.date, hd, user)));
-      return json({ ok: true, item: await loadItem(db, item.id) });
+      // 입고한 날·그 뒤에 이미 센 마감재고가 있으면 그 수량은 그대로 두고, 취소로 생긴 차이는 그 날 '재고 차이'로만(사용량으로 세지 않음)
+      const keep = await keepCountStmts(db, item.id, tx.date, hd, user, false, true);
+      await db.batch(ordered(hd, stmts, keep));
+      return json({ ok: true, item: await loadItem(db, item.id), kept: keep.kept || null, diff: keep.kept ? -hd : 0 });
     }
     if (m === 'DELETE' && /^\/invoices\/\d+$/.test(path)) {
       // 명세서 사진 지우기(걸린 기록 모두에서 빠짐)
@@ -662,7 +665,7 @@ async function inventoryRoute(request, env, url, user, db, path, m) {
       const closing = Object.entries(body.closing || {}).filter(([, v]) => v !== '' && v != null);
       // 마감 전 재고 고침(2026-11-09 사용자 '월말 보고서 사용량까지 정확하게'): 그 날 시작 재고를 직접 적으면
       // '마감 전 재고 고침'(조정) + 사용량 = 고친 마감 전 재고 − 마감재고(출고)로 나눠 기록. 병원재고 결과는 같고(센 마감재고), 월말 사용량만 정확해진다.
-      const openOf = {}, ledgerOf = {};
+      const openOf = {}, ledgerOf = {}, cancelFix = {};
       if (closing.length) {
         const later = await stockAtDates(db, date);
         for (const [id, raw] of closing) {
@@ -674,6 +677,12 @@ async function inventoryRoute(request, env, url, user, db, path, m) {
           const before = round(it.hospital_stock - (later.get(it.id) || 0) + (prev?.q || 0));
           used[id] = round(before - left); // 음수면 센 수량이 장부보다 많음 → 그만큼 늘림
           const rawOpen = body.opening?.[id];
+          if ((rawOpen === undefined || rawOpen === '' || rawOpen === null) && it.daily_mode === 'count') {
+            // 마감재고 품목을 다시 저장해도 앞서 남긴 재고 차이(입고 취소 등)는 사용량으로 바뀌지 않게 그대로
+            const fx = await one(db, `SELECT coalesce(sum(hospital_delta), 0) AS f, count(*) AS n FROM inv_tx WHERE deleted_at IS NULL AND daily_date = ? AND item_id = ? AND kind = 'adjust' AND memo LIKE '%입고 취소%'`, date, it.id);
+            if (fx?.n && fx.f && left <= round(before + fx.f)) { openOf[it.id] = round(before + fx.f); ledgerOf[it.id] = before; cancelFix[it.id] = true; }
+            continue;
+          }
           if (rawOpen !== undefined && rawOpen !== '' && rawOpen !== null) {
             const op = num(rawOpen);
             if (!isNum(op) || op < 0) return bad('마감 전 재고는 0 이상이어야 해요.');
@@ -705,7 +714,7 @@ async function inventoryRoute(request, env, url, user, db, path, m) {
         const op = counted ? openOf[item.id] : undefined;
         if (op !== undefined) {
           const fix = round(op - ledgerOf[item.id]), use = round(qty + fix); // 사용량 = 고친 마감 전 재고 − 마감재고
-          if (fix) dS.push(rowOnly(dItem, { date, kind: 'adjust', qty: Math.abs(fix), hospital_delta: fix, daily_date: date, memo: '마감 전 재고 고침 · 마감재고', by: user }));
+          if (fix) dS.push(rowOnly(dItem, { date, kind: 'adjust', qty: Math.abs(fix), hospital_delta: fix, daily_date: date, memo: cancelFix[item.id] ? '마감 전 재고 고침 · 입고 취소 · 마감재고' : '마감 전 재고 고침 · 마감재고', by: user }));
           if (use > 0) dS.push(rowOnly({ ...dItem, hospital_stock: round(dItem.hospital_stock + fix) }, { date, kind: 'out', qty: use, hospital_delta: -use, daily_date: date, memo: '일일 마감 소모 · 마감재고', by: user }));
           if (!fix && !(use > 0)) dS.push(rowOnly(dItem, { date, kind: 'adjust', qty: 0, hospital_delta: 0, daily_date: date, memo: '일일 마감재고 확인', by: user }));
         }
@@ -747,10 +756,19 @@ async function inventoryRoute(request, env, url, user, db, path, m) {
   }
 }
 
+const PAID_AT_ORDER = `(v.payment_method LIKE '%카드%' OR v.payment_method LIKE '%홈페이지%')`;
 async function monthReport(db, month, brief = false) {
   const from = `${month}-01`, to = `${month}-31`;
+  // 결제 시점 기준(2026-11-11 사용자): 카드·홈페이지결제 업체는 주문할 때 결제 → 주문일 달에, 계좌이체·방문결제(그 밖)는 월말 결제 → 입고일 달에.
+  // 같은 결제를 두 번 세지 않게 카드·홈페이지 주문으로 받은 입고 기록의 금액은 빼고 주문 금액으로 한 번만 센다. 선결제는 결제 기록 날짜.
+  const pays = [
+    ...await all(db, `SELECT i.vendor_id, o.amount FROM inv_orders o JOIN inv_items i ON i.id = o.item_id LEFT JOIN inv_vendors v ON v.id = i.vendor_id
+      WHERE o.prepaid = 0 AND o.status <> 'cancelled' AND o.amount > 0 AND o.ordered_at BETWEEN ? AND ? AND ${PAID_AT_ORDER}`, from, to),
+    ...await all(db, `SELECT i.vendor_id, t.amount FROM inv_tx t JOIN inv_items i ON i.id = t.item_id LEFT JOIN inv_orders o ON o.id = t.order_id LEFT JOIN inv_vendors v ON v.id = i.vendor_id
+      WHERE t.deleted_at IS NULL AND t.kind = 'in' AND t.amount > 0 AND t.date BETWEEN ? AND ? AND NOT (o.id IS NOT NULL AND o.prepaid = 0 AND ${PAID_AT_ORDER})`, from, to),
+  ];
+  const generalPaid = pays.reduce((a, r) => a + (r.amount || 0), 0);
   const spend = await one(db, `SELECT
-      coalesce(sum(CASE WHEN kind = 'in' THEN amount END), 0) AS general,
       coalesce(sum(CASE WHEN kind = 'prepaid_buy' THEN amount END), 0) AS prepaid,
       sum(CASE WHEN kind IN ('in','prepaid_in') AND cancelled_at IS NULL THEN 1 ELSE 0 END) AS in_count,
       sum(CASE WHEN kind IN ('in','prepaid_buy') AND amount > 0 AND invoice = 0 AND NOT EXISTS (SELECT 1 FROM inv_invoice_links l WHERE l.tx_id = inv_tx.id) THEN 1 ELSE 0 END) AS no_invoice,
@@ -762,11 +780,22 @@ async function monthReport(db, month, brief = false) {
   // 영업일 = 피부관리 인원이 있는 날. 인원을 안 적은 달(성과 미입력)은 일일재고를 적은 날로(사용량이 있는데 '기록 없음'으로 보이지 않게)
   const openDays = days.open_days || days.record_days || 0;
   const out = {
-    month, spend_total: (spend.general || 0) + (spend.prepaid || 0), spend_general: spend.general || 0, spend_prepaid: spend.prepaid || 0,
+    month, spend_total: generalPaid + (spend.prepaid || 0), spend_general: generalPaid, spend_prepaid: spend.prepaid || 0,
     in_count: spend.in_count || 0, no_invoice: spend.no_invoice || 0, no_amount: spend.no_amount || 0, patients: days.patients || 0, open_days: openDays,
     usage: usage.map(u => ({ ...u, used: round(u.used), per_day: openDays ? Math.round((u.used / openDays) * 10) / 10 : null })),
   };
   if (brief) return out;
+  // 결제 내역(업체별, 원장님 제출용): 계좌이체 업체는 업체명·예금주·은행·계좌번호·결제금액
+  const prepaidPays = await all(db, `SELECT i.vendor_id, t.amount FROM inv_tx t JOIN inv_items i ON i.id = t.item_id WHERE t.deleted_at IS NULL AND t.kind = 'prepaid_buy' AND t.amount > 0 AND t.date BETWEEN ? AND ?`, from, to);
+  const byVendor = new Map();
+  for (const r of [...pays, ...prepaidPays]) byVendor.set(r.vendor_id ?? 0, (byVendor.get(r.vendor_id ?? 0) || 0) + (r.amount || 0));
+  const vendors = byVendor.size ? await all(db, `SELECT id, name, company, payment_method, bank, account, holder FROM inv_vendors WHERE id IN (${[...byVendor.keys()].map(() => '?').join(',')})`, ...byVendor.keys()) : [];
+  out.payments = [...byVendor.entries()].map(([id, amount]) => {
+    const v = vendors.find(x => x.id === id) || { name: '업체 미지정', payment_method: null };
+    const bank = /계좌|이체|입금/.test(v.payment_method || '');
+    return { vendor_id: id, name: v.name, company: v.company || null, payment_method: v.payment_method, when: /카드|홈페이지/.test(v.payment_method || '') ? '주문 시 결제' : '월말 결제', amount,
+      ...(bank ? { holder: v.holder || null, bank: v.bank || null, account: v.account || null } : {}) };
+  }).sort((a, b) => (a.when === b.when ? b.amount - a.amount : a.when === '월말 결제' ? -1 : 1));
   out.inbound = await all(db, `SELECT t.date, t.kind, t.qty, t.bonus_qty, t.amount, t.invoice, t.memo, t.cancelled_at, t.cancel_reason, v.bank, v.account, v.holder, i.name AS item_name, i.stock_unit, v.name AS vendor_name, v.payment_method
     FROM inv_tx t JOIN inv_items i ON i.id = t.item_id LEFT JOIN inv_vendors v ON v.id = i.vendor_id
     WHERE t.deleted_at IS NULL AND t.kind IN ('in','prepaid_buy','prepaid_in') AND t.date BETWEEN ? AND ? ORDER BY t.date, t.id`, from, to);
