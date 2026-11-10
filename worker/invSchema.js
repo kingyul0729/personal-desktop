@@ -147,6 +147,15 @@ export async function ensureInvSchema(db) {
       await db.prepare(`INSERT OR REPLACE INTO inv_meta (key, value) VALUES ('fixes', ?)`).bind(`${fixes} datefix1`.trim()).run();
       fixes = `${fixes} datefix1`.trim();
     }
+    if (!fixes.includes('datefix2')) {
+      // 2026-11-10 밤 사용자 '11/6에 300장이 자동으로 들어오게, 이중으로 들어오지 않게': 11월의 보관용 3종 시트팩 선결제 입고 300장이
+      // 딱 한 줄일 때만, 11/6이 아니면 11/6으로 옮긴다(이미 11/6이면 그대로, 두 줄 이상이면 손대지 않음). 새로 만들지는 않는다.
+      const rows = (await db.prepare(`SELECT t.* FROM inv_tx t JOIN inv_items i ON i.id = t.item_id WHERE i.name = '보관용 3종 시트팩' AND t.kind = 'prepaid_in'
+        AND t.deleted_at IS NULL AND t.date BETWEEN '2026-11-01' AND '2026-11-30' AND abs(t.hospital_delta - 300) < 0.0005`).all()).results || [];
+      if (rows.length === 1 && rows[0].date !== '2026-11-06') await moveTxDate(db, rows[0], '2026-11-06', 'system');
+      await db.prepare(`INSERT OR REPLACE INTO inv_meta (key, value) VALUES ('fixes', ?)`).bind(`${fixes} datefix2`.trim()).run();
+      fixes = `${fixes} datefix2`.trim();
+    }
   }
   ready = db;
 }

@@ -811,3 +811,18 @@ test('check: tx list stock column is the stock as of that date, also for records
   assert.equal(Math.min(...oct31.map(r => r.stock_asof)), 26);
   assert.equal(rows.find(r => r.date === '2026-11-06').stock_asof, 326);
 });
+
+test('check: datefix2 puts the one November 300-sheet prepaid receipt on 11/6 once (never twice)', async () => {
+  const e = env(); await call(e, '/state');
+  const it = item(e, '보관용 3종 시트팩');
+  e.inv.prepare('UPDATE inv_items SET hospital_stock = 6 WHERE id = ?').run(it.id);
+  e.inv.prepare(`INSERT INTO inv_tx (date, kind, item_id, qty, hospital_delta, vendor_delta, memo, created_at) VALUES ('2026-11-09', 'prepaid_in', ?, 300, 300, -300, '입고', 1)`).run(it.id);
+  e.inv.prepare('UPDATE inv_items SET hospital_stock = hospital_stock + 300 WHERE id = ?').run(it.id);
+  const f = e.inv.prepare(`SELECT value FROM inv_meta WHERE key = 'fixes'`).get().value;
+  e.inv.prepare(`UPDATE inv_meta SET value = ? WHERE key = 'fixes'`).run(f.replace('datefix2', '').trim());
+  const { resetInvSchemaCache } = await import('../worker/invSchema.js'); resetInvSchemaCache();
+  await call(e, '/state'); resetInvSchemaCache(); await call(e, '/state');
+  const rows = e.inv.prepare(`SELECT date FROM inv_tx WHERE item_id = ? AND kind = 'prepaid_in' AND deleted_at IS NULL`).all(it.id);
+  assert.deepEqual(rows.map(r => r.date), ['2026-11-06']);
+  assert.equal(item(e, '보관용 3종 시트팩').hospital_stock, 306);
+});
