@@ -693,10 +693,11 @@ async function monthReport(db, month, brief = false) {
       sum(CASE WHEN kind IN ('in','prepaid_buy') AND amount > 0 AND invoice = 0 AND NOT EXISTS (SELECT 1 FROM inv_invoice_links l WHERE l.tx_id = inv_tx.id) THEN 1 ELSE 0 END) AS no_invoice,
       sum(CASE WHEN kind = 'in' AND amount IS NULL THEN 1 ELSE 0 END) AS no_amount
     FROM inv_tx WHERE deleted_at IS NULL AND date BETWEEN ? AND ?`, from, to);
-  const days = await one(db, `SELECT coalesce(sum(patients), 0) AS patients, sum(CASE WHEN patients > 0 THEN 1 ELSE 0 END) AS open_days FROM inv_daily WHERE date BETWEEN ? AND ?`, from, to);
+  const days = await one(db, `SELECT coalesce(sum(patients), 0) AS patients, sum(CASE WHEN patients > 0 THEN 1 ELSE 0 END) AS open_days, count(*) AS record_days FROM inv_daily WHERE date BETWEEN ? AND ?`, from, to);
   const usage = await all(db, `SELECT i.id, i.name, i.stock_unit, sum(t.qty) AS used FROM inv_tx t JOIN inv_items i ON i.id = t.item_id
     WHERE t.deleted_at IS NULL AND t.kind = 'out' AND t.date BETWEEN ? AND ? GROUP BY i.id ORDER BY i.sort, i.id`, from, to);
-  const openDays = days.open_days || 0;
+  // 영업일 = 피부관리 인원이 있는 날. 인원을 안 적은 달(성과 미입력)은 일일재고를 적은 날로(사용량이 있는데 '기록 없음'으로 보이지 않게)
+  const openDays = days.open_days || days.record_days || 0;
   const out = {
     month, spend_total: (spend.general || 0) + (spend.prepaid || 0), spend_general: spend.general || 0, spend_prepaid: spend.prepaid || 0,
     in_count: spend.in_count || 0, no_invoice: spend.no_invoice || 0, no_amount: spend.no_amount || 0, patients: days.patients || 0, open_days: openDays,

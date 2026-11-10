@@ -2355,3 +2355,7 @@ input[type="date"]::-webkit-date-and-time-value, input[type="month"]::-webkit-da
 .iv-dcard .iv-dpair .sf-input input { width: 100%; min-width: 0; }
 .iv-dcard .iv-dpair input::placeholder { color: #a8afb7; }
 .iv-dcard .iv-dbefore dd s { color: #a8afb7; font-weight: 400; }
+
+/* 월말 숫자 타일 비교 줄(2026-11-10): '9월 값'과 차이가 중간에서 끊기지 않게 각각 한 덩어리 */
+.sf-wrap .iv-tiles .iv-tile-cmp i { font-style: normal; white-space: nowrap; }
+.sf-wrap .iv-tiles .iv-tile-cmp span { white-space: nowrap; }

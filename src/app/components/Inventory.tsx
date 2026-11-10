@@ -746,7 +746,7 @@ export function StockReport() {
   return <div className="sf-wrap iv-wrap iv-report">
     <div className="sf-bar iv-noprint"><Seg label="보고서" value={tab} onChange={setTab} options={[['month', '월말 보고'], ['year', '연말 보고']]} />
       <div className="iv-inline">{tab === 'month' ? <>
-        <label className="sf-input"><span>보고 월</span><input type="month" value={month} onChange={e => e.target.value && setMonth(e.target.value)} /></label>
+        <label className="sf-input"><span>보고 월</span><input type="month" value={month} onChange={e => { const v = e.target.value; if (!v) return; setMonth(v); setCmp(shiftMonth(v, -1)); }} /></label>
         <label className="sf-input"><span>비교 월</span><input type="month" value={cmp} onChange={e => e.target.value && setCmp(e.target.value)} /></label></>
         : <label className="sf-input"><span>연도</span><input type="number" value={year} onChange={e => setYear(e.target.value)} /></label>}
         <button type="button" className="sf-btn is-primary" onClick={() => window.print()}>PDF로 저장·인쇄</button></div></div>
@@ -779,7 +779,7 @@ function MonthReport({ a, b }: { a: MonthRep; b: MonthRep }) {
     <Block n={++n} title={`${mm(a.month)} 확인 내용`}>
       <dl className="iv-tiles">{tiles.map(([label, now, prev, d, main]) => <div key={label} className={main ? 'is-main' : ''}>
         <dt>{label}</dt><dd><b>{now}</b>{main && a.spend_total >= 10000 && <small className="iv-read">{readWon(a.spend_total)}</small>}</dd>
-        <dd className="iv-tile-cmp">{mm(b.month)} {prev} · <span>{d}</span></dd></div>)}</dl>
+        <dd className="iv-tile-cmp"><i>{mm(b.month)} {prev}</i> <span>{d}</span></dd></div>)}</dl>
       {a.no_amount ? <p className="sf-hint">금액 미입력 입고 {a.no_amount}건</p> : null}
     </Block>
     <Block n={++n} title="재고 확인" sub={`품목별 하루 평균 사용량 · 영업일 ${mm(b.month)} ${b.open_days}일 / ${mm(a.month)} ${a.open_days}일`}>
