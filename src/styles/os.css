@@ -2384,3 +2384,16 @@ input[type="date"]::-webkit-date-and-time-value, input[type="month"]::-webkit-da
 .sf-wrap .iv-cancel-box { display: flex; flex-direction: column; gap: 10px; padding-top: 10px; border-top: 1px solid #e6ecf2; }
 .sf-wrap .iv-paybox { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 13px; color: var(--text-sub, #7d838b); }
 .sf-wrap .iv-paybox b { color: var(--ui-ink, #2d3136); font-weight: 600; }
+
+/* 입고 묶음(2026-11-11 사용자): 같은 날·같은 업체 입고 2건 이상은 한 줄, 누르면 개별 건이 바로 아래 들여쓴 카드로 */
+.iv-txrow.is-group { cursor: pointer; background: #f7f9fb; }
+.iv-txrow.is-group.is-open { border-color: #c9d6e3; }
+.iv-txrow.is-group .iv-count { font-weight: 700; color: #44617c; }
+.iv-txrow.is-group .iv-tx-l1 em { color: #44617c; font-weight: 600; }
+.iv-txrow.is-group svg.is-up { transform: rotate(180deg); }
+.iv-txrow.is-child { margin-left: 18px; min-height: 60px; border-style: dashed; }
+@container sfw (max-width: 900px) {
+  .iv-txgrid { --tx-cols: 38px minmax(160px, 1fr) 30px 70px 84px 52px 60px 72px; }
+  .iv-txrow .iv-unit-t { display: inline; font-size: 11px; }
+  .iv-txrow.is-child { margin-left: 10px; }
+}
