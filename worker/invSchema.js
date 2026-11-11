@@ -164,6 +164,24 @@ export async function ensureInvSchema(db) {
       await db.prepare(`INSERT OR REPLACE INTO inv_meta (key, value) VALUES ('fixes', ?)`).bind(`${fixes} datefix2`.trim()).run();
       fixes = `${fixes} datefix2`.trim();
     }
+    if (!fixes.includes('aladdin1')) {
+      // 2026-11-11 사용자: 알라딘 필링 단가(파우더 979,000 · 수딩 44,000 · 액티베이터 165,000), 카드결제·계좌입금 둘 다 가능.
+      // 단가가 아직 비어 있을 때만 넣고(앱에서 고친 값은 그대로), 구매조건이 없으면 '주문단위 1개 = 단가' 하나. 계좌 정보는 공개 저장소라 코드에 넣지 않음(앱에서 입력).
+      const now = Date.now();
+      for (const [id, price] of [[1030, 979000], [1031, 44000], [1029, 165000]]) {
+        const it = await db.prepare('SELECT * FROM inv_items WHERE id = ?').bind(id).first();
+        if (!it || it.price != null) continue;
+        await db.prepare('UPDATE inv_items SET price = ?, memo = NULL, updated_at = ? WHERE id = ?').bind(price, now, id).run();
+        if (!(await db.prepare('SELECT id FROM inv_options WHERE item_id = ? AND active = 1').bind(id).first())) {
+          const pack = it.pack_qty || 1;
+          await db.prepare('INSERT INTO inv_options (item_id, label, qty, bonus_qty, amount, prepaid, sort, created_at) VALUES (?,?,?,0,?,0,0,?)')
+            .bind(id, `1${it.order_unit || it.stock_unit}${pack !== 1 ? `(${pack}${it.stock_unit})` : ''}`, pack, price, now).run();
+        }
+      }
+      await db.prepare(`UPDATE inv_vendors SET payment_method = '카드결제·계좌입금' WHERE id = 7 AND (payment_method IS NULL OR payment_method = '홈페이지결제')`).run();
+      await db.prepare(`INSERT OR REPLACE INTO inv_meta (key, value) VALUES ('fixes', ?)`).bind(`${fixes} aladdin1`.trim()).run();
+      fixes = `${fixes} aladdin1`.trim();
+    }
     if (!fixes.includes('splitfix1')) {
       // 2026-11-11 사용자 '10/22로 해줘': 예전 앱에서 '받기 목록: 절단솜 4×6 외 3건(4개 품목)' 수량 0 · 67,500원 한 줄로 옮겨진 10/22 피부미소 입고를
       // 사용자가 보낸 거래명세서(일회용해면 60·거즈 2·절단솜 4x6 5·비절단솜 4x30 1, 합계 334,000원)대로 품목마다 따로 10/22 입고로 나눈다.

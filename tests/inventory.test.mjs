@@ -31,7 +31,7 @@ test('starts with the confirmed price list; old app numbers come in once from a 
   assert.equal(s.data.imported, null);
   const by = n => s.data.items.find(i => i.name === n);
   assert.equal(by('GA30%').price, 47272);
-  assert.equal(by('알라딘 필링 파우더').price, null); // 단가 미확인은 0원으로 바꾸지 않음
+  assert.equal(s.data.items.find(i => i.id === 3001).price, null); // 단가 미확인은 0원으로 바꾸지 않음(알라딘 필링은 2026-11-11 단가 받음)
   assert.equal(by('면봉').price, null);
   assert.deepEqual(by('이온토P').options.map(o => [o.qty, o.amount]), [[1, 7000], [50, 350000]]);
   assert.deepEqual(by('카프리가스').options.map(o => [o.qty, o.amount]), [[1, 44000], [5, 220000]]);
@@ -348,7 +348,7 @@ test('general items use the registered unit price; prepaid purchase and receipt 
   // 주문단위(box 50) ≠ 재고단위(ea): 구성수량으로 환산
   assert.equal((await call(e, '/receive', 'POST', { item_id: iono.id, actual_qty: 50, date: '2026-11-09' })).data.amount, 350000);
   // 단가 미확인은 금액 없음(0원으로 만들지 않음)
-  const powder = item(e, '알라딘 필링 파우더');
+  const powder = e.inv.prepare('SELECT * FROM inv_items WHERE id = 3001').get();
   assert.equal((await call(e, '/receive', 'POST', { item_id: powder.id, actual_qty: 3, date: '2026-11-09' })).data.amount, null);
   // 선결제 품목은 일반 입고로 받지 않음
   assert.equal((await call(e, '/receive', 'POST', { item_id: pack.id, actual_qty: 10 })).status, 400);
@@ -950,4 +950,17 @@ test('최종 수정일·수정자: qty/date/memo edits stamp the row; delete kee
   assert.equal(row.updated_by, 'u1');
   await call(e, `/tx/${r.data.tx_id}`, 'DELETE');
   assert.ok(e.inv.prepare('SELECT deleted_at FROM inv_tx WHERE id = ?').get(r.data.tx_id).deleted_at);
+});
+
+test('aladdin1: 알라딘 필링 prices + one order option, vendor pays by card or transfer; vendor payment info saved from the app', async () => {
+  const e = env(); await call(e, '/state');
+  const p = id => e.inv.prepare('SELECT price FROM inv_items WHERE id = ?').get(id).price;
+  assert.deepEqual([p(1030), p(1031), p(1029)], [979000, 44000, 165000]);
+  assert.equal(e.inv.prepare('SELECT amount FROM inv_options WHERE item_id = 1030 AND active = 1').get().amount, 979000);
+  assert.equal(e.inv.prepare('SELECT payment_method FROM inv_vendors WHERE id = 7').get().payment_method, '카드결제·계좌입금');
+  const r = await call(e, '/vendors', 'POST', { id: 7, company: '테스트상사', payment_method: '카드결제·계좌입금', bank: '테스트은행', account: '000-00-0000', holder: '홍길동' });
+  assert.equal(r.status, 200);
+  const v = e.inv.prepare('SELECT bank, account, holder FROM inv_vendors WHERE id = 7').get();
+  assert.deepEqual([v.bank, v.account, v.holder], ['테스트은행', '000-00-0000', '홍길동']);
+  assert.equal((await call(e, '/vendors', 'POST', { id: 99999 })).status, 404);
 });

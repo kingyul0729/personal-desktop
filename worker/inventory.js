@@ -297,6 +297,15 @@ async function inventoryRoute(request, env, url, user, db, path, m) {
     }
 
     // ── 구매조건(품목마다 여러 개: 구매수량 / 총 결제금액 / 증정수량) ──
+    if (m === 'POST' && path === '/vendors') {
+      // 거래처 결제 정보(결제 방법·회사명·은행·계좌번호·예금주)는 앱에서 입력(2026-11-11 — 공개 저장소에 계좌를 적지 않기 위해)
+      const v = await one(db, 'SELECT id FROM inv_vendors WHERE id = ?', Number(body.id) || 0);
+      if (!v) return bad('거래처를 찾을 수 없어요.', 404);
+      const t = k => (body[k] == null || String(body[k]).trim() === '' ? null : String(body[k]).trim().slice(0, 100));
+      await db.prepare('UPDATE inv_vendors SET company = ?, payment_method = ?, bank = ?, account = ?, holder = ? WHERE id = ?')
+        .bind(t('company'), t('payment_method'), t('bank'), t('account'), t('holder'), v.id).run();
+      return json({ ok: true, vendors: await all(db, 'SELECT * FROM inv_vendors WHERE active = 1 ORDER BY sort, id') });
+    }
     if (m === 'POST' && path === '/options') {
       const item = await loadItem(db, body.item_id);
       if (!item) return bad('품목을 찾을 수 없어요.', 404);

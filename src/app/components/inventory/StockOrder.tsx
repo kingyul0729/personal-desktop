@@ -275,7 +275,25 @@ export function ItemForm({ item, state, notify, onSaved, onDeleted }: { item: In
       : <button type="button" className="sf-btn" onClick={() => setAskDel(true)}>품목 빼기</button>)}
       <button type="button" className="sf-btn is-primary" disabled={busy} onClick={() => void save()}>{busy && <SavingMark />}저장</button></div>
     {item && <Options item={item} notify={notify} onSaved={onSaved} />}
+    {item?.vendor_id && state.vendors.find(v => v.id === item.vendor_id) && <VendorPay key={item.vendor_id} vendor={state.vendors.find(v => v.id === item.vendor_id)!} notify={notify} onSaved={onSaved} />}
   </div>;
+}
+
+// 거래처 결제 정보(같은 거래처의 모든 품목에 함께 적용)
+export function VendorPay({ vendor, notify, onSaved }: { vendor: InvVendor; notify: (m: string) => void; onSaved: () => void }) {
+  const [f, setF] = useState({ company: vendor.company || '', payment_method: vendor.payment_method || '', bank: vendor.bank || '', account: vendor.account || '', holder: vendor.holder || '' });
+  const [busy, setBusy] = useState(false);
+  const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement>) => setF(x => ({ ...x, [k]: e.target.value }));
+  return <section className="iv-sec"><h3>거래처 결제 정보 · {vendor.name}</h3>
+    <div className="iv-fgrid">
+      <label className="sf-input"><span>회사명</span><input value={f.company} onChange={set('company')} /></label>
+      <label className="sf-input"><span>결제 방법</span><input value={f.payment_method} onChange={set('payment_method')} placeholder="카드결제·계좌입금·방문결제" /></label>
+      <label className="sf-input"><span>은행</span><input value={f.bank} onChange={set('bank')} /></label>
+      <label className="sf-input"><span>계좌번호</span><input value={f.account} onChange={set('account')} inputMode="numeric" /></label>
+      <label className="sf-input"><span>예금주</span><input value={f.holder} onChange={set('holder')} /></label>
+    </div>
+    <div className="sf-modal-foot"><button type="button" className="sf-btn is-primary" disabled={busy} onClick={async () => { setBusy(true); try { await invSend('POST', '/vendors', { id: vendor.id, ...f }); notify('거래처 결제 정보를 저장했어요.'); onSaved(); } catch (e) { notify(errText(e)); } finally { setBusy(false); } }}>{busy && <SavingMark />}저장</button></div>
+  </section>;
 }
 
 export function Options({ item, notify, onSaved }: { item: InvItem; notify: (m: string) => void; onSaved: () => void }) {
