@@ -65,6 +65,21 @@ function priceFor(item, stockQty) {
 // 선결제 개당원가 = 실제 구매금액 ÷ 증정 포함 총수량(가장 최근 선결제 구매 기준)
 const unitCostOf = tx => (tx && tx.amount != null && tx.qty + tx.bonus_qty > 0 ? Math.round((tx.amount / (tx.qty + tx.bonus_qty)) * 100) / 100 : null);
 
+// 결제 시점(2026-11-12 사용자): 카드·홈페이지결제는 늘 '주문 시 결제', 그 밖(계좌입금·방문결제)은 업체마다 저장한 값, 안 정했으면 미정(null)
+const PAY_METHODS = ['카드결제', '홈페이지결제', '계좌입금', '방문결제'];
+const timingOf = v => (v && (v.pay_timing === 'order' || v.pay_timing === 'month') ? v.pay_timing : /카드|홈페이지/.test(v?.payment_method || '') ? 'order' : null);
+// 옵션 기간(행사): 비우면 늘. 그 날짜가 기간 안이면 주문 가능
+const optOpen = (o, date) => (!o.start_date || o.start_date <= date) && (!o.end_date || date <= o.end_date);
+const OUT_OF_PERIOD = '행사 기간이 아닌 옵션이에요.';
+async function vendorList(db) { return all(db, 'SELECT * FROM inv_vendors ORDER BY active DESC, sort, id'); }
+// 업체 입력값 정리(새 업체·업체 정보 수정 공통). 계좌는 공개 저장소라 코드에 넣지 않고 앱에서만 받는다.
+function vendorFields(body) {
+  const t = k => (body[k] == null || String(body[k]).trim() === '' ? null : String(body[k]).trim().slice(0, 100));
+  const method = t('payment_method');
+  const pt = /카드|홈페이지/.test(method || '') ? 'order' : ['order', 'month'].includes(body.pay_timing) ? body.pay_timing : null;
+  return { name: t('name'), company: t('company'), payment_method: method, pay_timing: pt, bank: t('bank'), account: t('account'), holder: t('holder') };
+}
+
 async function loadItem(db, id) {
   const it = await one(db, 'SELECT * FROM inv_items WHERE id = ?', Number(id));
   return it || null;
@@ -256,9 +271,9 @@ async function inventoryRoute(request, env, url, user, db, path, m) {
     if (m === 'GET' && path === '/state') {
       const imported = await one(db, `SELECT value FROM inv_meta WHERE key = 'import'`);
       const [vendors, items, orders] = await Promise.all([
-        all(db, 'SELECT * FROM inv_vendors WHERE active = 1 ORDER BY sort, id'),
+        vendorList(db),
         itemsWithOptions(db),
-        all(db, `SELECT o.*, i.name AS item_name, i.stock_unit, (SELECT coalesce(sum(t.qty + t.bonus_qty), 0) FROM inv_tx t WHERE t.order_id = o.id AND t.deleted_at IS NULL AND t.cancelled_at IS NULL AND t.kind = 'in') AS received_qty,
+        all(db, `SELECT o.*, i.name AS item_name, i.stock_unit, (SELECT coalesce(sum(t.qty + t.bonus_qty + t.vendor_delta), 0) FROM inv_tx t WHERE t.order_id = o.id AND t.deleted_at IS NULL AND t.cancelled_at IS NULL AND t.kind = 'in') AS received_qty,
           (SELECT p.qty + p.bonus_qty FROM inv_orders p WHERE o.memo = 'from:' || p.id) AS contract_qty, (SELECT p.amount FROM inv_orders p WHERE o.memo = 'from:' || p.id) AS contract_amount FROM inv_orders o JOIN inv_items i ON i.id = o.item_id WHERE o.status = 'ordered' ORDER BY o.ordered_at, o.id`),
       ]);
       return json({ today: kstToday(), imported: imported?.value || null, vendors, items, orders });
@@ -275,6 +290,18 @@ async function inventoryRoute(request, env, url, user, db, path, m) {
         prepaid: body.prepaid ? 1 : 0, is_pack: body.is_pack ? 1 : 0, memo: body.memo || null,
       };
       if (f.pack_qty != null && !(f.pack_qty > 0)) return bad('구성수량은 0보다 커야 해요.');
+      // 새 업체를 품목과 같이 저장(2026-11-12 사용자: 업체 탭 없이 거래처에서 '+ 새 업체')
+      if (body.new_vendor) {
+        const v = vendorFields(body.new_vendor);
+        if (!v.name) return bad('업체명을 입력해 주세요.');
+        if (!v.payment_method || !v.payment_method.split('·').every(x => PAY_METHODS.includes(x.trim()))) return bad('결제 방법을 골라 주세요.');
+        if (!v.pay_timing) return bad('결제 시점을 골라 주세요.');
+        if (await one(db, 'SELECT id FROM inv_vendors WHERE name = ?', v.name)) return bad('같은 이름의 업체가 이미 있어요. 거래처에서 골라 주세요.');
+        const sort = (await one(db, 'SELECT coalesce(max(sort), 0) + 1 AS s FROM inv_vendors'))?.s || 0;
+        await db.prepare('INSERT INTO inv_vendors (name, company, payment_method, pay_timing, bank, account, holder, sort) VALUES (?,?,?,?,?,?,?,?)')
+          .bind(v.name, v.company, v.payment_method, v.pay_timing, ...(v.payment_method.includes('계좌입금') ? [v.bank, v.account, v.holder] : [null, null, null]), sort).run();
+        f.vendor_id = (await one(db, 'SELECT id FROM inv_vendors WHERE name = ?', v.name)).id;
+      }
       if (body.id) {
         await db.prepare(`UPDATE inv_items SET name=?, vendor_id=?, category=?, stock_unit=?, order_unit=?, pack_qty=?, price=?, min_stock=?, daily_mode=?, prepaid=?, is_pack=?, memo=?, updated_at=? WHERE id=?`)
           .bind(f.name, f.vendor_id, f.category, f.stock_unit, f.order_unit, f.pack_qty, f.price, f.min_stock, f.daily_mode, f.prepaid, f.is_pack, f.memo, Date.now(), Number(body.id)).run();
@@ -289,7 +316,7 @@ async function inventoryRoute(request, env, url, user, db, path, m) {
         await db.prepare('INSERT INTO inv_options (item_id, label, qty, bonus_qty, amount, prepaid, sort, created_at) VALUES (?,?,?,?,?,0,0,?)')
           .bind(saved.id, `1${saved.order_unit || saved.stock_unit}${pack !== 1 ? `(${pack}${saved.stock_unit})` : ''}`, pack, 0, saved.price, Date.now()).run();
       }
-      return json({ ok: true, items: await itemsWithOptions(db) });
+      return json({ ok: true, items: await itemsWithOptions(db), vendors: await vendorList(db), vendor_id: f.vendor_id, item_id: saved?.id ?? null });
     }
     if (m === 'DELETE' && path.startsWith('/items/')) {
       await db.prepare('UPDATE inv_items SET active = 0, updated_at = ? WHERE id = ?').bind(Date.now(), Number(path.split('/')[2])).run();
@@ -299,12 +326,21 @@ async function inventoryRoute(request, env, url, user, db, path, m) {
     // ── 구매조건(품목마다 여러 개: 구매수량 / 총 결제금액 / 증정수량) ──
     if (m === 'POST' && path === '/vendors') {
       // 거래처 결제 정보(결제 방법·회사명·은행·계좌번호·예금주)는 앱에서 입력(2026-11-11 — 공개 저장소에 계좌를 적지 않기 위해)
-      const v = await one(db, 'SELECT id FROM inv_vendors WHERE id = ?', Number(body.id) || 0);
+      const v = await one(db, 'SELECT * FROM inv_vendors WHERE id = ?', Number(body.id) || 0);
       if (!v) return bad('거래처를 찾을 수 없어요.', 404);
-      const t = k => (body[k] == null || String(body[k]).trim() === '' ? null : String(body[k]).trim().slice(0, 100));
-      await db.prepare('UPDATE inv_vendors SET company = ?, payment_method = ?, bank = ?, account = ?, holder = ? WHERE id = ?')
-        .bind(t('company'), t('payment_method'), t('bank'), t('account'), t('holder'), v.id).run();
-      return json({ ok: true, vendors: await all(db, 'SELECT * FROM inv_vendors WHERE active = 1 ORDER BY sort, id') });
+      // 거래 중단·재개(2026-11-12): 새 주문 목록에서만 빠지고 재고·일일재고·기록은 그대로
+      if (body.active != null && Object.keys(body).every(k => k === 'id' || k === 'active')) {
+        await db.prepare('UPDATE inv_vendors SET active = ? WHERE id = ?').bind(body.active ? 1 : 0, v.id).run();
+        return json({ ok: true, vendors: await vendorList(db) });
+      }
+      const f = vendorFields(body);
+      const name = f.name || v.name;
+      if (name !== v.name && await one(db, 'SELECT id FROM inv_vendors WHERE name = ? AND id <> ?', name, v.id)) return bad('같은 이름의 업체가 이미 있어요.');
+      // 결제 시점을 안 보냈으면 저장된 값 유지(카드·홈페이지면 늘 주문 시)
+      const pt = 'pay_timing' in body || /카드|홈페이지/.test(f.payment_method || '') ? f.pay_timing : v.pay_timing;
+      await db.prepare('UPDATE inv_vendors SET name = ?, company = ?, payment_method = ?, pay_timing = ?, bank = ?, account = ?, holder = ? WHERE id = ?')
+        .bind(name, f.company, f.payment_method, pt, f.bank, f.account, f.holder, v.id).run();
+      return json({ ok: true, vendors: await vendorList(db) });
     }
     if (m === 'POST' && path === '/options') {
       const item = await loadItem(db, body.item_id);
@@ -314,9 +350,13 @@ async function inventoryRoute(request, env, url, user, db, path, m) {
       if (bonus < 0) return bad('증정수량은 0 이상이어야 해요.');
       if (amount != null && amount < 0) return bad('결제금액은 0 이상이어야 해요.');
       const label = String(body.label || '').trim() || null;
-      const prepaid = body.prepaid ? 1 : 0;
-      if (body.id) await db.prepare('UPDATE inv_options SET label=?, qty=?, bonus_qty=?, amount=?, prepaid=?, unit_label=? WHERE id=? AND item_id=?').bind(label, qty, bonus, amount, prepaid, body.unit_label || null, Number(body.id), item.id).run();
-      else await db.prepare('INSERT INTO inv_options (item_id, label, qty, bonus_qty, amount, prepaid, unit_label, sort, created_at) VALUES (?,?,?,?,?,?,?,?,?)').bind(item.id, label, qty, bonus, amount, prepaid, body.unit_label || null, 99, Date.now()).run();
+      const prepaid = body.prepaid != null ? (body.prepaid ? 1 : 0) : (item.prepaid ? 1 : 0);
+      // 행사 기간(2026-11-12 사용자: 업체 문자로 오는 월·연 행사 — 비우면 늘)
+      const sd = body.start_date ? String(body.start_date) : null, ed = body.end_date ? String(body.end_date) : null;
+      if ((sd && !okDate(sd)) || (ed && !okDate(ed))) return bad('기간 날짜를 확인해 주세요.');
+      if (sd && ed && sd > ed) return bad('기간의 끝 날짜가 시작보다 빨라요.');
+      if (body.id) await db.prepare('UPDATE inv_options SET label=?, qty=?, bonus_qty=?, amount=?, prepaid=?, unit_label=?, start_date=?, end_date=? WHERE id=? AND item_id=?').bind(label, qty, bonus, amount, prepaid, body.unit_label || null, sd, ed, Number(body.id), item.id).run();
+      else await db.prepare('INSERT INTO inv_options (item_id, label, qty, bonus_qty, amount, prepaid, unit_label, sort, created_at, start_date, end_date) VALUES (?,?,?,?,?,?,?,?,?,?,?)').bind(item.id, label, qty, bonus, amount, prepaid, body.unit_label || null, 99, Date.now(), sd, ed).run();
       return json({ ok: true, items: await itemsWithOptions(db) });
     }
     if (m === 'DELETE' && path.startsWith('/options/')) {
@@ -343,6 +383,7 @@ async function inventoryRoute(request, env, url, user, db, path, m) {
       if (short > 0) {
         opt = await one(db, 'SELECT * FROM inv_options WHERE id = ? AND item_id = ? AND active = 1 AND prepaid = 1', Number(body.option_id), item.id);
         if (!opt) return bad(`업체 보관 잔량이 ${short} ${item.stock_unit} 모자라요. 신규 선결제 옵션을 골라 주세요.`);
+        if (!optOpen(opt, date)) return bad(OUT_OF_PERIOD);
         if (opt.qty + (opt.bonus_qty || 0) < short) return bad('고른 선결제 옵션으로도 모자라요. 더 큰 옵션을 골라 주세요.');
       } else if (body.option_id) return bad('업체 보관 잔량으로 충분해서 신규 선결제가 필요 없어요.');
       // 결제 기록·주문 연결·반입 예정을 한 batch로(중간에 끊기거나 다른 요청이 끼어도 엉키지 않게)
@@ -369,6 +410,7 @@ async function inventoryRoute(request, env, url, user, db, path, m) {
       const count = num(body.count) ?? 1;
       if (!(count > 0) || !Number.isInteger(count)) return bad('주문 개수는 1 이상의 정수예요.');
       const date = okDate(body.date) ? body.date : kstToday();
+      if (!optOpen(opt, date)) return bad(OUT_OF_PERIOD);
       const u = optionUnits(item, opt);
       const qty = u.qty * count, bonus = u.bonus * count, amount = u.amount == null ? null : u.amount * count;
       if (opt.prepaid) {
@@ -403,9 +445,14 @@ async function inventoryRoute(request, env, url, user, db, path, m) {
     // 선결제 반입: 업체 보관 잔량 - 실제 수량, 병원재고 + 실제 수량을 한 batch로. 결제금액 0.
     if (m === 'POST' && path === '/receive') {
       const actual = num(body.actual_qty);
-      if (!(actual > 0)) return bad('실제 도착 수량을 입력해 주세요.');
+      // 일반 품목 업체 보관(2026-11-12 사용자 '킵'): 돈은 냈는데 일부를 업체에 맡김 → 실제 도착은 병원재고, 업체 보관은 업체 보관 잔량
+      const keepQ = num(body.keep_qty) ?? 0;
+      if (!isNum(keepQ) || keepQ < 0) return bad('업체 보관 수량을 확인해 주세요.');
+      const keepOk = keepQ > 0 && body.order_id;
+      if (!(actual > 0) && !(keepOk && actual === 0)) return bad('실제 도착 수량을 입력해 주세요.');
       const date = okDate(body.date) ? body.date : kstToday();
       if (body.from_prepaid) {
+        // 업체 보관에서 가져오기: 선결제 품목은 주문→받기로만(아래 막음), 일반 품목은 맡겨 둔 것을 여기서(2026-11-12)
         const item = await loadItem(db, body.item_id);
         if (!item) return bad('품목을 찾을 수 없어요.', 404);
         if (actual > round(item.vendor_stock || 0)) return bad(`업체 보관 잔량(${round(item.vendor_stock || 0)} ${item.stock_unit})보다 많이 받을 수 없어요.`);
@@ -421,6 +468,7 @@ async function inventoryRoute(request, env, url, user, db, path, m) {
         // 같은 주문을 두 기기에서 동시에 받으면 하나만 되게: 주문별 받기 번호를 먼저 잡는다(겹치면 batch 전체가 취소됨)
         const seen = await one(db, 'SELECT count(*) AS n FROM inv_tx WHERE order_id = ?', order.id);
         const lock = db.prepare('INSERT INTO inv_requests (id, path, created_at) VALUES (?,?,?)').bind(`recv:${order.id}:${seen?.n || 0}`, 'receive-lock', Date.now());
+        if (order.prepaid && keepQ > 0) return bad('선결제 품목은 업체 보관 칸이 없어요.');
         if (order.prepaid) {
           // 선결제 반입 예정: 실제 도착 수량만 업체 보관 잔량 → 병원재고로 옮긴다(금액 없음). 주문 수량보다 많이는 못 받음(오타 방지).
           const oq = round(order.qty + (order.bonus_qty || 0));
@@ -434,20 +482,24 @@ async function inventoryRoute(request, env, url, user, db, path, m) {
         }
         // 나눠서 도착(2026-11-09 사용자 지정): 도착할 때마다 그날 날짜로 따로 기록. 결제금액은 처음 받은 기록에 한 번만,
         // 다음 도착분은 0원. 주문 수량을 다 받을 때까지 주문은 '받기 전'에 남는다(남은 것이 안 오면 주문 줄에서 '마감').
-        const got = await one(db, `SELECT coalesce(sum(CASE WHEN cancelled_at IS NULL THEN qty + bonus_qty ELSE 0 END), 0) AS q, count(*) AS n FROM inv_tx WHERE deleted_at IS NULL AND order_id = ? AND kind = 'in'`, order.id);
+        const got = await one(db, `SELECT coalesce(sum(CASE WHEN cancelled_at IS NULL THEN qty + bonus_qty + vendor_delta ELSE 0 END), 0) AS q, count(*) AS n FROM inv_tx WHERE deleted_at IS NULL AND order_id = ? AND kind = 'in'`, order.id);
         const total = round(order.qty + (order.bonus_qty || 0)), left = round(total - (got?.q || 0));
         const first = !(got?.n > 0);
-        if (actual > left) return bad(`남은 수량(${left} ${item.stock_unit})보다 많이 받을 수 없어요. 더 온 것은 '증정·행사로 받기'로 적어 주세요.`);
-        const done = actual >= left;
+        const got2 = round(actual + keepQ);
+        if (got2 > left) return bad(`남은 수량(${left} ${item.stock_unit})보다 많이 받을 수 없어요. 더 온 것은 '증정·행사로 받기'로 적어 주세요.`);
+        const done = got2 >= left;
         const nth = (got?.n || 0) + 1;
+        const base = body.memo || (first && done ? order.option_label : `${order.option_label || '주문'} · 나눠 받음 ${nth}차`);
+        const memo = keepQ > 0 ? `${body.memo ? `${body.memo} · ` : ''}주문 ${fmtNum(total)} · 도착 ${fmtNum(actual)} · 업체 보관 ${fmtNum(keepQ)}` : base;
         await db.batch([lock,
           ...(done ? [db.prepare(`UPDATE inv_orders SET status = 'received', received_at = ? WHERE id = ? AND status = 'ordered'`).bind(date, order.id)] : []),
-          ...ordered(actual, txStatements(db, item, { date, kind: 'in', qty: actual, bonus_qty: 0, amount: first ? order.amount : 0, hospital_delta: actual, order_id: order.id,
-            memo: body.memo || (first && done ? order.option_label : `${order.option_label || '주문'} · 나눠 받음 ${nth}차`), by: user, invoice: 0 }), await keepCountStmts(db, item.id, date, actual, user)),
+          ...ordered(actual, txStatements(db, item, { date, kind: 'in', qty: actual, bonus_qty: 0, amount: first ? order.amount : 0, hospital_delta: actual, vendor_delta: keepQ, order_id: order.id,
+            memo, by: user, invoice: 0 }), actual ? await keepCountStmts(db, item.id, date, actual, user) : []),
         ]);
-        return json({ ok: true, left: done ? 0 : round(left - actual), tx_id: (await one(db, 'SELECT max(id) AS id FROM inv_tx WHERE order_id = ?', order.id)).id });
+        return json({ ok: true, left: done ? 0 : round(left - got2), tx_id: (await one(db, 'SELECT max(id) AS id FROM inv_tx WHERE order_id = ?', order.id)).id });
       }
       // 주문 없이 바로 받은 일반 입고: 금액을 안 넣으면 등록된 구매단가 × 수량(주문단위는 구성수량으로 환산). 단가 미확인이면 금액 없음.
+      if (keepQ > 0) return bad('업체 보관은 주문한 것을 받을 때만 적을 수 있어요.');
       const item = await loadItem(db, body.item_id);
       if (!item) return bad('품목을 찾을 수 없어요.', 404);
       if (item.prepaid) return bad('선결제 품목은 재고주문에서 주문한 뒤 받기에서 입고확정해 주세요.');
@@ -527,6 +579,7 @@ async function inventoryRoute(request, env, url, user, db, path, m) {
       const item = await loadItem(db, tx.item_id);
       const hd = -tx.hospital_delta, vd = -tx.vendor_delta;
       if (round(item.hospital_stock + hd) < 0) return bad(`병원재고(${round(item.hospital_stock)} ${item.stock_unit})가 모자라요. 그 뒤 출고 기록을 먼저 확인해 주세요.`, 409);
+      if (round(item.vendor_stock + vd) < 0) return bad('업체 보관에 맡긴 수량을 이미 가져왔어요. 가져온 기록을 먼저 확인해 주세요.', 409);
       const now = Date.now();
       const stmts = [
         db.prepare(`UPDATE inv_items SET hospital_stock = round(hospital_stock + ?, 3), vendor_stock = round(vendor_stock + ?, 3), updated_at = ? WHERE id = ?`).bind(hd, vd, now, item.id),
@@ -599,6 +652,7 @@ async function inventoryRoute(request, env, url, user, db, path, m) {
         const actual = num(body.actual_qty);
         if (!(actual > 0)) return bad('수량은 0보다 커야 해요.');
         if (tx.kind === 'in' && actual < tx.bonus_qty) return bad(`증정 수량(${tx.bonus_qty})보다 적게 고칠 수 없어요.`);
+        if (tx.kind === 'in' && tx.vendor_delta > 0) return bad('업체 보관이 있는 입고는 수량을 고칠 수 없어요. 입고 취소 뒤 다시 받아 주세요.');
         const old = Math.abs(tx.hospital_delta);
         const diff = round(actual - old);
         if (!diff) return json({ ok: true, unchanged: true });
@@ -608,7 +662,7 @@ async function inventoryRoute(request, env, url, user, db, path, m) {
         if (round(item.vendor_stock + vd) < 0) return bad(`업체 보관 잔량(${round(item.vendor_stock)} ${item.stock_unit})보다 많이 받을 수 없어요.`);
         if (tx.order_id && tx.kind !== 'out') { // 주문으로 받은 기록은 주문 수량을 넘게 고치지 못함
           const o = await one(db, 'SELECT qty, bonus_qty FROM inv_orders WHERE id = ?', tx.order_id);
-          const others = await one(db, `SELECT coalesce(sum(abs(hospital_delta)), 0) AS q FROM inv_tx WHERE deleted_at IS NULL AND order_id = ? AND id <> ? AND kind = ?`, tx.order_id, tx.id, tx.kind);
+          const others = await one(db, `SELECT coalesce(sum(abs(hospital_delta) + CASE WHEN kind = 'in' THEN vendor_delta ELSE 0 END), 0) AS q FROM inv_tx WHERE deleted_at IS NULL AND order_id = ? AND id <> ? AND kind = ?`, tx.order_id, tx.id, tx.kind);
           const cap = o ? round(o.qty + (o.bonus_qty || 0) - (tx.kind === 'in' ? others?.q || 0 : 0)) : Infinity;
           if (actual > cap) return bad(`주문 수량을 넘게 고칠 수 없어요(최대 ${cap} ${item.stock_unit}).`);
         }
@@ -629,9 +683,13 @@ async function inventoryRoute(request, env, url, user, db, path, m) {
       const kind = url.searchParams.get('kind'), itemId = url.searchParams.get('item_id');
       // 병원재고 칸 = 그 날짜(같은 날은 기록 순서)까지의 재고. 저장할 때의 재고(hospital_after)는 늦게 적은 기록이면 그때 재고라 날짜와 안 맞아서(2026-11-10 사용자 '10/31 시트팩 맞아?') 지금 재고에서 그 뒤 기록을 빼서 다시 계산.
       const rows = await all(db, `SELECT t.*, round(i.hospital_stock - coalesce((SELECT sum(t2.hospital_delta) FROM inv_tx t2 WHERE t2.item_id = t.item_id AND t2.deleted_at IS NULL AND (t2.date > t.date OR (t2.date = t.date AND t2.id > t.id))), 0), 3) AS stock_asof,
+        round(i.vendor_stock - coalesce((SELECT sum(t2.vendor_delta) FROM inv_tx t2 WHERE t2.item_id = t.item_id AND t2.deleted_at IS NULL AND (t2.date > t.date OR (t2.date = t.date AND t2.id > t.id))), 0), 3) AS vendor_asof, i.prepaid AS item_prepaid,
         i.name AS item_name, i.stock_unit, i.vendor_id, v.name AS vendor_name, (SELECT group_concat(l.invoice_id) FROM inv_invoice_links l WHERE l.tx_id = t.id) AS invoice_ids FROM inv_tx t JOIN inv_items i ON i.id = t.item_id LEFT JOIN inv_vendors v ON v.id = i.vendor_id
         WHERE t.deleted_at IS NULL AND NOT (t.daily_date IS NOT NULL AND t.hospital_delta = 0) AND t.date BETWEEN ? AND ? ${kind ? `AND t.kind IN (${kind.split(',').map(() => '?').join(',')})` : ''} ${itemId ? 'AND t.item_id = ?' : ''}
         ORDER BY t.date DESC, t.id DESC LIMIT 500`, from, to, ...(kind ? kind.split(',') : []), ...(itemId ? [Number(itemId)] : []));
+      // 업체 보관에서 가져온 줄: 처음 결제한 날짜(먼저 결제한 것부터 씀, 2026-11-12 사용자)
+      const src = await keepSources(db, [...new Set(rows.filter(r => r.kind === 'prepaid_in' && r.vendor_delta < 0).map(r => r.item_id))]);
+      for (const r of rows) if (src.has(r.id)) r.sources = src.get(r.id);
       return json({ rows });
     }
 
@@ -765,15 +823,55 @@ async function inventoryRoute(request, env, url, user, db, path, m) {
   }
 }
 
-const PAID_AT_ORDER = `(v.payment_method LIKE '%카드%' OR v.payment_method LIKE '%홈페이지%')`;
+// 업체 보관 잔량이 어느 결제에서 왔는지(먼저 결제한 것부터 씀): 품목마다 기록을 날짜 순으로 따라가며 늘어난 몫(선결제 구매·업체 보관 입고·잔량 고침)을 쌓고,
+// 업체 보관에서 가져온 기록이 앞 몫부터 꺼내 쓴다. 기록 없이 들어온 처음 잔량(예전 자료)은 '이전 잔량'.
+async function keepSources(db, itemIds) {
+  const out = new Map();
+  for (const id of itemIds) {
+    const it = await one(db, 'SELECT vendor_stock FROM inv_items WHERE id = ?', id);
+    const txs = await all(db, `SELECT t.id, t.date, t.kind, t.vendor_delta, t.order_id, o.ordered_at, v.pay_timing, v.payment_method,
+        (SELECT min(f.id) FROM inv_tx f WHERE f.order_id = t.order_id AND f.kind = 'in' AND f.deleted_at IS NULL) AS first_id,
+        (SELECT f.date FROM inv_tx f WHERE f.order_id = t.order_id AND f.kind = 'in' AND f.deleted_at IS NULL ORDER BY f.id LIMIT 1) AS first_date
+      FROM inv_tx t JOIN inv_items i ON i.id = t.item_id LEFT JOIN inv_vendors v ON v.id = i.vendor_id LEFT JOIN inv_orders o ON o.id = t.order_id
+      WHERE t.item_id = ? AND t.deleted_at IS NULL AND t.vendor_delta <> 0 ORDER BY t.date, t.id`, id);
+    const lots = [];
+    const opening = round((it?.vendor_stock || 0) - txs.reduce((a, t) => a + t.vendor_delta, 0));
+    if (opening > 0) lots.push({ date: null, kind: 'old', left: opening, tx: null });
+    for (const t of txs) {
+      if (t.vendor_delta > 0) {
+        if (t.kind === 'prepaid_buy') lots.push({ date: t.date, kind: 'prepaid', left: t.vendor_delta, tx: t.id });
+        else if (t.kind === 'in') { // 일반 품목 업체 보관: 결제한 날 = 주문 시 결제면 주문일, 아니면 결제금액이 걸린 첫 입고일
+          const atOrder = timingOf(t) === 'order' && t.ordered_at;
+          lots.push({ date: atOrder ? t.ordered_at : t.first_date || t.date, kind: 'paid', left: t.vendor_delta, tx: t.first_id || t.id });
+        } else lots.push({ date: t.date, kind: 'fix', left: t.vendor_delta, tx: null });
+        continue;
+      }
+      let need = -t.vendor_delta; const used = [];
+      while (need > 0.0005 && lots.length) {
+        const l = lots[0], q = Math.min(l.left, need);
+        used.push({ date: l.date, kind: l.kind, qty: round(q), tx: l.tx });
+        l.left = round(l.left - q); need = round(need - q);
+        if (l.left <= 0.0005) lots.shift();
+      }
+      if (t.kind === 'prepaid_in') out.set(t.id, used);
+    }
+  }
+  // 결제 기록에 올린 명세서 사진(누르면 그 결제의 명세서)
+  const ids = [...new Set([...out.values()].flat().map(u => u.tx).filter(Boolean))];
+  const photos = ids.length ? await all(db, `SELECT tx_id, group_concat(invoice_id) AS ids FROM inv_invoice_links WHERE tx_id IN (${ids.map(() => '?').join(',')}) GROUP BY tx_id`, ...ids) : [];
+  for (const list of out.values()) for (const u of list) u.invoice_ids = photos.find(p => p.tx_id === u.tx)?.ids || null;
+  return out;
+}
+
+const PAID_AT_ORDER = `(v.pay_timing = 'order' OR (coalesce(v.pay_timing, '') NOT IN ('order', 'month') AND (v.payment_method LIKE '%카드%' OR v.payment_method LIKE '%홈페이지%')))`;
 async function monthReport(db, month, brief = false) {
   const from = `${month}-01`, to = `${month}-31`;
   // 결제 시점 기준(2026-11-11 사용자): 카드·홈페이지결제 업체는 주문할 때 결제 → 주문일 달에, 계좌이체·방문결제(그 밖)는 월말 결제 → 입고일 달에.
   // 같은 결제를 두 번 세지 않게 카드·홈페이지 주문으로 받은 입고 기록의 금액은 빼고 주문 금액으로 한 번만 센다. 선결제는 결제 기록 날짜.
   const pays = [
-    ...await all(db, `SELECT i.vendor_id, o.amount FROM inv_orders o JOIN inv_items i ON i.id = o.item_id LEFT JOIN inv_vendors v ON v.id = i.vendor_id
+    ...await all(db, `SELECT i.vendor_id, o.amount, o.ordered_at AS pay_date FROM inv_orders o JOIN inv_items i ON i.id = o.item_id LEFT JOIN inv_vendors v ON v.id = i.vendor_id
       WHERE o.prepaid = 0 AND o.status <> 'cancelled' AND o.amount > 0 AND o.ordered_at BETWEEN ? AND ? AND ${PAID_AT_ORDER}`, from, to),
-    ...await all(db, `SELECT i.vendor_id, t.amount FROM inv_tx t JOIN inv_items i ON i.id = t.item_id LEFT JOIN inv_orders o ON o.id = t.order_id LEFT JOIN inv_vendors v ON v.id = i.vendor_id
+    ...await all(db, `SELECT i.vendor_id, t.amount, t.date AS pay_date FROM inv_tx t JOIN inv_items i ON i.id = t.item_id LEFT JOIN inv_orders o ON o.id = t.order_id LEFT JOIN inv_vendors v ON v.id = i.vendor_id
       WHERE t.deleted_at IS NULL AND t.kind = 'in' AND t.amount > 0 AND t.date BETWEEN ? AND ? AND NOT (o.id IS NOT NULL AND o.prepaid = 0 AND ${PAID_AT_ORDER})`, from, to),
   ];
   const generalPaid = pays.reduce((a, r) => a + (r.amount || 0), 0);
@@ -794,17 +892,28 @@ async function monthReport(db, month, brief = false) {
     usage: usage.map(u => ({ ...u, used: round(u.used), per_day: openDays ? Math.round((u.used / openDays) * 10) / 10 : null })),
   };
   if (brief) return out;
-  // 결제 내역(업체별, 원장님 제출용): 계좌이체 업체는 업체명·예금주·은행·계좌번호·결제금액
-  const prepaidPays = await all(db, `SELECT i.vendor_id, t.amount FROM inv_tx t JOIN inv_items i ON i.id = t.item_id WHERE t.deleted_at IS NULL AND t.kind = 'prepaid_buy' AND t.amount > 0 AND t.date BETWEEN ? AND ?`, from, to);
+  // 결제 내역(2026-11-12 사용자: 원장님 제출용, 모든 업체를 결제 시점별로 · 결제 상태는 자동 — 주문 시 = 결제 완료, 월말 = 그 달 말까지 결제 예정 → 다음 달부터 결제 완료)
+  const prepaidPays = await all(db, `SELECT i.vendor_id, t.amount, t.date AS pay_date FROM inv_tx t JOIN inv_items i ON i.id = t.item_id WHERE t.deleted_at IS NULL AND t.kind = 'prepaid_buy' AND t.amount > 0 AND t.date BETWEEN ? AND ?`, from, to);
+  const ins = await all(db, `SELECT i.vendor_id, t.date, t.item_id FROM inv_tx t JOIN inv_items i ON i.id = t.item_id WHERE t.deleted_at IS NULL AND t.cancelled_at IS NULL AND t.daily_date IS NULL AND t.kind IN ('in','prepaid_in') AND t.date BETWEEN ? AND ?`, from, to);
   const byVendor = new Map();
-  for (const r of [...pays, ...prepaidPays]) byVendor.set(r.vendor_id ?? 0, (byVendor.get(r.vendor_id ?? 0) || 0) + (r.amount || 0));
-  const vendors = byVendor.size ? await all(db, `SELECT id, name, company, payment_method, bank, account, holder FROM inv_vendors WHERE id IN (${[...byVendor.keys()].map(() => '?').join(',')})`, ...byVendor.keys()) : [];
-  out.payments = [...byVendor.entries()].map(([id, amount]) => {
-    const v = vendors.find(x => x.id === id) || { name: '업체 미지정', payment_method: null };
+  for (const r of [...pays, ...prepaidPays]) { const k = r.vendor_id ?? 0; const b = byVendor.get(k) || { amount: 0, dates: new Set() }; b.amount += r.amount || 0; b.dates.add(r.pay_date); byVendor.set(k, b); }
+  const allV = await all(db, 'SELECT id, name, company, payment_method, pay_timing, bank, account, holder, active FROM inv_vendors ORDER BY sort, id');
+  const lastDay = new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0)).toISOString().slice(0, 10);
+  const closed = month < kstToday().slice(0, 7);
+  const WHEN = { order: '주문 시 결제', month: '월말 결제' };
+  const rowsOf = v => {
+    const b = byVendor.get(v.id ?? 0), timing = timingOf(v), amount = b?.amount || 0;
+    const vin = ins.filter(r => (r.vendor_id ?? 0) === (v.id ?? 0));
     const bank = /계좌|이체|입금/.test(v.payment_method || '');
-    return { vendor_id: id, name: v.name, company: v.company || null, payment_method: v.payment_method, when: /카드|홈페이지/.test(v.payment_method || '') ? '주문 시 결제' : '월말 결제', amount,
+    return { vendor_id: v.id ?? 0, name: v.name, company: v.company || null, payment_method: v.payment_method, timing, when: WHEN[timing] || '결제 시점 미정', amount,
+      pay_dates: !amount ? [] : timing === 'month' ? [lastDay] : [...b.dates].sort(),
+      in_dates: [...new Set(vin.map(r => r.date))].sort(), in_items: new Set(vin.map(r => r.item_id)).size,
+      status: !amount ? '결제 없음' : timing === 'order' ? '결제 완료' : timing === 'month' ? (closed ? '결제 완료' : '결제 예정') : '—',
       ...(bank ? { holder: v.holder || null, bank: v.bank || null, account: v.account || null } : {}) };
-  }).sort((a, b) => (a.when === b.when ? b.amount - a.amount : a.when === '월말 결제' ? -1 : 1));
+  };
+  out.payments = [...allV.filter(v => v.active || byVendor.has(v.id)).map(rowsOf), ...(byVendor.has(0) ? [rowsOf({ id: 0, name: '업체 미지정', payment_method: null })] : [])];
+  out.pay_done = out.payments.filter(p => p.status === '결제 완료').reduce((a, p) => a + p.amount, 0);
+  out.pay_due = out.payments.filter(p => p.status === '결제 예정').reduce((a, p) => a + p.amount, 0);
   out.inbound = await all(db, `SELECT t.date, t.kind, t.qty, t.bonus_qty, t.amount, t.invoice, t.memo, t.cancelled_at, t.cancel_reason, v.bank, v.account, v.holder, i.name AS item_name, i.stock_unit, v.name AS vendor_name, v.payment_method
     FROM inv_tx t JOIN inv_items i ON i.id = t.item_id LEFT JOIN inv_vendors v ON v.id = i.vendor_id
     WHERE t.deleted_at IS NULL AND t.kind IN ('in','prepaid_buy','prepaid_in') AND t.date BETWEEN ? AND ? ORDER BY t.date, t.id`, from, to);

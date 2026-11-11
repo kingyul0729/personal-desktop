@@ -1,14 +1,16 @@
 // 재고 API(/api/inventory/*)와 화면 공용 상태
 import { useCallback, useEffect, useState } from 'react';
 
-export type InvOption = { id: number; item_id: number; label: string | null; qty: number; bonus_qty: number; amount: number | null; prepaid: number; unit_label?: string | null };
+export type InvOption = { id: number; item_id: number; label: string | null; qty: number; bonus_qty: number; amount: number | null; prepaid: number; unit_label?: string | null; start_date?: string | null; end_date?: string | null };
 export type InvItem = {
   id: number; name: string; vendor_id: number | null; vendor_name?: string | null; category: string | null; stock_unit: string; order_unit: string | null; pack_qty: number | null;
   price: number | null; min_stock: number; hospital_stock: number; vendor_stock: number; daily_mode: 'usage' | 'count' | null; prepaid: number; is_pack: number; memo: string | null; options: InvOption[]; unit_cost?: number | null; paid_unit_cost?: number | null;
 };
-export type InvVendor = { id: number; name: string; company: string | null; category: string | null; manager: string | null; payment_method: string | null; contact: string | null; bank: string | null; account: string | null; holder: string | null; memo: string | null };
+export type InvVendor = { id: number; name: string; company: string | null; category: string | null; manager: string | null; payment_method: string | null; contact: string | null; bank: string | null; account: string | null; holder: string | null; memo: string | null; pay_timing?: 'order' | 'month' | null; active?: number };
 export type InvOrder = { id: number; item_id: number; item_name: string; stock_unit: string; option_label: string | null; ordered_at: string; qty: number; bonus_qty: number; amount: number | null; prepaid: number; status: string; memo: string | null; received_qty?: number; contract_qty?: number | null; contract_amount?: number | null };
-export type InvTx = { id: number; date: string; kind: 'in' | 'out' | 'prepaid_buy' | 'prepaid_in' | 'adjust'; item_id: number; item_name: string; stock_unit: string; vendor_id?: number | null; vendor_name: string | null; qty: number; bonus_qty: number; amount: number | null; hospital_delta: number; vendor_delta: number; hospital_after: number; stock_asof?: number | null; vendor_after: number | null; invoice: number; memo: string | null; daily_date: string | null; source?: string | null; invoice_ids?: string | null; updated_at?: number | null; updated_by?: string | null; cancelled_at?: number | null; cancel_reason?: string | null };
+export type InvTx = { id: number; date: string; kind: 'in' | 'out' | 'prepaid_buy' | 'prepaid_in' | 'adjust'; item_id: number; item_name: string; stock_unit: string; vendor_id?: number | null; vendor_name: string | null; qty: number; bonus_qty: number; amount: number | null; hospital_delta: number; vendor_delta: number; hospital_after: number; stock_asof?: number | null; vendor_after: number | null; invoice: number; memo: string | null; daily_date: string | null; source?: string | null; invoice_ids?: string | null; updated_at?: number | null; updated_by?: string | null; cancelled_at?: number | null; cancel_reason?: string | null; vendor_asof?: number | null; item_prepaid?: number; sources?: KeepSource[] };
+// 업체 보관에서 가져온 줄이 어느 결제에서 왔는지(먼저 결제한 것부터): prepaid = 선결제분, paid = 결제분, fix = 잔량 고침, old = 이전 잔량
+export type KeepSource = { date: string | null; kind: 'prepaid' | 'paid' | 'fix' | 'old'; qty: number; tx: number | null; invoice_ids: string | null };
 export type InvState = { today: string; imported: string | null; vendors: InvVendor[]; items: InvItem[]; orders: InvOrder[] };
 
 export class InvError extends Error { detail = ''; unavailable = false; }
@@ -72,7 +74,16 @@ export function useInventory() {
 
 export const fmtQty = (v: number | null | undefined) => (v == null ? '—' : Number.isInteger(v) ? v.toLocaleString('ko-KR') : (Math.round(v * 100) / 100).toLocaleString('ko-KR'));
 export const fmtWon = (v: number | null | undefined) => (v == null ? '단가 미확인' : `${Math.round(v).toLocaleString('ko-KR')}원`);
-export const KIND_LABEL: Record<string, string> = { in: '입고', out: '출고', prepaid_buy: '선결제 구매', prepaid_in: '선결제 입고', adjust: '재고 맞추기' };
+export const KIND_LABEL: Record<string, string> = { in: '입고', out: '출고', prepaid_buy: '선결제 구매', prepaid_in: '업체 보관에서 입고', adjust: '재고 맞추기' };
 export const todayLocal = () => { const n = new Date(); return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`; };
 export const shiftMonth = (month: string, by: number) => { const d = new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)) - 1 + by, 1)); return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`; };
 export const unitHint = (it: InvItem) => (it.order_unit && it.pack_qty && it.order_unit !== it.stock_unit ? `1 ${it.order_unit} = ${fmtQty(it.pack_qty)} ${it.stock_unit}` : '');
+// 옵션 기간(행사): 비우면 늘. 오늘이 기간 안이어야 주문 화면에 뜬다
+export const optOpen = (o: InvOption, date: string) => (!o.start_date || o.start_date <= date) && (!o.end_date || date <= o.end_date);
+export const optState = (o: InvOption, date: string): 'always' | 'on' | 'soon' | 'ended' => (!o.start_date && !o.end_date ? 'always' : o.end_date && date > o.end_date ? 'ended' : o.start_date && date < o.start_date ? 'soon' : 'on');
+export const md = (d: string) => `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}`;
+// 결제 시점: 카드·홈페이지결제는 늘 주문 시, 그 밖은 업체마다 저장한 값(없으면 미정)
+export const timingOf = (v: InvVendor | null | undefined): 'order' | 'month' | null => (v?.pay_timing === 'order' || v?.pay_timing === 'month' ? v.pay_timing : /카드|홈페이지/.test(v?.payment_method || '') ? 'order' : null);
+export const TIMING_LABEL = { order: '주문 시 결제', month: '월말 결제' } as const;
+export const PAY_METHODS = ['카드결제', '홈페이지결제', '계좌입금', '방문결제'] as const;
+export const UNITS = ['ea', 'box', 'ml', 'sheet', 'l', 'set', 'kg', 'g'];

@@ -10,7 +10,7 @@ export function StockCheck() {
   const [tab, setTab] = useState<'daily' | 'all'>('daily');
   if (error) return <Problem error={error} />;
   if (!state) return <LoadingBox />;
-  const prepaid = state.items.filter(it => it.prepaid);
+  const prepaid = state.items.filter(it => it.prepaid || it.vendor_stock > 0); // 업체 보관 잔량이 있는 품목(선결제 + 일반 품목 업체 보관)
   const low = state.items.filter(it => flagOf(it, state.orders) === 'low');
   const bring = state.items.filter(it => flagOf(it, state.orders) === 'bring');
   return <Shell toast={toast}>
@@ -36,7 +36,7 @@ export function AllStock({ state, notify }: { state: InvState; notify: (m: strin
       <tbody>{rows.map(it => { const fl = flagOf(it, state.orders); return <tr key={it.id} className={fl === 'low' ? 'is-low' : ''}>
         <td><b>{it.name}</b>{unitHint(it) && <small> · {unitHint(it)}</small>} <FlagTag flag={fl} /></td><td><small>{it.vendor_name || '—'}</small></td>
         <td className={`num${it.hospital_stock < 0 ? ' is-warn' : ''}`}>{withUnit(it.hospital_stock, it.stock_unit)}</td>
-        <td className="num">{it.prepaid ? withUnit(it.vendor_stock, it.stock_unit) : <small>—</small>}</td>
+        <td className="num">{it.prepaid || it.vendor_stock > 0 ? withUnit(it.vendor_stock, it.stock_unit) : <small>—</small>}</td>
         <td className="num"><small>{it.min_stock ? withUnit(it.min_stock, it.stock_unit) : '—'}</small></td>
         <td className="num"><button type="button" className="sf-btn" onClick={() => setAdj(it)}>맞추기</button></td></tr>; })}</tbody>
     </table>
@@ -48,11 +48,11 @@ export function AdjustDialog({ item, today, onClose, onDone }: { item: InvItem; 
   const [h, setH] = useState(String(item.hospital_stock)), [v, setV] = useState(String(item.vendor_stock)), [memo, setMemo] = useState(''), [error, setError] = useState(''), [busy, setBusy] = useState(false);
   return <Modal title={`${item.name} 재고 맞추기`} onClose={onClose}>
     <label className="sf-input"><span>병원재고 ({item.stock_unit}) · 지금 {fmtQty(item.hospital_stock)}</span><input type="number" min={0} inputMode="decimal" value={h} onChange={e => setH(e.target.value)} /></label>
-    {item.prepaid ? <label className="sf-input"><span>업체 보관 잔량 ({item.stock_unit}) · 지금 {fmtQty(item.vendor_stock)}</span><input type="number" min={0} inputMode="decimal" value={v} onChange={e => setV(e.target.value)} /></label> : null}
+    {item.prepaid || item.vendor_stock > 0 ? <label className="sf-input"><span>업체 보관 잔량 ({item.stock_unit}) · 지금 {fmtQty(item.vendor_stock)}</span><input type="number" min={0} inputMode="decimal" value={v} onChange={e => setV(e.target.value)} /></label> : null}
     <label className="sf-input"><span>메모</span><input value={memo} onChange={e => setMemo(e.target.value)} placeholder="예: 11월 실사" /></label>
     {error && <p className="sf-hint is-warn">{error}</p>}
     <div className="sf-modal-foot"><button type="button" className="sf-btn" onClick={onClose}>닫기</button>
-      <button type="button" className="sf-btn is-primary" disabled={busy} onClick={async () => { setBusy(true); try { await invSend('POST', '/adjust', { item_id: item.id, hospital_stock: h === '' ? null : Number(h), vendor_stock: item.prepaid && v !== '' ? Number(v) : null, memo, date: today }); onDone('재고를 맞췄어요.'); } catch (e) { setError(errText(e)); setBusy(false); } }}>{busy && <SavingMark />}맞추기</button></div>
+      <button type="button" className="sf-btn is-primary" disabled={busy} onClick={async () => { setBusy(true); try { await invSend('POST', '/adjust', { item_id: item.id, hospital_stock: h === '' ? null : Number(h), vendor_stock: (item.prepaid || item.vendor_stock > 0) && v !== '' ? Number(v) : null, memo, date: today }); onDone('재고를 맞췄어요.'); } catch (e) { setError(errText(e)); setBusy(false); } }}>{busy && <SavingMark />}맞추기</button></div>
   </Modal>;
 }
 

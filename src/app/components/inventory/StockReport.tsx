@@ -9,7 +9,21 @@ export type MonthRep = { month: string; spend_total: number; spend_general: numb
   inbound?: { date: string; kind: string; qty: number; bonus_qty: number; amount: number | null; invoice: number; memo: string | null; item_name: string; stock_unit: string; vendor_name: string | null; payment_method: string | null; cancelled_at?: number | null; cancel_reason?: string | null }[];
   prepaid?: { id: number; name: string; stock_unit: string; vendor_stock: number; hospital_stock: number }[];
   stock?: { id: number; name: string; stock_unit: string; hospital_stock: number; min_stock: number }[]; as_of?: string | null;
-  payments?: { vendor_id: number; name: string; company: string | null; payment_method: string | null; when: string; amount: number; holder?: string | null; bank?: string | null; account?: string | null }[] };
+  payments?: Pay[]; pay_done?: number; pay_due?: number };
+export type Pay = { vendor_id: number; name: string; company: string | null; payment_method: string | null; timing?: 'order' | 'month' | null; when: string; amount: number; pay_dates?: string[]; in_dates?: string[]; in_items?: number; status?: string; holder?: string | null; bank?: string | null; account?: string | null };
+const mdd = (d: string) => `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}`;
+// 결제 내역(2026-11-12 사용자 지정, 원장님 제출용): 모든 업체를 결제 시점별로 · 칸 맞춤 — 업체 · 결제 방법 · 결제일 · 입고 · 결제금액 · 결제 상태(자동)
+function PayTable({ title, list }: { title: string; list: Pay[] }) {
+  return <div className="iv-paygrp"><h4>{title}</h4>
+    <div className="iv-scroll"><table className="sf-table iv-paytbl"><thead><tr><th>업체</th><th>결제 방법</th><th>결제일</th><th>입고</th><th className="num">결제금액</th><th className="num">결제 상태</th></tr></thead>
+      <tbody>{list.map(p => <tr key={p.vendor_id}>
+        <td><b>{p.name}</b><small className="iv-pay-co">{p.company || '—'}</small>{p.bank !== undefined && <small className="iv-pay-co">예금주 {p.holder || '—'} · 은행 {p.bank || '—'} · 계좌 {p.account || '—'}</small>}</td>
+        <td>{p.payment_method ? <span className={`iv-ptag${/계좌|방문/.test(p.payment_method) ? ' is-sand' : ''}`}>{p.payment_method}</span> : <span className="iv-muted">—</span>}</td>
+        <td>{p.pay_dates?.length ? p.pay_dates.map(mdd).join(' · ') : <span className="iv-muted">—</span>}</td>
+        <td>{p.in_dates?.length ? `${p.in_dates.map(mdd).join(' · ')} · ${p.in_items}품목` : <span className="iv-muted">—</span>}</td>
+        <td className="num">{p.amount ? <b>{won(p.amount)}</b> : <span className="iv-muted">—</span>}</td>
+        <td className="num">{p.status === '결제 완료' || p.status === '결제 예정' ? <span className={`iv-paystate ${p.status === '결제 완료' ? 'is-done' : 'is-due'}`}>{p.status}</span> : <span className="iv-muted">{p.status || '—'}</span>}</td></tr>)}</tbody></table></div></div>;
+}
 
 export function StockReport() {
   const [tab, setTab] = useState<'month' | 'year'>('month');
@@ -74,8 +88,11 @@ export function MonthReport({ a, b }: { a: MonthRep; b: MonthRep }) {
     {a.inbound && <Block n={++n} title="입고·구매 내역">{!a.inbound.length ? <p className="sf-hint">기록 없음</p> : <table className="sf-table"><thead><tr><th>날짜</th><th>품목</th><th>구분</th><th className="num">수량</th><th className="num">금액</th><th>명세서</th></tr></thead>
       <tbody>{a.inbound.map((r, i) => <tr key={i}><td>{Number(r.date.slice(5, 7))}.{Number(r.date.slice(8))}</td><td>{r.item_name} <small>{r.vendor_name}{r.payment_method ? ` · ${r.payment_method}` : ''}</small></td><td><small>{KIND_LABEL[r.kind]}{r.cancelled_at ? <b className="is-warn"> 취소</b> : null}</small></td>
         <td className="num">{fmtQty(r.qty)}{r.bonus_qty ? ` (+${fmtQty(r.bonus_qty)})` : ''} {r.stock_unit}</td><td className="num">{r.kind === 'prepaid_in' ? '—' : fmtWon(r.amount)}</td><td>{r.invoice ? '등록' : (r.amount || 0) > 0 ? <span className="is-warn">미등록</span> : '—'}</td></tr>)}</tbody></table>}</Block>}
-    {a.payments && <Block n={++n} title="결제 내역" sub={a.payments.length ? `합계 ${won(a.payments.reduce((x, p) => x + p.amount, 0))}` : undefined}>{!a.payments.length ? <p className="sf-hint">기록 없음</p> : <table className="sf-table"><thead><tr><th>업체</th><th>결제</th><th className="num">결제금액</th></tr></thead>
-      <tbody>{a.payments.map(p => <tr key={p.vendor_id}><td><b>{p.name}</b>{p.bank !== undefined ? <><br /><small>{p.company || p.name} · 예금주 {p.holder || '—'} · {p.bank || '은행 —'} {p.account || '계좌 —'}</small></> : null}</td><td><small>{p.payment_method || '—'} · {p.when}</small></td><td className="num"><b>{won(p.amount)}</b></td></tr>)}</tbody></table>}</Block>}
+    {a.payments && <Block n={++n} title="결제 내역">
+      {([['month', '월말 결제'], ['order', '주문 시 결제'], [null, '결제 시점 미정']] as const).map(([t, title]) => { const list = a.payments!.filter(p => (p.timing ?? null) === t); return list.length ? <PayTable key={title} title={title} list={list} /> : null; })}
+      <div className="iv-paytotal"><b>{mm(a.month)} 결제 합계</b><b>{won(a.payments.reduce((x, p) => x + p.amount, 0))}</b></div>
+      <p className="iv-paysplit">결제 완료 {won(a.pay_done || 0)} · 결제 예정 {won(a.pay_due || 0)}</p>
+    </Block>}
     <p className="iv-foot">출력 {new Date().toLocaleString('ko-KR')}</p>
   </article>;
 }

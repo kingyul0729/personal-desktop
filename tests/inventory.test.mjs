@@ -964,3 +964,84 @@ test('aladdin1: 알라딘 필링 prices + one order option, vendor pays by card 
   assert.deepEqual([v.bank, v.account, v.holder], ['테스트은행', '000-00-0000', '홍길동']);
   assert.equal((await call(e, '/vendors', 'POST', { id: 99999 })).status, 404);
 });
+
+test('user 11-12: new vendor saved with a new item, period options, general keep and bring-in with first payment dates', async () => {
+  const e = env(); await call(e, '/state');
+  // 새 업체 + 새 품목 한 번에(결제 방법·시점 필수, 카드는 늘 주문 시)
+  assert.equal((await call(e, '/items', 'POST', { name: '비타민 앰플', stock_unit: 'ea', order_unit: 'box', pack_qty: 10, price: 55000, new_vendor: { name: '테스트업체' } })).status, 400);
+  assert.equal((await call(e, '/items', 'POST', { name: '비타민 앰플', stock_unit: 'ea', order_unit: 'box', pack_qty: 10, price: 55000, new_vendor: { name: '테스트업체', payment_method: '계좌입금' } })).status, 400);
+  const r = await call(e, '/items', 'POST', { name: '비타민 앰플', stock_unit: 'ea', order_unit: 'box', pack_qty: 10, price: 55000, new_vendor: { name: '테스트업체', company: '(주)테스트', payment_method: '계좌입금', pay_timing: 'month', bank: 'X은행', account: '1', holder: '홍' } });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  const v = r.data.vendors.find(x => x.name === '테스트업체');
+  assert.deepEqual([v.payment_method, v.pay_timing, v.bank], ['계좌입금', 'month', 'X은행']);
+  const amp = r.data.items.find(i => i.name === '비타민 앰플');
+  assert.equal(amp.vendor_id, v.id);
+  assert.deepEqual(amp.options.map(o => [o.qty, o.amount]), [[10, 55000]]); // 주문단위 1개 = 단가 조건
+  const card = await call(e, '/items', 'POST', { name: '카드품목', new_vendor: { name: '카드업체', payment_method: '카드결제', pay_timing: 'month' } });
+  assert.equal(card.data.vendors.find(x => x.name === '카드업체').pay_timing, 'order');
+  assert.equal((await call(e, '/items', 'POST', { name: 'x', new_vendor: { name: '테스트업체', payment_method: '카드결제' } })).status, 400); // 같은 이름
+  // 업체 정보 수정: 결제 시점을 안 보내면 그대로
+  await call(e, '/vendors', 'POST', { id: v.id, name: '테스트업체', company: '(주)테스트2', payment_method: '계좌입금', bank: 'Y은행', account: '2', holder: '김' });
+  assert.equal(e.inv.prepare('SELECT pay_timing, bank FROM inv_vendors WHERE id = ?').get(v.id).bank, 'Y은행');
+  assert.equal(e.inv.prepare('SELECT pay_timing FROM inv_vendors WHERE id = ?').get(v.id).pay_timing, 'month');
+  // 기간 옵션: 기간 밖이면 주문 안 됨
+  const it = item(e, '일회용해면');
+  const opts = (await call(e, '/options', 'POST', { item_id: it.id, label: '10+1', qty: 10, bonus_qty: 1, amount: 41000, start_date: '2026-11-01', end_date: '2026-11-30' })).data.items.find(i => i.id === it.id).options;
+  const ev = opts.find(o => o.label === '10+1');
+  assert.deepEqual([ev.start_date, ev.end_date, ev.prepaid], ['2026-11-01', '2026-11-30', 0]);
+  assert.equal((await call(e, '/options', 'POST', { item_id: it.id, qty: 1, amount: 1, start_date: '2026-11-30', end_date: '2026-11-01' })).status, 400);
+  assert.equal((await call(e, '/orders', 'POST', { item_id: it.id, option_id: ev.id, count: 1, date: '2026-12-01' })).status, 400);
+  assert.equal((await call(e, '/orders', 'POST', { item_id: it.id, option_id: ev.id, count: 1, date: '2026-11-12' })).status, 200);
+  const ord = (await call(e, '/state')).data.orders.find(o => o.item_id === it.id);
+  // 받을 때 일부 업체 보관: 도착 5 · 업체 보관 6 → 병원재고 +5, 업체 보관 +6, 결제는 한 번
+  const h0 = item(e, '일회용해면').hospital_stock;
+  assert.equal((await call(e, '/receive', 'POST', { order_id: ord.id, actual_qty: 5, keep_qty: 7, date: '2026-11-12' })).status, 400); // 11개 넘음
+  const rc = await call(e, '/receive', 'POST', { order_id: ord.id, actual_qty: 5, keep_qty: 6, date: '2026-11-12' });
+  assert.equal(rc.status, 200, JSON.stringify(rc.data));
+  assert.deepEqual([item(e, '일회용해면').hospital_stock, item(e, '일회용해면').vendor_stock], [h0 + 5, 6]);
+  assert.equal((await call(e, '/state')).data.orders.find(o => o.id === ord.id), undefined); // 다 받음(도착 + 보관)
+  const inTx = e.inv.prepare('SELECT * FROM inv_tx WHERE id = ?').get(rc.data.tx_id);
+  assert.deepEqual([inTx.qty, inTx.hospital_delta, inTx.vendor_delta, inTx.amount], [5, 5, 6, 41000]);
+  assert.match(inTx.memo, /도착 5 · 업체 보관 6/);
+  assert.equal((await call(e, '/tx/' + inTx.id, 'PATCH', { actual_qty: 4 })).status, 400); // 업체 보관 있는 입고는 수량 고치기 막음
+  // 나중에 가져오기: 결제 없음, 처음 결제한 날짜(주문일 — 피부미소는 결제 시점 미정이라 결제금액이 걸린 입고일)
+  const k1 = await call(e, '/receive', 'POST', { from_prepaid: true, item_id: it.id, actual_qty: 3, date: '2026-11-20' });
+  assert.equal(k1.status, 200, JSON.stringify(k1.data));
+  assert.deepEqual([item(e, '일회용해면').hospital_stock, item(e, '일회용해면').vendor_stock], [h0 + 8, 3]);
+  assert.equal(e.inv.prepare('SELECT amount FROM inv_tx WHERE id = ?').get(k1.data.tx_id).amount, 0);
+  const log = (await call(e, '/tx?from=2026-11-01&to=2026-11-30')).data.rows;
+  const kr = log.find(t => t.id === k1.data.tx_id);
+  assert.deepEqual(kr.sources.map(s => [s.date, s.kind, s.qty]), [['2026-11-12', 'paid', 3]]);
+  assert.equal(kr.vendor_asof, 3);
+  assert.equal(log.find(t => t.id === inTx.id).vendor_asof, 6);
+  // 업체 보관에 맡긴 것을 이미 가져왔으면 그 입고는 취소 못 함(잔량이 마이너스가 되므로)
+  await call(e, '/receive', 'POST', { from_prepaid: true, item_id: it.id, actual_qty: 3, date: '2026-11-21' });
+  assert.equal((await call(e, `/tx/${inTx.id}/cancel`, 'POST', { reason: '반품' })).status, 409);
+  // 거래 중단·재개: 목록에는 남고(active 0), 기록은 그대로
+  const st = await call(e, '/vendors', 'POST', { id: v.id, active: 0 });
+  assert.equal(st.data.vendors.find(x => x.id === v.id).active, 0);
+  assert.equal(item(e, '비타민 앰플').active, 1);
+  assert.equal((await call(e, '/vendors', 'POST', { id: v.id, active: 1 })).data.vendors.find(x => x.id === v.id).active, 1);
+});
+
+test('user 11-12: prepaid bring-in uses the oldest payment first and shows both dates when it spans two', async () => {
+  const e = env(); await call(e, '/state');
+  const pp = item(e, '보관용 3종 시트팩');
+  const o300 = (await call(e, '/state')).data.items.find(i => i.id === pp.id).options.find(o => o.prepaid && o.qty === 300);
+  await call(e, '/prepaid-order', 'POST', { item_id: pp.id, qty: 200, option_id: o300.id, date: '2026-10-02' });
+  let ord = (await call(e, '/state')).data.orders.find(o => o.item_id === pp.id);
+  await call(e, '/receive', 'POST', { order_id: ord.id, actual_qty: 200, date: '2026-10-03' });
+  await call(e, '/prepaid-order', 'POST', { item_id: pp.id, qty: 300, option_id: o300.id, date: '2026-11-05' }); // 10/2분 100 + 11/5분 200
+  ord = (await call(e, '/state')).data.orders.find(o => o.item_id === pp.id);
+  const r = await call(e, '/receive', 'POST', { order_id: ord.id, actual_qty: 300, date: '2026-11-06' });
+  const rows = (await call(e, '/tx?from=2026-10-01&to=2026-11-30')).data.rows;
+  assert.deepEqual(rows.find(t => t.kind === 'prepaid_in' && t.date === '2026-10-03').sources.map(s => [s.date, s.qty]), [['2026-10-02', 200]]);
+  assert.deepEqual(rows.find(t => t.id === r.data.tx_id).sources.map(s => [s.date, s.kind, s.qty]), [['2026-10-02', 'prepaid', 100], ['2026-11-05', 'prepaid', 200]]);
+  // 결제 내역: 하라셀(월말 결제) — 이번 달은 결제 예정, 결제일 = 그 달 말일
+  const rep = (await call(e, '/report?month=2026-11')).data;
+  const h = rep.payments.find(p => p.name === '하라셀');
+  assert.deepEqual([h.when, h.amount, h.pay_dates[0], h.in_dates], ['월말 결제', 450000, '2026-11-30', ['2026-11-06']]);
+  assert.equal(h.status, new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 7) > '2026-11' ? '결제 완료' : '결제 예정');
+  assert.equal(rep.payments.find(p => p.name === '쿠팡').status, '결제 없음');
+  assert.equal(rep.payments.find(p => p.name === '쿠팡').when, '결제 시점 미정');
+});

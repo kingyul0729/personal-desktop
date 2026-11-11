@@ -28,7 +28,7 @@ export const flagOf = (it: InvItem, orders: InvOrder[]): Flag | null => {
   if (pend.some(o => o.prepaid)) return 'bringing';
   if (pend.length) return 'wait';
   if (!lowOf(it)) return null;
-  return it.prepaid && it.hospital_stock + (it.vendor_stock || 0) > it.min_stock ? 'bring' : 'low';
+  return (it.vendor_stock || 0) > 0 && it.hospital_stock + (it.vendor_stock || 0) > it.min_stock ? 'bring' : 'low';
 };
 export const FlagTag = ({ flag }: { flag: Flag | null }) => (flag ? <span className={`iv-tag is-${flag}`}>{FLAG_LABEL[flag]}</span> : null);
 export const withUnit = (v: number | null | undefined, unit: string) => (v == null ? '—' : `${fmtQty(v)} ${unit}`);

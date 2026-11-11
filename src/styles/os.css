@@ -2397,3 +2397,122 @@ input[type="date"]::-webkit-date-and-time-value, input[type="month"]::-webkit-da
   .iv-txrow .iv-unit-t { display: inline; font-size: 11px; }
   .iv-txrow.is-child { margin-left: 10px; }
 }
+
+/* ── 업체·품목·옵션 칸 4개·일반 품목 업체 보관·입출고 업체 보관 칸·결제 내역 (2026-11-12 사용자 지정 시안) ── */
+.sf-wrap .sf-pills button[aria-checked="true"] { background: var(--sage-bg); border-color: var(--sage); color: var(--sage-ink); font-weight: 700; }
+.sf-wrap .sf-pills button:disabled { opacity: .4; cursor: default; }
+.iv-tag.is-event { background: #ecf1f6; color: #44617c; box-shadow: inset 0 0 0 1px #c9d6e3; }
+.iv-d-opts .iv-tag.is-event, .iv-pp-opts .iv-tag.is-event, .iv-opt-table .iv-tag.is-event { margin-left: 6px; vertical-align: 1px; }
+.iv-d-opts li.is-event { background: #f5f8fb; }
+.iv-d-stats dd.is-keep { color: #44617c; }
+/* 받기: 실제 입고 수량 | 업체 보관 두 칸, 업체 보관에서 가져오기 */
+.iv-recv-two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; min-width: 0; }
+.iv-recv-list li:has(.iv-recv-two) { grid-template-columns: minmax(0, 1.1fr) minmax(0, 260px) auto auto; }
+.iv-recv-calc .is-warn { color: #c2504a; }
+.iv-recv-calc .is-ok, .iv-recv-keep .is-ok { color: #3f7a58; font-weight: 700; }
+.iv-recv-keep { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 160px) auto; align-items: end; gap: 12px; margin-top: 12px; padding: 12px 16px; border: 1px solid #c9d6e3; border-radius: 12px; background: #f5f8fb; }
+.iv-recv-keep .iv-recv-calc { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; color: #7D838B; }
+@container sfw (max-width: 760px) {
+  .iv-recv-list li:has(.iv-recv-two) { grid-template-columns: minmax(0, 1fr); }
+  .iv-recv-keep { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .iv-recv-keep .iv-recv-what { grid-column: 1 / -1; }
+}
+/* 품목 화면: 업체 칸 */
+.iv-vbox { margin: 4px 0 14px; padding: 14px 16px 6px; background: #f7f9fb; border: 1px solid #c9d6e3; border-radius: 12px; }
+.iv-vbox h4 { margin: 0 0 10px; font-size: 13px; font-weight: 800; color: #44617c; }
+.iv-pickrow { display: flex; flex-direction: column; gap: 6px; margin: 0 0 12px; }
+.iv-pickrow > span { font-size: 12.5px; color: #7D838B; }
+.iv-req { font-style: normal; color: #c2504a; font-weight: 700; }
+.iv-vline { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin: -2px 0 14px; font-size: 13px; color: #7D838B; }
+.iv-vline .iv-vbtn { margin-left: auto; }
+.iv-ptag { display: inline-flex; align-items: center; height: 22px; padding: 0 9px; border-radius: 999px; font-size: 11.5px; font-weight: 700; background: #ecf1f6; color: #44617c; white-space: nowrap; }
+.iv-ptag.is-sand, .iv-vline .iv-ptag.is-method { background: #f4efe6; color: #7a5f2e; }
+.iv-ptag.is-none { background: #f1f3f5; color: #8d9197; }
+.iv-ptag.is-stop { background: #fbeceb; color: #c2504a; }
+.iv-vedit { margin: 0 0 14px; }
+.iv-vedit .iv-vbox { margin-top: 0; }
+.iv-unitrow { display: flex; gap: 8px; min-width: 0; }
+.sf-wrap .iv-unitrow input { width: 64px; flex: none; text-align: center; background: #f7f9fb; }
+.sf-wrap .iv-unitrow select { width: 120px; flex: none; }
+.iv-packrow { display: flex; align-items: center; gap: 8px; margin: 2px 0 14px; font-size: 13.5px; color: #5d646d; }
+.sf-wrap .iv-packrow input { width: 88px; }
+.sf-wrap .iv-packrow select { width: 110px; }
+.sf-wrap .iv-packrow :is(input, select) { height: var(--ui-h); padding: 0 12px; border: 1px solid var(--ui-line); border-bottom-color: var(--ui-line-strong); border-radius: var(--ui-r); background: #fff; font-size: 14px; color: var(--ui-ink); }
+.sf-input.is-off { opacity: .45; }
+.sf-input > small { font-size: 12px; color: #8d9197; }
+.iv-form > .iv-check { margin: 2px 0 12px; }
+/* 옵션 칸 4개 */
+.iv-opts.is-pp { background: #f7f9fb; border: 1px solid #c9d6e3; border-radius: 12px; padding: 14px 16px; }
+.iv-opts h3 { color: #44617c; }
+.iv-opt-stats { margin-bottom: 10px; }
+.iv-opt-table td, .iv-opt-table th { white-space: nowrap; }
+.iv-opt-table tr.is-ended td { color: #b5bac0; }
+.iv-opt-table tr.is-ended b { color: #b5bac0; }
+.iv-period { font-size: 13px; color: #5d646d; }
+.iv-period b { margin-left: 4px; font-size: 12px; }
+.iv-period b.is-on { color: #3f7a58; }
+.iv-period b.is-soon { color: #44617c; }
+.iv-period b.is-ended { color: #9aa0a6; }
+.iv-addopt { margin-top: 10px; padding: 0; border: 0; background: none; font: inherit; font-size: 13px; font-weight: 700; color: #44617c; cursor: pointer; }
+.iv-optbox { margin-top: 12px; padding: 14px; border: 1px dashed #c9d6e3; border-radius: 12px; background: #fff; }
+.iv-optbox .iv-calc { margin: 2px 0 6px; }
+.iv-opt-hint { font-size: 11.5px; color: #9aa0a6; margin-left: 4px; font-weight: 400; }
+.iv-pair em { flex: none; align-self: center; font-style: normal; font-size: 13.5px; color: #5d646d; }
+.iv-dates { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 6px; min-width: 0; }
+.iv-dates i { font-style: normal; color: #8d9197; }
+.sf-wrap .iv-dates input { width: 100%; min-width: 0; appearance: none; -webkit-appearance: none; height: var(--ui-h); padding: 0 10px; border: 1px solid var(--ui-line); border-bottom-color: var(--ui-line-strong); border-radius: var(--ui-r); background: #fff; font-size: 14px; color: var(--ui-ink); box-sizing: border-box; }
+/* 입출고 내역: 금액 칸 대신 업체 보관 칸, 업체 보관에서 가져온 줄 색(결제분 베이지 · 선결제분 청회색), 명세서 칸은 같은 흰 상자 */
+.iv-txgrid { --tx-cols: 52px minmax(220px, 1fr) 44px 104px 76px 96px 112px 80px; }
+.iv-legend { display: flex; justify-content: flex-end; gap: 12px; font-size: 11.5px; color: #5d646d; margin: 0 2px -2px; }
+.iv-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.iv-legend .iv-kdot { width: 8px; height: 8px; }
+.iv-txrow .iv-qty { font-weight: 700; }
+.iv-txrow .iv-kv { color: #44617c; font-weight: 700; }
+.iv-txrow.is-src-paid { background: #faf6ee; border-color: #e6dcc8; }
+.iv-txrow.is-src-pp { background: #f2f6fa; border-color: #cfdbe7; }
+.iv-inv-mini { width: auto; min-width: 64px; padding: 0 9px; }
+.iv-inv-mini.is-photo { background: #fff; border-color: #d5dee8; color: #2D3136; font-weight: 700; }
+.iv-inv-mini.is-src { background: #fff; border-color: #d5dee8; color: #3a3f45; font-weight: 700; font-size: 11px; }
+.iv-inv-mini.is-none { border-color: #e6ebf1; color: #b5bac0; cursor: default; }
+.iv-src-row + .iv-src-row { border-top: 1px solid #eef1f4; margin-top: 8px; padding-top: 8px; }
+.iv-src-row p { margin: 0 0 6px; font-size: 13.5px; }
+@container sfw (max-width: 900px) {
+  .iv-txgrid { --tx-cols: 38px minmax(150px, 1fr) 30px 72px 56px 76px 100px 72px; }
+}
+@container sfw (max-width: 600px) {
+  .iv-txgrid { min-width: 820px; }
+}
+/* 월말보고 결제 내역: 결제 시점별 · 칸 맞춤 */
+.iv-paygrp + .iv-paygrp { margin-top: 18px; }
+.iv-paygrp h4 { margin: 0 0 6px; font-size: 14px; font-weight: 800; }
+.iv-paytbl { table-layout: fixed; min-width: 640px; }
+.iv-paytbl th:nth-child(1) { width: 30%; } .iv-paytbl th:nth-child(2) { width: 14%; } .iv-paytbl th:nth-child(3) { width: 11%; }
+.iv-paytbl th:nth-child(4) { width: 17%; } .iv-paytbl th:nth-child(5) { width: 14%; } .iv-paytbl th:nth-child(6) { width: 14%; }
+.iv-paytbl td { vertical-align: top; }
+.iv-pay-co { display: block; font-size: 12px; color: #8d9197; margin-top: 2px; }
+.iv-paystate { display: inline-flex; align-items: center; height: 24px; padding: 0 10px; border-radius: 999px; font-size: 12px; font-weight: 700; white-space: nowrap; }
+.iv-paystate.is-done { background: #eaf3ee; color: #3f7a58; box-shadow: inset 0 0 0 1px #b9d6c4; }
+.iv-paystate.is-due { background: #fdf1e3; color: #a5642a; box-shadow: inset 0 0 0 1px #efd2b0; }
+.iv-paytotal { display: flex; justify-content: space-between; margin-top: 16px; padding-top: 12px; border-top: 1px solid #e1e6ec; font-size: 15px; }
+.iv-paysplit { margin: 4px 0 0; font-size: 12.5px; color: #7D838B; }
+.iv-form .iv-fgrid.iv-two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 12px; align-items: start; }
+.iv-form .iv-fgrid.iv-two > .iv-wide { grid-column: auto; }
+.iv-vbox .iv-fgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 12px; }
+.iv-optbox .iv-fgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 12px; align-items: start; }
+@container sfw (max-width: 520px) { .iv-form .iv-fgrid.iv-two, .iv-vbox .iv-fgrid, .iv-optbox .iv-fgrid { grid-template-columns: minmax(0, 1fr); } }
+/* 받기 줄: 위에서 아래로(주문 · 결제정보 · 입력 칸 · 변화 줄), 맨 아래 명세서 사진 | 취소·입고확정 — 좁아져도 가로로 늘어나지 않게 */
+.sf-wrap .iv-recv-list li { grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px 12px; }
+.sf-wrap .iv-recv-list li:has(.iv-recv-two) { grid-template-columns: minmax(0, 1fr) auto; }
+.sf-wrap .iv-recv-list li > :is(.iv-recv-what, .iv-paybox, .iv-recv-one, .iv-recv-two, .iv-recv-calc) { grid-column: 1 / -1; }
+.sf-wrap .iv-recv-list li > .iv-photo-pick { justify-self: start; }
+.iv-recv-one { max-width: 240px; }
+.iv-recv-two { max-width: 480px; }
+.iv-d-opt-main b .iv-tag { display: inline-flex; margin-left: 6px; vertical-align: 2px; }
+.iv-optbox .iv-fgrid > .iv-span2 { grid-column: 1 / -1; max-width: 420px; }
+.iv-opt-table td:first-child { white-space: normal; }
+.iv-opt-table td.iv-row-btns { display: table-cell; text-align: right; white-space: nowrap; }
+.sf-wrap .iv-opt-table th, .sf-wrap .iv-opt-table td { padding: 10px 6px; }
+.sf-wrap .iv-opt-table td.iv-period { white-space: normal; min-width: 72px; }
+.sf-wrap .iv-opt-table td.iv-period b { display: inline-block; margin-left: 0; }
+.sf-wrap .iv-opt-table .iv-icon-btn { width: 32px; height: 32px; }
+.iv-opt-table small.iv-period { display: block; margin-top: 2px; font-size: 12px; color: #7D838B; }

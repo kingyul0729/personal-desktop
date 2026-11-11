@@ -54,10 +54,10 @@ const INV_GUARD_SCHEMA = [
 
 // 재고 표(2026-11-08 새로 설계). 기록(inv_tx)마다 병원재고·업체 보관 잔량 증감을 저장해 삭제 때 정확히 되돌린다.
 const INV_STOCK_SCHEMA = [
-  `CREATE TABLE IF NOT EXISTS inv_vendors (id INTEGER PRIMARY KEY, name TEXT NOT NULL, company TEXT, category TEXT, manager TEXT, payment_method TEXT, contact TEXT, bank TEXT, account TEXT, holder TEXT, memo TEXT, sort INTEGER DEFAULT 0, active INTEGER NOT NULL DEFAULT 1)`,
+  `CREATE TABLE IF NOT EXISTS inv_vendors (id INTEGER PRIMARY KEY, name TEXT NOT NULL, company TEXT, category TEXT, manager TEXT, payment_method TEXT, contact TEXT, bank TEXT, account TEXT, holder TEXT, memo TEXT, sort INTEGER DEFAULT 0, active INTEGER NOT NULL DEFAULT 1, pay_timing TEXT)`,
   `CREATE TABLE IF NOT EXISTS inv_items (id INTEGER PRIMARY KEY, name TEXT NOT NULL, vendor_id INTEGER, category TEXT, stock_unit TEXT NOT NULL DEFAULT 'ea', order_unit TEXT, pack_qty REAL, price REAL, min_stock REAL DEFAULT 0,
      hospital_stock REAL NOT NULL DEFAULT 0, vendor_stock REAL NOT NULL DEFAULT 0, daily_mode TEXT, prepaid INTEGER NOT NULL DEFAULT 0, is_pack INTEGER NOT NULL DEFAULT 0, memo TEXT, sort INTEGER DEFAULT 0, active INTEGER NOT NULL DEFAULT 1, created_at INTEGER, updated_at INTEGER)`,
-  `CREATE TABLE IF NOT EXISTS inv_options (id INTEGER PRIMARY KEY, item_id INTEGER NOT NULL, label TEXT, qty REAL NOT NULL, bonus_qty REAL NOT NULL DEFAULT 0, amount REAL, prepaid INTEGER NOT NULL DEFAULT 0, unit_label TEXT, sort INTEGER DEFAULT 0, active INTEGER NOT NULL DEFAULT 1, created_at INTEGER)`,
+  `CREATE TABLE IF NOT EXISTS inv_options (id INTEGER PRIMARY KEY, item_id INTEGER NOT NULL, label TEXT, qty REAL NOT NULL, bonus_qty REAL NOT NULL DEFAULT 0, amount REAL, prepaid INTEGER NOT NULL DEFAULT 0, unit_label TEXT, sort INTEGER DEFAULT 0, active INTEGER NOT NULL DEFAULT 1, created_at INTEGER, start_date TEXT, end_date TEXT)`,
   `CREATE TABLE IF NOT EXISTS inv_orders (id INTEGER PRIMARY KEY, item_id INTEGER NOT NULL, option_id INTEGER, option_label TEXT, ordered_at TEXT NOT NULL, qty REAL NOT NULL, bonus_qty REAL NOT NULL DEFAULT 0, amount REAL, prepaid INTEGER NOT NULL DEFAULT 0, status TEXT NOT NULL, received_at TEXT, memo TEXT, created_by TEXT, created_at INTEGER)`,
   `CREATE TABLE IF NOT EXISTS inv_tx (id INTEGER PRIMARY KEY, date TEXT NOT NULL, kind TEXT NOT NULL, item_id INTEGER NOT NULL, qty REAL NOT NULL, bonus_qty REAL NOT NULL DEFAULT 0, amount REAL,
      hospital_delta REAL NOT NULL DEFAULT 0, vendor_delta REAL NOT NULL DEFAULT 0, hospital_after REAL, vendor_after REAL, order_id INTEGER, daily_date TEXT, invoice INTEGER NOT NULL DEFAULT 0, memo TEXT, source TEXT, created_by TEXT, created_at INTEGER, deleted_at INTEGER, deleted_by TEXT)`,
@@ -181,6 +181,21 @@ export async function ensureInvSchema(db) {
       await db.prepare(`UPDATE inv_vendors SET payment_method = '카드결제·계좌입금' WHERE id = 7 AND (payment_method IS NULL OR payment_method = '홈페이지결제')`).run();
       await db.prepare(`INSERT OR REPLACE INTO inv_meta (key, value) VALUES ('fixes', ?)`).bind(`${fixes} aladdin1`.trim()).run();
       fixes = `${fixes} aladdin1`.trim();
+    }
+    if (!fixes.includes('paytime1')) {
+      // 2026-11-12 사용자: 업체마다 결제 시점(주문 시 결제 / 월말 결제)을 저장, 옵션(구매조건·선결제 옵션)에 행사 기간(시작~끝, 비우면 늘).
+      // 사용자가 정해 준 업체만 넣고(주문 시: 더마소드·쎄라덤·중외·알라딘 필링·카프리가스·스키노바·상떼화장품·바이더퀄리티 / 월말: 하라셀),
+      // 아직 안 정한 업체(피부미소·히스토랩·셀퓨전씨·에스트라·닥터슈라클·쿠팡·간호팀)는 비워 둠 = '결제 시점 미정'(앱 '업체 정보'에서 고름).
+      for (const [t, col] of [['inv_vendors', 'pay_timing TEXT'], ['inv_options', 'start_date TEXT'], ['inv_options', 'end_date TEXT']]) {
+        try { await db.prepare(`ALTER TABLE ${t} ADD COLUMN ${col}`).run(); } catch (e) { if (!/duplicate column/i.test(String(e?.message || e))) throw e; }
+      }
+      await db.batch([
+        db.prepare(`UPDATE inv_vendors SET pay_timing = 'order' WHERE pay_timing IS NULL AND ((id = 1 AND name = '더마소드') OR (id = 2 AND name = '쎄라덤') OR (id = 3 AND name = '중외') OR (id = 7 AND name = '알라딘 필링')
+          OR (id = 8 AND name = '카프리가스') OR (id = 14 AND name = '스키노바') OR (id = 15 AND name = '상떼화장품') OR (id = 16 AND name = '바이더퀄리티'))`),
+        db.prepare(`UPDATE inv_vendors SET pay_timing = 'month' WHERE pay_timing IS NULL AND id = 4 AND name = '하라셀'`),
+        db.prepare(`INSERT OR REPLACE INTO inv_meta (key, value) VALUES ('fixes', ?)`).bind(`${fixes} paytime1`.trim()),
+      ]);
+      fixes = `${fixes} paytime1`.trim();
     }
     if (!fixes.includes('splitfix1')) {
       // 2026-11-11 사용자 '10/22로 해줘': 예전 앱에서 '받기 목록: 절단솜 4×6 외 3건(4개 품목)' 수량 0 · 67,500원 한 줄로 옮겨진 10/22 피부미소 입고를
