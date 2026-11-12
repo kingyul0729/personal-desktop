@@ -178,21 +178,6 @@ export function StudyArchive({ onDirtyChange, onSubs, goto, onLocation }: { onDi
     } catch (error) { setError((error as Error).message || '파일을 읽지 못했습니다.'); }
     finally { busyRef.current = false; setBusy(false); }
   };
-  // AI 정리: 본문을 외부 AI로 보내 노트 양식으로 받아 본문 칸에 넣는다(저장은 '기록 저장'을 눌러야). 보내기 전에 늘 묻는다.
-  const [aiBusy, setAiBusy] = useState(false), [aiBackup, setAiBackup] = useState<{ id: string; text: string } | null>(null);
-  const organize = async () => {
-    if (!editor || aiBusy) return;
-    if (!editor.content.trim()) { setError('정리할 글을 먼저 붙여 넣어 주세요.'); return; }
-    if (!await askConfirm({ title: 'AI로 정리할까요?', message: '본문을 외부 AI로 보내요.' })) return;
-    const id = editor.id, before = editor.content;
-    setAiBusy(true); setError('');
-    try {
-      const data = await parse(await fetch('/api/study/organize', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: before }) }));
-      setEditor(current => current && current.id === id && current.content === before ? { ...current, content: data.text } : current);
-      setAiBackup({ id, text: before });
-    } catch (e) { setError((e as Error).message); }
-    finally { setAiBusy(false); }
-  };
   const insertNoteFormat = (value: string) => {
     if (!editor || busyRef.current) return;
     const input = noteRef.current;
@@ -256,8 +241,6 @@ export function StudyArchive({ onDirtyChange, onSubs, goto, onLocation }: { onDi
             <button type="button" onClick={() => insertNoteFormat('\n핵심: 꼭 기억할 내용\n')}>핵심</button>
             <button type="button" onClick={() => insertNoteFormat('\n| 항목 | 설명 |\n| --- | --- |\n| 개념 | 내용 |\n')}>비교표</button>
             <button type="button" onClick={() => textInputRef.current?.click()}>텍스트 가져오기</button>
-            <button type="button" className="study-ai" disabled={aiBusy} onClick={() => void organize()}>{aiBusy ? <SavingMark /> : null}AI 정리</button>
-            {aiBackup && aiBackup.id === editor.id && !aiBusy && <button type="button" onClick={() => { field('content', aiBackup.text); setAiBackup(null); }}>정리 전으로</button>}
             <input ref={textInputRef} type="file" accept=".md,.markdown,.txt" hidden onChange={event => { void importText(event.target.files?.[0]); event.target.value = ''; }} />
           </div>
           <div className="study-ink-tools" aria-label="글자 강조"><span>본문에서 글자를 선택한 뒤</span>{[['**', '중요 · 빨강'], ['__', '암기 · 파랑'], ['==', '강조 · 회색']].map(([mark, label]) => <button key={mark} type="button" onClick={() => {
