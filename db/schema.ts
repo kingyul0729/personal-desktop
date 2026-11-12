@@ -74,7 +74,7 @@ export const workCapsules = sqliteTable('work_capsules', {
 
 export const studyRecords = sqliteTable('study_records', {
   id: text('id').primaryKey(), owner: text('owner').notNull(), title: text('title').notNull(),
-  keywords: text('keywords').notNull().default(''), summary: text('summary').notNull().default(''),
+  keywords: text('keywords').notNull().default(''), summary: text('summary').notNull().default(''), ink: text('ink').notNull().default(''),
   category: text('category').notNull(), studiedOn: text('studied_on').notNull(), content: text('content').notNull().default(''),
   tags: text('tags').notNull().default(''), favorite: integer('favorite').notNull().default(0),
   createdAt: integer('created_at').notNull(), updatedAt: integer('updated_at').notNull(), trashedAt: integer('trashed_at'),

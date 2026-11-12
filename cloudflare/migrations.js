@@ -82,5 +82,11 @@ export default [
    "CREATE TABLE `work_docs` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`owner` text NOT NULL,\n\t`kind` text NOT NULL,\n\t`title` text NOT NULL,\n\t`summary` text DEFAULT '' NOT NULL,\n\t`content` text DEFAULT '' NOT NULL,\n\t`created_at` integer NOT NULL,\n\t`updated_at` integer NOT NULL,\n\t`trashed_at` integer\n);",
    "CREATE INDEX `idx_work_docs_owner` ON `work_docs` (`owner`,`updated_at`);"
   ]
+ },
+ {
+  "name": "0010_study_ink",
+  "statements": [
+   "ALTER TABLE `study_records` ADD `ink` text DEFAULT '' NOT NULL;"
+  ]
  }
 ];

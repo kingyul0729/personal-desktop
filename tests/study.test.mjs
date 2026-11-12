@@ -151,3 +151,39 @@ test('a study record can be purged from the trash with its attachments', async (
   assert.equal(env.objects.size, 0);
   assert.deepEqual((await call(env, '/api/study')).data.records, []);
 });
+
+test('pen ink saves by itself, survives a text edit, and rejects malformed or stale saves', async () => {
+  const env = environment();
+  let record = (await call(env, path, { method: 'PUT', body: form({}) })).data;
+  assert.equal(record.ink, '');
+  const ink = JSON.stringify([{ c: '#2b46c8', w: 2, p: [10, 20, 30.5, 40] }]);
+  const saved = await call(env, path, { method: 'PATCH', body: { action: 'ink', ink, version: record.updatedAt } });
+  assert.equal(saved.status, 200); assert.equal(saved.data.ink, ink); assert.ok(saved.data.updatedAt > record.updatedAt);
+  assert.equal((await call(env, path, { method: 'PATCH', body: { action: 'ink', ink: '[]', version: record.updatedAt } })).status, 409);
+  record = saved.data;
+  for (const bad of ['{', '[{"c":"red","w":2,"p":[1,2]}]', '[{"c":"#222222","w":2,"p":[1]}]', '[{"c":"#222222","w":2,"p":[1,"2"]}]'])
+    assert.equal((await call(env, path, { method: 'PATCH', body: { action: 'ink', ink: bad, version: record.updatedAt } })).status, 400);
+  record = (await call(env, path, { method: 'PUT', body: form({ version: record.updatedAt, content: '고친 글' }) })).data;
+  assert.equal(record.ink, ink);
+  assert.equal((await call(env, '/api/study')).data.records[0].ink, ink);
+  assert.equal((await call(env, path, { method: 'PATCH', body: { action: 'ink', ink: '', version: record.updatedAt } })).data.ink, '');
+});
+
+test('AI organize needs a key, limits size, and returns only the model text', async () => {
+  const env = environment(), path2 = '/api/study/organize';
+  assert.equal((await call(env, path2, { method: 'POST', body: { text: '' } })).status, 400);
+  assert.equal((await call(env, path2, { method: 'POST', body: { text: 'x'.repeat(30001) } })).status, 400);
+  assert.equal((await call(env, path2, { method: 'POST', body: { text: '정규화는 분해하는 과정' } })).status, 503);
+  env.ANTHROPIC_API_KEY = 'test-key';
+  const real = globalThis.fetch; let sent;
+  globalThis.fetch = async (url, init) => { sent = { url, init, body: JSON.parse(init.body) }; return new Response(JSON.stringify({ content: [{ type: 'text', text: '1) 정규화\n- 분해하는 과정' }], stop_reason: 'end_turn' }), { status: 200 }); };
+  try {
+    const ok = await call(env, path2, { method: 'POST', body: { text: '정규화는 분해하는 과정' } });
+    assert.equal(ok.status, 200); assert.equal(ok.data.text, '1) 정규화\n- 분해하는 과정');
+    assert.equal(sent.url, 'https://api.anthropic.com/v1/messages'); assert.equal(sent.init.headers['x-api-key'], 'test-key');
+    assert.equal(sent.body.model, 'claude-haiku-5-5'); assert.match(sent.body.messages[0].content, /정규화는 분해하는 과정/);
+    globalThis.fetch = async () => new Response(JSON.stringify({ error: { type: 'authentication_error' } }), { status: 401 });
+    assert.equal((await call(env, path2, { method: 'POST', body: { text: '글' } })).status, 502);
+    assert.equal((await call(env, path2, { method: 'POST', body: { text: '글' }, owner: '' })).status, 401);
+  } finally { globalThis.fetch = real; }
+});

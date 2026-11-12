@@ -71,6 +71,13 @@
       "when": 1793798489192,
       "tag": "0009_milky_invaders",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1794492000000,
+      "tag": "0010_study_ink",
+      "breakpoints": true
     }
   ]
 }

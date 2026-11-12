@@ -1,15 +1,16 @@
 import { askConfirm } from './AlertDialog';
 import { DownloadMark, SavingMark } from './Feedback';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, BookOpen, CalendarDays, Check, ChevronLeft, ChevronRight, FileText, FolderOpen, ImagePlus, LayoutGrid, Layers, Pencil, Plus, Search, Star, Trash2, Upload, X } from 'lucide-react';
+import { ArrowLeft, BookOpen, CalendarDays, Check, ChevronLeft, ChevronRight, Eraser, FileText, FolderOpen, ImagePlus, LayoutGrid, Layers, Pencil, Plus, Search, Star, Trash2, Undo2, Upload, X } from 'lucide-react';
 import '../../styles/study.css';
 import { StudyNoteText } from './StudyNoteText';
+import { INK_COLORS, InkLayer, NOTE_W, parseInk, type InkTool, type Stroke } from './StudyInk';
 import { announceTrash, useTrashChange } from '../trash';
 import { FinderMain, FinderPath } from './FinderFrame';
 import { ToneDot, ToneFolder } from './ToneFolder';
 
 type Attachment = { id: string; name: string; mime: string; size: number; url: string };
-type RecordItem = { id: string; title: string; category: string; studiedOn: string; content: string; tags: string; keywords: string; summary: string; favorite: number; createdAt: number; updatedAt: number; trashedAt: number | null; attachments: Attachment[] };
+type RecordItem = { id: string; title: string; category: string; studiedOn: string; content: string; tags: string; keywords: string; summary: string; ink?: string; favorite: number; createdAt: number; updatedAt: number; trashedAt: number | null; attachments: Attachment[] };
 type Editor = { id: string; title: string; category: string; studiedOn: string; content: string; tags: string; keywords: string; summary: string; version: number; attachments: Attachment[] };
 export const STUDY_CATEGORIES = ['피부 기초', '색소·레이저', '홍조·혈관', '여드름·흉터', '리프팅', '스킨부스터', '상담·기타'];
 const newRecordId = () => crypto.randomUUID?.() || Array.from(crypto.getRandomValues(new Uint8Array(16)), value => value.toString(16).padStart(2, '0')).join('');
@@ -47,6 +48,42 @@ export function StudyArchive({ onDirtyChange, onSubs, goto, onLocation }: { onDi
   const noteRef = useRef<HTMLTextAreaElement>(null);
   const reading = records.find(item => item.id === readingId && !item.trashedAt);
   const busyRef = useRef(false);
+  // 노트 종이는 폭 NOTE_W로 고정해 놓고 화면 폭에 맞춰 통째로 줄인다(글 줄바꿈이 기기마다 같아야 펜 필기가 제자리에 보임). 휴대폰 폭은 한 단으로 흘려 보내고 펜은 숨긴다.
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [fitW, setFitW] = useState(0);
+  const flow = fitW > 0 && fitW < 520;
+  const zoom = flow || !fitW ? 1 : Math.min(1.15, fitW / NOTE_W) * readingSize / 16;
+  const [pen, setPen] = useState<InkTool | null>(null), [ink, setInk] = useState<Stroke[]>([]);
+  const inkJob = useRef<{ id: string; text: string } | null>(null), inkBusy = useRef(false), inkTimer = useRef(0), recordsRef = useRef(records);
+  recordsRef.current = records;
+  const flushInk = async () => {
+    if (inkBusy.current) return;
+    inkBusy.current = true;
+    try {
+      while (inkJob.current) {
+        const job = inkJob.current; inkJob.current = null;
+        const record = recordsRef.current.find(item => item.id === job.id); if (!record || record.trashedAt) break;
+        const data = await parse(await fetch(`/api/study/records/${job.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'ink', ink: job.text, version: record.updatedAt }) }));
+        recordsRef.current = recordsRef.current.map(item => item.id === data.id ? data : item); setRecords(items => items.map(item => item.id === data.id ? data : item));
+      }
+    } catch (e) { setError((e as Error).message); }
+    finally { inkBusy.current = false; }
+  };
+  const changeInk = (next: Stroke[]) => {
+    if (!readingId) return;
+    setInk(next); inkJob.current = { id: readingId, text: next.length ? JSON.stringify(next) : '' };
+    window.clearTimeout(inkTimer.current); inkTimer.current = window.setTimeout(() => void flushInk(), 700);
+  };
+  useEffect(() => {
+    setInk(parseInk(recordsRef.current.find(item => item.id === readingId)?.ink)); setPen(null);
+    return () => { window.clearTimeout(inkTimer.current); void flushInk(); };
+  }, [readingId]);
+  const readerOpen = !!reading && !editor;
+  useEffect(() => {
+    const box = scrollRef.current; if (!box || typeof ResizeObserver === 'undefined') return;
+    const measure = () => { const style = getComputedStyle(box); setFitW(Math.max(0, box.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight))); };
+    const watch = new ResizeObserver(measure); watch.observe(box); measure(); return () => watch.disconnect();
+  }, [readerOpen]);
   const dirty = !!editor && (JSON.stringify(editor) !== baseline || files.length > 0);
   useEffect(() => { onDirtyChange?.(dirty || busy); return () => onDirtyChange?.(false); }, [dirty, busy, onDirtyChange]);
   useEffect(() => {
@@ -139,6 +176,21 @@ export function StudyArchive({ onDirtyChange, onSubs, goto, onLocation }: { onDi
     } catch (error) { setError((error as Error).message || '파일을 읽지 못했습니다.'); }
     finally { busyRef.current = false; setBusy(false); }
   };
+  // AI 정리: 본문을 외부 AI로 보내 노트 양식으로 받아 본문 칸에 넣는다(저장은 '기록 저장'을 눌러야). 보내기 전에 늘 묻는다.
+  const [aiBusy, setAiBusy] = useState(false), [aiBackup, setAiBackup] = useState<{ id: string; text: string } | null>(null);
+  const organize = async () => {
+    if (!editor || aiBusy) return;
+    if (!editor.content.trim()) { setError('정리할 글을 먼저 붙여 넣어 주세요.'); return; }
+    if (!await askConfirm({ title: 'AI로 정리할까요?', message: '본문을 외부 AI로 보내요.' })) return;
+    const id = editor.id, before = editor.content;
+    setAiBusy(true); setError('');
+    try {
+      const data = await parse(await fetch('/api/study/organize', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: before }) }));
+      setEditor(current => current && current.id === id && current.content === before ? { ...current, content: data.text } : current);
+      setAiBackup({ id, text: before });
+    } catch (e) { setError((e as Error).message); }
+    finally { setAiBusy(false); }
+  };
   const insertNoteFormat = (value: string) => {
     if (!editor || busyRef.current) return;
     const input = noteRef.current;
@@ -195,16 +247,21 @@ export function StudyArchive({ onDirtyChange, onSubs, goto, onLocation }: { onDi
             {files.map((file, index) => <div key={`${file.name}-${index}`} className="study-file"><ImagePlus size={24} /><span><strong>{file.name}</strong><small>{sizeLabel(file.size)} · 저장 시 첨부</small></span><button type="button" aria-label={`${file.name} 선택 취소`} onClick={() => setFiles(items => items.filter((_, i) => i !== index))}><X size={16} /></button></div>)}
           </div>}
           <div className="study-format-tools" aria-label="본문 서식">
+            <button type="button" onClick={() => insertNoteFormat('\n# 1강 제목\n')}>강</button>
             <button type="button" onClick={() => insertNoteFormat('\n## 소제목\n')}>소제목</button>
-            <button type="button" onClick={() => insertNoteFormat('\n- 핵심 내용\n')}>목록</button>
+            <button type="button" onClick={() => insertNoteFormat('\n### 작은 소제목\n')}>작은 소제목</button>
+            <button type="button" onClick={() => insertNoteFormat('\n- 내용\n')}>목록</button>
+            <button type="button" onClick={() => insertNoteFormat('\n핵심: 꼭 기억할 내용\n')}>핵심</button>
             <button type="button" onClick={() => insertNoteFormat('\n| 항목 | 설명 |\n| --- | --- |\n| 개념 | 내용 |\n')}>비교표</button>
             <button type="button" onClick={() => textInputRef.current?.click()}>텍스트 가져오기</button>
+            <button type="button" className="study-ai" disabled={aiBusy} onClick={() => void organize()}>{aiBusy ? <SavingMark /> : null}AI 정리</button>
+            {aiBackup && aiBackup.id === editor.id && !aiBusy && <button type="button" onClick={() => { field('content', aiBackup.text); setAiBackup(null); }}>정리 전으로</button>}
             <input ref={textInputRef} type="file" accept=".md,.markdown,.txt" hidden onChange={event => { void importText(event.target.files?.[0]); event.target.value = ''; }} />
           </div>
-          <div className="study-ink-tools" aria-label="필기 색상"><span>본문에서 글자를 선택한 뒤</span>{[['**', '중요 · 빨강'], ['__', '암기 · 파랑'], ['==', '형광펜']].map(([mark, label]) => <button key={mark} type="button" onClick={() => {
+          <div className="study-ink-tools" aria-label="글자 강조"><span>본문에서 글자를 선택한 뒤</span>{[['**', '중요 · 빨강'], ['__', '암기 · 파랑'], ['==', '강조 · 회색']].map(([mark, label]) => <button key={mark} type="button" onClick={() => {
             const input = noteRef.current; if (!input) return;
             const start = input.selectionStart, end = input.selectionEnd;
-            if (start === end) { input.focus(); setError('색을 표시할 본문 글자를 먼저 선택해 주세요.'); return; }
+            if (start === end) { input.focus(); setError('강조할 본문 글자를 먼저 선택해 주세요.'); return; }
             const text = input.value; const selected = text.slice(start, end).split('\n').map(line => line ? mark + line + mark : '').join('\n');
             field('content', text.slice(0, start) + selected + text.slice(end)); setError(''); input.focus();
           }}>{label}</button>)}</div>
@@ -213,18 +270,22 @@ export function StudyArchive({ onDirtyChange, onSubs, goto, onLocation }: { onDi
         </fieldset>
         <p className="study-save-hint">‘기록 저장’을 누르면 자료와 메모가 함께 저장됩니다.</p>
       </form> : reading ? <>
-        <div className="study-reader-toolbar"><button onClick={() => { setReadingId(null); setNotice(''); }}><ArrowLeft size={17} />{reading.category}</button><span>노트 읽기</span><label className="study-reading-size">글자 크기<select aria-label="본문 글자 크기" value={readingSize} onChange={event => setReadingSize(Number(event.target.value))}>{[14, 16, 18, 20].map(size => <option key={size} value={size}>{size}</option>)}</select></label><button onClick={() => void mutate(reading, 'favorite')} className={reading.favorite ? 'is-favorite' : ''} aria-pressed={!!reading.favorite} disabled={busy}><Star size={16} fill={reading.favorite ? 'currentColor' : 'none'} />즐겨찾기</button><button onClick={() => { setRemoving(reading); setError(''); }} disabled={busy}><Trash2 size={15} />삭제</button><button className="study-primary" onClick={() => open(reading)}>수정</button></div>
-        <div className="study-reader-scroll">
-          <article className="cornell-page" aria-label="코넬식 공부 노트" style={{ fontSize: readingSize }}>
-            <header className="cornell-title"><div><span>{reading.category}</span><time>{dateLabel(reading.studiedOn)}</time></div><h1>{reading.title}</h1>{reading.tags && <p>{reading.tags.split(/[,#]+/).map(tag => tag.trim()).filter(Boolean).map((tag, i) => <span key={i}>#{tag}</span>)}</p>}</header>
-            <div className="cornell-body">
-              <aside className="cornell-cues"><h2>핵심 키워드<span>KEYWORDS & QUESTIONS</span></h2>{reading.keywords?.trim() ? <StudyNoteText text={reading.keywords} /> : reading.tags?.trim() ? <ul>{reading.tags.split(/[,#]+/).map(tag => tag.trim()).filter(Boolean).map((tag, i) => <li key={i}>{tag}</li>)}</ul> : <p className="cornell-empty">핵심 개념과 질문을<br />여기에 정리해 보세요.</p>}</aside>
-              <section className="cornell-content"><h2>학습 내용<span>STUDY NOTES</span></h2>{reading.content && <StudyNoteText text={reading.content} />}
-                {reading.attachments.length > 0 && <div className="cornell-materials" aria-label="학습 이미지와 자료">{reading.attachments.map(file => file.mime.startsWith('image/') ? <figure key={file.id}><button onClick={() => setPreview(file)} aria-label={`${file.name} 크게 보기`}><img src={file.url} alt={file.name} loading="lazy" /></button><figcaption>{file.name} <span>눌러서 확대</span></figcaption></figure> : <figure className="cornell-pdf" key={file.id}><iframe src={file.url} title={file.name} loading="lazy" /><figcaption><span>{file.name}</span><button onClick={() => setPreview(file)}>PDF 크게 보기</button><a href={file.url} target="_blank" rel="noopener noreferrer">새 창에서 열기</a></figcaption></figure>)}</div>}
-                {!reading.content && !reading.attachments.length && <p className="cornell-empty">수정을 눌러 학습 내용을 작성해 주세요.</p>}
-              </section>
-            </div>
-            <section className="cornell-summary"><h2>한눈에 요약<span>SUMMARY</span></h2>{reading.summary?.trim() ? <StudyNoteText text={reading.summary} /> : <p className="cornell-empty">아직 작성한 요약이 없습니다. 수정에서 핵심 내용을 남길 수 있어요.</p>}</section>
+        <div className="study-reader-toolbar"><button onClick={() => { setReadingId(null); setNotice(''); }}><ArrowLeft size={17} />{reading.category}</button><span>노트 읽기</span><label className="study-reading-size">글자 크기<select aria-label="본문 글자 크기" value={readingSize} onChange={event => setReadingSize(Number(event.target.value))}>{[14, 16, 18, 20].map(size => <option key={size} value={size}>{size}</option>)}</select></label>{!flow && <button onClick={() => setPen(pen ? null : { kind: 'pen', color: INK_COLORS[0][0] })} className={pen ? 'is-favorite' : ''} aria-pressed={!!pen}><Pencil size={15} />펜</button>}<button onClick={() => void mutate(reading, 'favorite')} className={reading.favorite ? 'is-favorite' : ''} aria-pressed={!!reading.favorite} disabled={busy}><Star size={16} fill={reading.favorite ? 'currentColor' : 'none'} />즐겨찾기</button><button onClick={() => { setRemoving(reading); setError(''); }} disabled={busy}><Trash2 size={15} />삭제</button><button className="study-primary" onClick={() => open(reading)}>수정</button></div>
+        {pen && <div className="note-pen-bar" role="toolbar" aria-label="펜">
+          {INK_COLORS.map(([color, name]) => <button key={color} type="button" className={`note-pen-dot${pen.kind === 'pen' && pen.color === color ? ' is-on' : ''}`} aria-label={name} aria-pressed={pen.kind === 'pen' && pen.color === color} onClick={() => setPen({ kind: 'pen', color })}><i style={{ background: color }} /></button>)}
+          <button type="button" className={pen.kind === 'erase' ? 'is-on' : ''} aria-pressed={pen.kind === 'erase'} onClick={() => setPen({ kind: 'erase' })}><Eraser size={16} />지우개</button>
+          <button type="button" disabled={!ink.length} onClick={() => changeInk(ink.slice(0, -1))}><Undo2 size={16} />되돌리기</button>
+        </div>}
+        <div className="study-reader-scroll" ref={scrollRef}>
+          <article className={`note-page${flow ? ' is-flow' : ''}`} aria-label="공부 노트" style={flow ? { fontSize: readingSize } : { width: NOTE_W, zoom }}>
+            <header className="note-head"><h1>{reading.title}</h1><p>{[reading.category, dateLabel(reading.studiedOn), ...(reading.tags || '').split(/[,#]+/).map(tag => tag.trim()).filter(Boolean).map(tag => `#${tag}`)].filter(Boolean).join(' · ')}</p></header>
+            {reading.keywords?.trim() && <section className="note-terms"><h2>용어</h2><StudyNoteText text={reading.keywords} /></section>}
+            <section className="note-body">{reading.content && <StudyNoteText text={reading.content} />}
+              {reading.attachments.length > 0 && <div className="cornell-materials" aria-label="학습 이미지와 자료">{reading.attachments.map(file => file.mime.startsWith('image/') ? <figure key={file.id}><button onClick={() => setPreview(file)} aria-label={`${file.name} 크게 보기`}><img src={file.url} alt={file.name} loading="lazy" /></button><figcaption>{file.name}</figcaption></figure> : <figure className="cornell-pdf" key={file.id}><iframe src={file.url} title={file.name} loading="lazy" /><figcaption><span>{file.name}</span><button onClick={() => setPreview(file)}>PDF 크게 보기</button><a href={file.url} target="_blank" rel="noopener noreferrer">새 창에서 열기</a></figcaption></figure>)}</div>}
+              {!reading.content && !reading.attachments.length && <p className="note-empty">기록 없음</p>}
+            </section>
+            {reading.summary?.trim() && <section className="note-key note-key-box"><b>핵심</b><StudyNoteText text={reading.summary} /></section>}
+            {!flow && <InkLayer strokes={ink} tool={pen} onChange={changeInk} scroller={() => scrollRef.current} />}
           </article>
         </div>
       </> : <div className={showingFolders ? 'finder-grid' : 'finder-grid pf-thumb-grid'} style={{ ['--finder-scale' as string]: scale / 100 }}>

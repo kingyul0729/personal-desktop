@@ -30,3 +30,56 @@
 .study-stack-actions{display:flex;gap:12px;margin-top:4px}.study-stack-actions button{display:grid;place-items:center;width:46px;height:46px;border:1px solid #d6dbe1;border-radius:50%;background:#fff;color:#5c6672;box-shadow:0 6px 16px #6c76841f}.study-stack-actions button:hover:not(:disabled){background:#f6f7f9}.study-stack-actions button[aria-pressed="true"]{color:#d58a00}
 @container (max-width:620px){.study-stack-stage{--w:min(440px,78cqi)}.study-stack-preview{grid-template-columns:1fr;background:#fff}.study-stack-page:first-child{display:none}.study-stack-card:not(.is-center){width:70px}}
 @media (prefers-reduced-motion:reduce){.study-stack-card{transition:none}}
+
+/* 공부 노트 양식(2026-11-12 사용자가 손 필기 사진으로 지정): 좌우 2단 줄 노트, 고딕 한 가지, 중요 빨강·암기 파랑.
+   종이 폭 900px로 고정해 화면 폭에 맞춰 통째로 줄인다(zoom) — 기기마다 줄바꿈이 같아야 펜 덧쓰기(.note-ink)가 제자리에 보인다. 휴대폰 폭(.is-flow)만 한 단·펜 없음.
+   줄 높이 30px: 글 덩어리마다 자기 줄 무늬를 그린다(표 뒤에서 줄이 어긋나지 않게). */
+.study-reading .study-main{background:#fafafa}
+.note-page{--desktop-font:system-ui;--rl:30px;--rule:#e2e5e9;position:relative;margin:0 auto;background:#fff;border:1px solid #e1e4e8;border-radius:12px;padding:38px 40px 46px;color:#222;font-family:-apple-system,BlinkMacSystemFont,'Pretendard','Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;font-size:15px;line-height:var(--rl);letter-spacing:0;overflow-wrap:anywhere}
+.note-head{border-bottom:1px solid #222;padding-bottom:12px;margin-bottom:18px}
+.note-head h1{font-size:24px;line-height:1.35;font-weight:700;margin:0;color:#222;letter-spacing:-.01em}
+.note-head p{margin:6px 0 0;font-size:12px;line-height:1.5;color:#595959}
+.note-body>.note-formatted{column-count:2;column-gap:44px;column-rule:1px solid #cfd4da}
+.note-page .note-formatted p{line-height:var(--rl);margin:0}
+.note-page .note-formatted>p,.note-page .note-formatted>.note-bullet,.note-page .note-formatted>h3,.note-page .note-formatted>.note-paragraph-gap{background-image:linear-gradient(to bottom,transparent calc(var(--rl) - 1px),var(--rule) calc(var(--rl) - 1px));background-size:100% var(--rl)}
+.note-page .note-formatted .note-paragraph-gap{height:var(--rl)}
+.note-page .note-formatted h3{border:0;padding:0;margin:0;color:#222;font-weight:700;line-height:var(--rl);break-after:avoid}
+.note-page .note-formatted .note-h1{font-size:19px}
+.note-page .note-formatted .note-h2{font-size:16.5px;padding-left:8px}
+.note-page .note-formatted .note-h3{font-size:15px;padding-left:20px}
+.note-page .note-formatted h3[data-no]::before{content:attr(data-no) ' '}
+.note-page .note-bullet{gap:8px;padding-left:30px;break-inside:avoid}
+.note-page .note-bullet>span{color:#222}
+.note-page .note-formatted .note-important{color:#d0342c;font-weight:700}
+.note-page .note-formatted .note-remember{color:#2b46c8;font-weight:700}
+.note-page .note-formatted mark{background:#f2f2f2;color:#222;padding:1px 4px;border-radius:3px}
+.note-page .note-table-scroll{margin:7px 0 8px 20px;break-inside:avoid;overflow:visible}
+.note-page .note-table-scroll table{font-size:13px;line-height:1.5;background:#fff}
+.note-page .note-table-scroll th,.note-page .note-table-scroll td{border:1px solid #9a9fa6;padding:3px 8px;min-width:0}
+.note-page .note-table-scroll td:first-child{white-space:nowrap}
+.note-page.is-flow .note-table-scroll td:first-child{white-space:normal}
+.note-page .note-table-scroll th{background:#f2f2f2;color:#222;font-weight:700;text-align:center}
+.note-page .note-key{background-color:#f2f2f2;border-radius:6px;padding:0 10px;margin:0;break-inside:avoid}
+.note-page .note-key>b{font-size:13px;font-weight:700;color:#595959;margin-right:10px}
+.note-page .note-key-box{margin:24px 0 0;padding:8px 12px;display:flex;gap:2px;align-items:baseline}
+.note-page .note-key-box>b{flex-shrink:0}
+.note-page .note-key-box .note-formatted{min-width:0;flex:1}
+.note-terms{margin-bottom:18px;font-size:14px;color:#222}
+.note-terms h2{font-size:12px;font-weight:700;color:#595959;margin:0;line-height:1.6}
+.note-page .cornell-materials figure{border-color:#e1e4e8;border-radius:8px}
+.note-page .cornell-materials figcaption{color:#595959;font-size:12px}
+.note-page .note-empty{color:#7d838b;margin:0}
+.note-page.is-flow{padding:22px 16px 28px;border-radius:8px}
+.note-page.is-flow .note-body>.note-formatted{column-count:1}
+.note-page.is-flow .note-formatted .note-h1{font-size:1.25em}.note-page.is-flow .note-formatted .note-h2{font-size:1.1em}.note-page.is-flow .note-formatted .note-h3{font-size:1em}
+.note-ink{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible}
+.note-ink.is-writing{pointer-events:auto;touch-action:none;cursor:crosshair}
+.note-ink.is-erasing{cursor:cell}
+.note-pen-bar{display:flex;align-items:center;gap:8px;padding:8px 22px;border-bottom:1px solid #dcdee1;background:#fff;flex-shrink:0}
+.note-pen-bar button{display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 12px;border:1px solid transparent;border-radius:999px;background:transparent;color:#666c75;font-size:13px}
+.note-pen-bar button.is-on{background:#ecf1f6;border-color:#c9d6e3;color:#44617c;font-weight:600}
+.note-pen-bar button:disabled{opacity:.4}
+.note-pen-bar .note-pen-dot{width:36px;padding:0;justify-content:center}
+.note-pen-dot i{width:16px;height:16px;border-radius:50%;display:block}
+@media (pointer:coarse){.note-pen-bar button{height:40px}.note-pen-bar .note-pen-dot{width:40px}}
+.study-format-tools .study-ai{display:inline-flex;align-items:center;gap:6px;border-color:#c9d6e3;background:#ecf1f6;color:#44617c;font-weight:600}.study-format-tools .study-ai:disabled{opacity:.7}
