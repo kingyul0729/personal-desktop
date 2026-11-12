@@ -46,12 +46,14 @@ export function StudyArchive({ onDirtyChange, onSubs, goto, onLocation }: { onDi
   const textInputRef = useRef<HTMLInputElement>(null);
   const [readingSize, setReadingSize] = useState(16);
   const noteRef = useRef<HTMLTextAreaElement>(null);
+  // 사진만 올려 펜으로 쓰는 방식(2026-11-13 사용자): 글 칸(태그·핵심 키워드·서식·학습 내용·요약)은 예전에 글을 적어 둔 기록을 고칠 때만 보인다.
+  const [legacyText, setLegacyText] = useState(false);
   const reading = records.find(item => item.id === readingId && !item.trashedAt);
   const busyRef = useRef(false);
   // 노트 종이는 폭 NOTE_W로 고정해 놓고 화면 폭에 맞춰 통째로 줄인다(글 줄바꿈이 기기마다 같아야 펜 필기가 제자리에 보임). 휴대폰 폭은 한 단으로 흘려 보내고 펜은 숨긴다.
   const scrollRef = useRef<HTMLDivElement>(null);
   const [fitW, setFitW] = useState(0);
-  const flow = fitW > 0 && fitW < 520;
+  const flow = fitW > 0 && fitW < 520 && !!(reading && (reading.content.trim() || reading.keywords?.trim() || reading.summary?.trim()));
   const zoom = flow || !fitW ? 1 : Math.min(1.15, fitW / NOTE_W) * readingSize / 16;
   const [pen, setPen] = useState<InkTool | null>(null), [ink, setInk] = useState<Stroke[]>([]);
   const inkJob = useRef<{ id: string; text: string } | null>(null), inkBusy = useRef(false), inkTimer = useRef(0), recordsRef = useRef(records);
@@ -117,6 +119,7 @@ export function StudyArchive({ onDirtyChange, onSubs, goto, onLocation }: { onDi
     setReadingId(record?.id || null);
     const value: Editor = record ? toEditor(record) : { id: newRecordId(), title: '', category: category || STUDY_CATEGORIES[0], studiedOn: today(), content: '', tags: '', keywords: '', summary: '', version: 0, attachments: [] };
     setEditor(value); setBaseline(JSON.stringify(value)); setFiles([]); setNotice('');
+    setLegacyText(!!(value.content.trim() || value.keywords.trim() || value.summary.trim() || value.tags.trim()));
   });
   const navigate = (next: typeof filter, folder = '') => leave(() => { setReadingId(null); setFilter(next); setCategory(folder); setNotice(''); });
   useEffect(() => { if (!goto) return; if (goto.id.startsWith('cat:')) navigate('all', goto.id.slice(4)); else navigate(goto.id as typeof filter); }, [goto?.n]);
@@ -219,10 +222,12 @@ export function StudyArchive({ onDirtyChange, onSubs, goto, onLocation }: { onDi
       : editor ? <form className="study-editor" onSubmit={event => { event.preventDefault(); void save(); }}>
         <div className="study-editor-bar"><button type="button" onClick={() => leave(() => {})} disabled={busy}><ArrowLeft size={16} />{reading ? '노트로 돌아가기' : '목록으로'}</button><span>{dirty ? '저장 전' : editor.version ? '저장된 기록' : '새 기록'}</span><button type="submit" className="study-primary" disabled={busy}>{busy ? <><SavingMark />저장 중…</> : '기록 저장'}</button></div>
         <fieldset disabled={busy}>
-          <label className="study-title-label">제목<input value={editor.title} onChange={event => field('title', event.target.value)} placeholder="어떤 내용을 공부했나요?" maxLength={100} required /></label>
+          <label className="study-title-label">제목<input value={editor.title} onChange={event => field('title', event.target.value)} placeholder="제목" maxLength={100} required /></label>
           <div className="study-fields"><label>분류<input value={editor.category} onChange={event => field('category', event.target.value)} list="study-categories" maxLength={40} placeholder="선택하거나 새 분류 입력" required /><datalist id="study-categories">{folders.map(name => <option key={name} value={name} />)}</datalist></label><label>공부 날짜<input type="date" value={editor.studiedOn} onChange={event => field('studiedOn', event.target.value)} required /></label></div>
+          {legacyText && <>
           <label>태그<input value={editor.tags} onChange={event => field('tags', event.target.value)} placeholder="예: 피부 구조, 복습, 원리 정리" maxLength={300} /></label>
           <label>핵심 키워드 · 질문<textarea value={editor.keywords} onChange={event => field('keywords', event.target.value)} placeholder="핵심 개념이나 복습 질문을 한 줄씩 적어 주세요." maxLength={5000} rows={3} /></label>
+          </>}
           <div className="study-section-label"><strong>첨부 자료</strong><span>{editor.attachments.length + files.length} / 12</span></div>
           <div className="study-upload" onDragOver={event => event.preventDefault()} onDrop={event => { event.preventDefault(); addFiles(Array.from(event.dataTransfer.files)); }}>
             <button type="button" onClick={() => inputRef.current?.click()}><Upload size={20} /><strong>이미지 또는 PDF 추가</strong><span>눌러서 선택하거나 파일을 끌어 놓으세요</span></button>
@@ -233,6 +238,7 @@ export function StudyArchive({ onDirtyChange, onSubs, goto, onLocation }: { onDi
             {editor.attachments.map(file => <div key={file.id} className="study-file"><button type="button" className="study-file-open" onClick={() => setPreview(file)}>{file.mime.startsWith('image/') ? <img src={file.url} alt="" /> : <FileText size={26} />}<span><strong>{file.name}</strong><small>{sizeLabel(file.size)} · 저장됨</small></span></button><button type="button" aria-label={`${file.name} 첨부 해제`} onClick={() => setEditor(current => current ? { ...current, attachments: current.attachments.filter(item => item.id !== file.id) } : current)}><X size={16} /></button></div>)}
             {files.map((file, index) => <div key={`${file.name}-${index}`} className="study-file"><ImagePlus size={24} /><span><strong>{file.name}</strong><small>{sizeLabel(file.size)} · 저장 시 첨부</small></span><button type="button" aria-label={`${file.name} 선택 취소`} onClick={() => setFiles(items => items.filter((_, i) => i !== index))}><X size={16} /></button></div>)}
           </div>}
+          {legacyText && <>
           <div className="study-format-tools" aria-label="본문 서식">
             <button type="button" onClick={() => insertNoteFormat('\n# 1강 제목\n')}>강</button>
             <button type="button" onClick={() => insertNoteFormat('\n## 소제목\n')}>소제목</button>
@@ -252,8 +258,8 @@ export function StudyArchive({ onDirtyChange, onSubs, goto, onLocation }: { onDi
           }}>{label}</button>)}</div>
           <label className="study-note-label">학습 내용<textarea ref={noteRef} value={editor.content} onChange={event => field('content', event.target.value)} placeholder={'배운 내용, 핵심 개념, 헷갈렸던 부분을 자유롭게 정리해 보세요.\n\n자료만 첨부해 보관해도 괜찮아요.'} maxLength={100000} rows={9} /></label>
           <label>한눈에 요약<textarea value={editor.summary} onChange={event => field('summary', event.target.value)} placeholder="이 노트에서 꼭 기억할 내용을 짧게 정리해 주세요." maxLength={10000} rows={3} /></label>
+          </>}
         </fieldset>
-        <p className="study-save-hint">‘기록 저장’을 누르면 자료와 메모가 함께 저장됩니다.</p>
       </form> : reading ? <>
         <div className="study-reader-toolbar"><button onClick={() => { setReadingId(null); setNotice(''); }}><ArrowLeft size={17} />{reading.category}</button><span>노트 읽기</span><label className="study-reading-size">글자 크기<select aria-label="본문 글자 크기" value={readingSize} onChange={event => setReadingSize(Number(event.target.value))}>{[14, 16, 18, 20].map(size => <option key={size} value={size}>{size}</option>)}</select></label>{!flow && <button onClick={() => setPen(pen ? null : { kind: 'pen', color: INK_COLORS[0][0] })} className={pen ? 'is-favorite' : ''} aria-pressed={!!pen}><Pencil size={15} />펜</button>}<button onClick={() => void mutate(reading, 'favorite')} className={reading.favorite ? 'is-favorite' : ''} aria-pressed={!!reading.favorite} disabled={busy}><Star size={16} fill={reading.favorite ? 'currentColor' : 'none'} />즐겨찾기</button><button onClick={() => { setRemoving(reading); setError(''); }} disabled={busy}><Trash2 size={15} />삭제</button><button className="study-primary" onClick={() => open(reading)}>수정</button></div>
         {pen && <div className="note-pen-bar" role="toolbar" aria-label="펜">
