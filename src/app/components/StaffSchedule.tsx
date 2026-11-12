@@ -384,7 +384,7 @@ function Performance({ month, data, notify }: { month: string; data: Data; notif
         {Array.from({ length: n }, (_, i) => { const d = dateIn(month, i + 1); return <option key={d} value={d}>{dayLabelKo(d)}</option>; })}
       </select></div>
     <table className="sf-table">
-      <thead><tr><th>직원</th><th className="num">당일 관리 수</th><th className="num">지정 환자 수<br /><small>당일 관리 수에 포함</small></th><th /></tr></thead>
+      <thead><tr><th>직원</th><th className="num">당일 관리 수</th><th className="num">지정 환자 수</th><th /></tr></thead>
       <tbody>{list.map(s => { const r = recOf(s.id); return <tr key={s.id}>
         <td><b>{s.name}</b> <small>{r ? stateOf(r) : '스케줄 없음'}</small></td>
         {(['managed_count', 'designated_count'] as const).map(f => <td key={f} className="num">{r && can(r, f, s)
