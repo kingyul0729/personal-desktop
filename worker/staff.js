@@ -667,6 +667,20 @@ staff.get("/performance", async (c) => {
     if (!attByStaff[r.staff_id]) attByStaff[r.staff_id] = [];
     attByStaff[r.staff_id].push(r);
   }
+  // 성과 미작성일(2026-11-12 사용자 지정): 팀장이 출근한 날(정상근무·출퇴근 기타)인데 그날 근무한 팀장·직원 모두의 당일 관리 수가 비었거나 0명이면
+  // 그 날짜는 성과를 적지 않은 날로 본다 — 지정 환자 수는 적힌 대로 집계하고, 당일 관리 수와 근무시간(근무일수·실근무시간·시간당 관리 수)은 팀장·직원 모두 집계에서 뺀다.
+  // 한 명이라도 1명 이상 적었으면 미작성일이 아니다. 병원 휴무·풀상담일은 기존 사유를 그대로 쓴다.
+  const worksOwn = (r) => r.attendance === "정상근무" || r.attendance === "기타" && r.etc_type === "time";
+  const attByDate = {};
+  for (const r of allAttRows) (attByDate[r.work_date] || (attByDate[r.work_date] = [])).push(r);
+  const unwrittenDays = new Set();
+  for (const [d, rows] of Object.entries(attByDate)) {
+    if (clinicOff.has(d) || isFullConsultDay(d)) continue;
+    const l = leaderAtt[d];
+    if (!l || !worksOwn(l)) continue;
+    const workers = rows.filter(worksOwn);
+    if (workers.length && workers.every((r) => !(r.managed_count > 0))) unwrittenDays.add(d);
+  }
   const result = [];
   for (const s of staffRows) {
     const hiredBefore = !s.hire_date || s.hire_date <= monthEnd;
@@ -715,12 +729,14 @@ staff.get("/performance", async (c) => {
         } else if (selfEligibleStatus && !isLeaderSelf && !eligible) {
           // 성과는 팀장 기준(팀장만 관리): 팀장이 근무하지 않았거나 팀장 근태가 비면 그날 근무시간·관리수 0
           reason = leaderLabel(r.work_date) + " \u00B7 \uD300\uC7A5 \uAE30\uC900 \uC81C\uC678";
+        } else if (selfEligibleStatus && unwrittenDays.has(r.work_date)) {
+          reason = "성과 미작성일";
         } else if (selfEligibleStatus && !isLeaderSelf && eligible && leaderAtt[r.work_date]?.attendance === "\uAE30\uD0C0") {
           reason = leaderLabel(r.work_date) + " \u00B7 \uD300\uC7A5 \uADFC\uBB34\uC2DC\uAC04\uB9CC \uC778\uC815";
         }
         if (reason) exclusions.push({ date: r.work_date, reason });
       }
-      if (eligible && r.work_minutes != null) {
+      if (eligible && r.work_minutes != null && !unwrittenDays.has(r.work_date)) {
         const ws = toMin(r.start_time), we = toMin(r.end_time);
         let creditedMin;
         if (isLeaderSelf) {
@@ -739,7 +755,7 @@ staff.get("/performance", async (c) => {
       const ownWork = r.attendance === "\uC815\uC0C1\uADFC\uBB34" || r.attendance === "\uAE30\uD0C0" && r.etc_type === "time";
       // 관리수 = 관리 인원(일반 + 본인 지정 환자 모두 포함, 사용자 지정 2026-11-10). 팀장이 근무한 날만(팀장 기준).
       // 지정 환자 수는 관리수에 이미 들어 있는 환자 중 본인 지정만 따로 적는 원장님 확인용 숫자 — 관리수·시간당·평균에 더하지 않는다.
-      if (eligible && ownWork && !isFullConsultDay(r.work_date) && r.managed_count != null) {
+      if (eligible && ownWork && !isFullConsultDay(r.work_date) && !unwrittenDays.has(r.work_date) && r.managed_count != null) {
         totalMgSum += r.managed_count;
         totalMgCnt++;
       }

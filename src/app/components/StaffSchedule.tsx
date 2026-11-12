@@ -357,6 +357,10 @@ function Performance({ month, data, notify }: { month: string; data: Data; notif
     if (v !== '' && !(Number.isFinite(Number(v)) && Number(v) >= 0)) { notify('0 이상의 숫자로 입력하세요'); return; }
     const val = v === '' ? null : Number(v);
     if (val === (r[field] ?? null)) return;
+    // 당일 관리 수 = 지정 환자를 포함한 그날 실제 전체 관리 인원(2026-11-12 사용자). 지정 환자 수는 그 안에 든 수라 더 클 수 없고, 두 수를 더하지 않는다.
+    const managed = field === 'managed_count' ? val : r.managed_count ?? null, designated = field === 'designated_count' ? val : r.designated_count ?? null;
+    // 당일 관리 수가 비었거나 0명인 날(성과 미작성일)은 지정 환자 수를 적힌 대로 저장한다.
+    if (managed != null && managed > 0 && designated != null && designated > managed) { notify('지정 환자 수는 당일 관리 수보다 많을 수 없어요'); return false; }
     try { await staffPost('/attendance', payloadFor(s, date, r, { [field]: val })); setSaved(s.id); await data.reload(true); void loadPerf(); }
     catch (e) { notify(e instanceof Error ? e.message : '저장 실패'); }
   };
@@ -380,12 +384,12 @@ function Performance({ month, data, notify }: { month: string; data: Data; notif
         {Array.from({ length: n }, (_, i) => { const d = dateIn(month, i + 1); return <option key={d} value={d}>{dayLabelKo(d)}</option>; })}
       </select></div>
     <table className="sf-table">
-      <thead><tr><th>직원</th><th className="num">관리수<br /><small>지정 포함</small></th><th className="num">지정 환자 수</th><th /></tr></thead>
+      <thead><tr><th>직원</th><th className="num">당일 관리 수</th><th className="num">지정 환자 수<br /><small>당일 관리 수에 포함</small></th><th /></tr></thead>
       <tbody>{list.map(s => { const r = recOf(s.id); return <tr key={s.id}>
         <td><b>{s.name}</b> <small>{r ? stateOf(r) : '스케줄 없음'}</small></td>
         {(['managed_count', 'designated_count'] as const).map(f => <td key={f} className="num">{r && can(r, f, s)
-          ? <input key={`${date}-${r[f]}`} type="number" min={0} inputMode="numeric" className="sf-num" defaultValue={r[f] ?? ''} aria-label={`${s.name} ${f === 'managed_count' ? '관리수' : '지정 환자 수'}`}
-            onBlur={e => void saveCell(s, f, e.target.value)} onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }} />
+          ? <input key={`${date}-${r[f]}`} type="number" min={0} inputMode="numeric" className="sf-num" defaultValue={r[f] ?? ''} aria-label={`${s.name} ${f === 'managed_count' ? '당일 관리 수' : '지정 환자 수'}`}
+            onBlur={e => { const el = e.target; void saveCell(s, f, el.value).then(ok => { if (ok === false) el.value = String(r[f] ?? ''); }); }} onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }} />
           : <small>{f === 'managed_count' && r && fullConsult && (s.is_leader || r.attendance === '정상근무' || isTimeEtc(r)) ? '풀상담일 · 관리실적 제외' : '—'}</small>}</td>)}
         <td><small>{saved === s.id ? '저장됨' : ''}</small></td>
       </tr>; })}</tbody>
@@ -395,7 +399,7 @@ function Performance({ month, data, notify }: { month: string; data: Data; notif
     <h3 className="sf-perf-title">{monthLabel(month)} 성과</h3>
     {rows == null ? <LoadingBox /> : !rows.length ? <p className="sf-hint">해당 월 성과 데이터가 없습니다</p> :
       <table className="sf-table is-click">
-        <thead><tr><th>직원</th><th className="num">실근무시간</th><th className="num">관리수<br /><small>지정 포함</small></th><th className="num">시간당 관리수</th><th className="num">지정 환자 수</th><th className="num">잔여연차</th></tr></thead>
+        <thead><tr><th>직원</th><th className="num">실근무시간</th><th className="num">관리 수</th><th className="num">시간당 관리 수</th><th className="num">지정 환자 수</th><th className="num">잔여연차</th></tr></thead>
         <tbody>{rows.map(r => <tr key={r.id} onClick={() => setDetail(r)} tabIndex={0} onKeyDown={e => { if (e.key === 'Enter') setDetail(r); }}>
           <td><b>{r.name}</b></td><td className="num">{dash(r.total_hours, '시간')}</td><td className="num">{dash(r.total_managed, '명')}</td>
           <td className="num">{dash(r.avg_managed, '명')}</td><td className="num">{dash(r.total_designated, '명')}</td>

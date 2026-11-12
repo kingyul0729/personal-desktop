@@ -209,3 +209,23 @@ test('총 피부관리 인원 follows the managed counts entered in performance'
   await call(e, '/api/inventory/daily', { method: 'POST', body: { date: '2027-09-02', patients: 15, used: {} } });
   assert.equal((await call(e, '/api/inventory/daily?date=2027-09-02')).data.day.patients, 15);
 });
+
+test('performance-not-written day: everyone at work left the day count empty or 0, so hours and day counts are left out but designated counts stay', async () => {
+  const e = env(); await call(e, '/api/staff/list');
+  const post = body => call(e, '/api/staff/attendance', { method: 'POST', body });
+  const day = { attendance: '정상근무', start_time: '10:00', end_time: '19:30' };
+  // 10/06: 팀장 출근, 아무도 당일 관리 수를 적지 않음(빈칸·0명) → 성과 미작성일. 지정 환자 수는 적힌 대로.
+  await post({ staff_id: 1, work_date: '2026-10-06', ...day, designated_count: 2 });
+  await post({ staff_id: 2, work_date: '2026-10-06', ...day, managed_count: 0, designated_count: 3 });
+  await post({ staff_id: 3, work_date: '2026-10-06', ...day, designated_count: 1 });
+  // 10/07: 한 명이라도 1명 이상 적었으면 미작성일이 아님 — 안 적은 직원의 근무시간도 그대로 집계
+  await post({ staff_id: 1, work_date: '2026-10-07', ...day });
+  await post({ staff_id: 2, work_date: '2026-10-07', ...day, managed_count: 5, designated_count: 1 });
+  await post({ staff_id: 3, work_date: '2026-10-07', ...day });
+  const perf = (await call(e, '/api/staff/performance?month=2026-10')).data;
+  const [lead, two, three] = [1, 2, 3].map(id => perf.find(r => r.id === id));
+  assert.deepEqual([lead.work_days, lead.total_hours, lead.total_designated], [1, 9.5, 2]);
+  assert.deepEqual([two.work_days, two.total_hours, two.total_managed, two.total_designated], [1, 9.5, 5, 4]);
+  assert.deepEqual([three.work_days, three.total_hours, three.total_managed, three.total_designated], [1, 9.5, null, 1]);
+  for (const r of [lead, two, three]) assert.deepEqual(r.exclusions.filter(x => x.reason === '성과 미작성일').map(x => x.date), ['2026-10-06']);
+});
