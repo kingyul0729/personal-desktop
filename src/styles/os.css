@@ -2533,3 +2533,6 @@ input[type="date"]::-webkit-date-and-time-value, input[type="month"]::-webkit-da
 .iv-pstate.is-due { background: #fbe9ee; color: #b24a6b; }
 .iv-paysub { margin: 20px 0 8px; font-size: 14px; font-weight: 800; }
 .iv-paysub::before { content: '■ '; color: #3a3f45; }
+.iv-pinv { display: inline-block; font-size: 12px; font-weight: 700; padding: 2px 10px; border-radius: 6px; border: 1px solid #d5dee8; background: #fff; color: #2D3136; white-space: nowrap; font-family: inherit; }
+button.iv-pinv { cursor: zoom-in; }
+.iv-pinv.is-missing { border-color: #f0c9c6; color: #c2504a; }

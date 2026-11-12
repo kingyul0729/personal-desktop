@@ -895,7 +895,8 @@ async function monthReport(db, month, brief = false) {
   // 결제 내역(2026-11-12 사용자: 원장님 제출용, 모든 업체를 결제 시점별로 · 결제 상태는 자동 — 주문 시 = 결제 완료, 월말 = 그 달 말까지 결제 예정 → 다음 달부터 결제 완료)
   const prepaidPays = await all(db, `SELECT i.vendor_id, t.amount, t.date AS pay_date FROM inv_tx t JOIN inv_items i ON i.id = t.item_id WHERE t.deleted_at IS NULL AND t.kind = 'prepaid_buy' AND t.amount > 0 AND t.date BETWEEN ? AND ?`, from, to);
   // 병원으로 들어온 물건(0원·업체 보관에서 입고 포함) + 선결제 결제 — 업체별 표의 품목 줄(2026-11-12 사용자 '그 달에 거래한 업체는 무조건, 0원도 표시')
-  const ins = await all(db, `SELECT i.vendor_id, t.id, t.date, t.item_id, t.kind, t.qty, t.bonus_qty, t.vendor_delta, i.name AS item_name, i.stock_unit FROM inv_tx t JOIN inv_items i ON i.id = t.item_id
+  const ins = await all(db, `SELECT i.vendor_id, t.id, t.date, t.item_id, t.kind, t.qty, t.bonus_qty, t.vendor_delta, t.amount, t.invoice, i.name AS item_name, i.stock_unit,
+      (SELECT group_concat(l.invoice_id) FROM inv_invoice_links l WHERE l.tx_id = t.id) AS invoice_ids FROM inv_tx t JOIN inv_items i ON i.id = t.item_id
     WHERE t.deleted_at IS NULL AND t.cancelled_at IS NULL AND t.daily_date IS NULL AND (t.kind IN ('in','prepaid_in') OR (t.kind = 'prepaid_buy' AND t.vendor_delta > 0)) AND t.date BETWEEN ? AND ? ORDER BY t.date, t.id`, from, to);
   const byVendor = new Map();
   for (const r of [...pays, ...prepaidPays]) { const k = r.vendor_id ?? 0; const b = byVendor.get(k) || { amount: 0, dates: new Set() }; b.amount += r.amount || 0; b.dates.add(r.pay_date); byVendor.set(k, b); }
@@ -912,6 +913,8 @@ async function monthReport(db, month, brief = false) {
       // 원장님 보고용 표기(2026-11-12 사용자): 주문 시 결제 = 결제 완료, 월말 결제 = '이달 말까지 결제 예정'(날짜가 지나도 보고서 표기는 그대로)
       status: !amount ? '결제 없음' : timing === 'order' ? '결제 완료' : timing === 'month' ? '결제 예정' : '—',
       lines: mine.map(r => ({ date: r.date, item: r.item_name, qty: r.kind === 'prepaid_buy' ? r.vendor_delta : round(r.qty + (r.kind === 'in' ? r.bonus_qty || 0 : 0)), unit: r.stock_unit,
+        // 명세서(2026-11-12 사용자 '5번에 명세서 이미지 표기'): 사진이 있으면 등록(눌러서 봄), 예전 앱 받음도 등록, 돈이 나간 줄인데 없으면 미등록, 0원 줄은 —
+        invoice_ids: r.invoice_ids || null, invoice: r.invoice_ids || r.invoice ? 'done' : r.amount > 0 ? 'missing' : 'none',
         note: r.kind === 'prepaid_buy' ? '선결제' : r.kind === 'prepaid_in' ? '업체 보관에서 입고' : r.kind === 'in' && r.vendor_delta > 0 ? `업체 보관 ${fmtNum(r.vendor_delta)}` : null })),
       ...(bank ? { holder: v.holder || null, bank: v.bank || null, account: v.account || null } : {}) };
   };
