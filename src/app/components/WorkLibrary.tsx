@@ -81,7 +81,7 @@ export function WorkLibrary({ onDirtyChange, onSubs, goto, onLocation }: { onDir
   const reading = docs.find(doc => doc.id === readingId && !doc.trashedAt) ?? null;
   const leave = async (next: () => void) => {
     if (busyRef.current) return;
-    if (!dirty || await askConfirm({ title: '저장하지 않고 이동할까요?', message: '저장하지 않은 변경 사항이 있어요.', ok: '이동' })) { setEditor(null); setFiles([]); setError(''); next(); }
+    if (!dirty || await askConfirm({ title: '저장하지 않고 이동할까요?', message: '저장하지 않은 변경 사항이 있어요.' })) { setEditor(null); setFiles([]); setError(''); next(); }
   };
   useEffect(() => { if (goto) leave(() => { setReadingId(null); setFilter(goto.id as Filter); }); }, [goto?.n]);
   const openDoc = (doc: WorkDoc) => { if (doc.trashedAt) return; setReadingId(doc.id); setNotice(''); setError(''); };
@@ -130,7 +130,7 @@ export function WorkLibrary({ onDirtyChange, onSubs, goto, onLocation }: { onDir
   useEffect(() => {
     if (!removing) return;
     let live = true;
-    void askConfirm({ title: '자료를 삭제할까요?', message: `‘${removing.title}’ · 휴지통에서 복원할 수 있어요.`, ok: '휴지통으로 이동', kind: 'delete' }).then(ok => { if (!live) return; if (ok) void mutate(removing, 'trash').finally(() => setRemoving(null)); else setRemoving(null); });
+    void askConfirm({ title: '자료를 삭제할까요?', message: `‘${removing.title}’ · 휴지통에서 복원할 수 있어요.`, kind: 'delete' }).then(ok => { if (!live) return; if (ok) void mutate(removing, 'trash').finally(() => setRemoving(null)); else setRemoving(null); });
     return () => { live = false; };
   }, [removing]); // eslint-disable-line react-hooks/exhaustive-deps
 

@@ -36,15 +36,17 @@ export function AlertHost() {
   });
   if (!cur) return null;
   const kind = cur.kind || 'ask';
+  // 삭제는 제목 하나로(2026-11-12 사용자 '삭제하시겠습니까?'), 버튼은 기본 [아니요] [네]
+  const title = kind === 'delete' ? '삭제하시겠습니까?' : cur.title;
   const Icon = ICON[kind];
   return <div className="mac-alert-back" role="presentation" onMouseDown={e => { if (e.target === e.currentTarget) close(false); }}>
     <div className="mac-alert" role="alertdialog" aria-modal="true" aria-labelledby="mac-alert-title">
       <span className={`mac-alert-icon is-${kind}`} aria-hidden="true"><Icon size={34} strokeWidth={1.6} /></span>
-      <strong id="mac-alert-title">{cur.title}</strong>
+      <strong id="mac-alert-title">{title}</strong>
       {cur.message && <p>{cur.message}</p>}
       <div className="mac-alert-btns">
-        <button type="button" onClick={() => close(false)}>{cur.cancel || '취소'}</button>
-        <button type="button" className={kind === 'delete' ? 'is-danger' : 'is-primary'} autoFocus onClick={() => close(true)}>{cur.ok || '확인'}</button>
+        <button type="button" onClick={() => close(false)}>{cur.cancel || '아니요'}</button>
+        <button type="button" className={kind === 'delete' ? 'is-danger' : 'is-primary'} autoFocus onClick={() => close(true)}>{cur.ok || '네'}</button>
       </div>
     </div>
   </div>;

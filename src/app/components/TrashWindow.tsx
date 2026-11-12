@@ -53,8 +53,8 @@ export function TrashWindow() {
   const purge = async (target: TrashEntry | Extra | 'all') => {
     setError('');
     const yes = await askConfirm(target === 'all'
-      ? { title: '휴지통을 비울까요?', message: '이 작업은 되돌릴 수 없습니다.', ok: '휴지통 비우기', kind: 'delete' }
-      : { title: `‘${target.name}’을 완전히 삭제할까요?`, message: `${'kind' in target ? '' : '첨부까지 함께 지워지며 '}이 작업은 되돌릴 수 없습니다.`, ok: '완전 삭제', kind: 'delete' });
+      ? { title: '휴지통을 비울까요?', message: '이 작업은 되돌릴 수 없습니다.', kind: 'delete' }
+      : { title: `‘${target.name}’을 완전히 삭제할까요?`, message: `${'kind' in target ? '' : '첨부까지 함께 지워지며 '}이 작업은 되돌릴 수 없습니다.`, kind: 'delete' });
     if (!yes) return;
     if (target === 'all') {
       setBusy(true);

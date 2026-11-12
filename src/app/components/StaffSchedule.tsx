@@ -111,7 +111,7 @@ function Schedule({ month, data, notify }: { month: string; data: Data; notify: 
   const save = async (s: StaffMember, date: string, patch: Partial<AttendanceRecord>, msg = '저장되었습니다', asked = false) => {
     const onlyMemo = Object.keys(patch).every(k => k === 'memo');
     const n = s.is_leader && !onlyMemo && !asked ? staffWithPerf(date) : 0;
-    if (n && !await askConfirm({ title: '팀장 근태를 바꿀까요?', message: `${dayLabelKo(date)} 직원 ${n}명의 관리 실적이 다시 계산돼요.`, ok: '바꾸기' })) return;
+    if (n && !await askConfirm({ title: '팀장 근태를 바꿀까요?', message: `${dayLabelKo(date)} 직원 ${n}명의 관리 실적이 다시 계산돼요.` })) return;
     setBusy(s.id);
     try { await staffPost('/attendance', payloadFor(s, date, recOf(s.id, date), patch)); notify(msg); await data.reload(true); }
     catch (e) { notify(e instanceof Error ? e.message : '저장 실패'); }
@@ -148,7 +148,7 @@ function Schedule({ month, data, notify }: { month: string; data: Data; notify: 
       <div className="sf-dhead"><h3>{dayLabelKo(sel)}</h3>
         <span className="sf-dhead-btns"><button type="button" className="sf-btn" onClick={() => setImporting(true)}>파일로 넣기</button>
         <button type="button" className="sf-btn" onClick={() => setBulk(true)}>일괄 설정</button></span></div>
-      {off && <div className="sf-confirm">병원 휴일로 정해진 날이에요. <button type="button" className="sf-btn" onClick={async () => { if (!await askConfirm({ title: '이 날짜의 휴일을 해제할까요?', message: dayLabelKo(sel), ok: '해제' })) return; try { await staffPost('/day-status', { work_date: sel, clear: true }); await data.reload(true); } catch (e) { notify(e instanceof Error ? e.message : '휴무 해제 실패'); } }}>휴일 해제</button></div>}
+      {off && <div className="sf-confirm">병원 휴일로 정해진 날이에요. <button type="button" className="sf-btn" onClick={async () => { if (!await askConfirm({ title: '이 날짜의 휴일을 해제할까요?', message: dayLabelKo(sel) })) return; try { await staffPost('/day-status', { work_date: sel, clear: true }); await data.reload(true); } catch (e) { notify(e instanceof Error ? e.message : '휴무 해제 실패'); } }}>휴일 해제</button></div>}
       {list.map(s => {
         const rec = recOf(s.id, sel), st = stateOf(rec), locked = isReadonly(s, sel) || off, opts = optionsFor(s);
         if (WORK_STATES.includes(st || '')) working++;
@@ -301,7 +301,7 @@ function BulkDialog({ month, staff, all, onClose, onDone }: { month: string; sta
   const apply = async () => {
     if (!s || !finalSt) return;
     const p = await plan(); if (!p) return;
-    if (!await askConfirm({ title: '일괄 설정을 적용할까요?', message: p.msg, ok: '적용', kind: 'save' })) return;
+    if (!await askConfirm({ title: '일괄 설정을 적용할까요?', message: p.msg, kind: 'save' })) return;
     setRunning(true);
     let ok = 0; const fail: string[] = [];
     for (const d of p.targets) {

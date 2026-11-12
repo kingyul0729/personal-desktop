@@ -82,7 +82,7 @@ export function InvoiceDialog({ tx, rows, notify, onClose, onChange }: { tx: Inv
   return <Modal title={`${Number(tx.date.slice(5, 7))}/${Number(tx.date.slice(8))} ${tx.vendor_name || tx.item_name} 명세서`} onClose={onClose}>
     {photos.length > 0 && <ul className="iv-inv-photos">{photos.map(id => <li key={id}>
       <button type="button" className="iv-inv-thumb" onClick={() => setBig(id)} aria-label="크게 보기"><InvThumb id={id} /></button>
-      <button type="button" className="sf-btn" onClick={async () => { if (await askConfirm({ title: '이 사진을 지울까요?', message: '이 명세서에 걸린 기록에서 모두 빠져요.', ok: '삭제', kind: 'delete' })) void remove(id); }}>삭제</button></li>)}</ul>}
+      <button type="button" className="sf-btn" onClick={async () => { if (await askConfirm({ title: '이 사진을 지울까요?', message: '이 명세서에 걸린 기록에서 모두 빠져요.', kind: 'delete' })) void remove(id); }}>삭제</button></li>)}</ul>}
     {group.length > 1 && <fieldset className="iv-inv-rows"><legend>같은 명세서 · {group.length}건</legend>
       {group.map(r => <label key={r.id} className="iv-check"><input type="checkbox" checked={pick.includes(r.id)} disabled={r.id === tx.id} onChange={e => setPick(p => e.target.checked ? [...p, r.id] : p.filter(x => x !== r.id))} />
         {r.item_name} · {KIND_LABEL[r.kind]} {fmtQty(r.qty)} {r.stock_unit}{(r.amount || 0) > 0 ? ` · ${fmtWon(r.amount)}` : ''}{photosOf(r).length ? ' · 사진 있음' : ''}</label>)}</fieldset>}
@@ -109,7 +109,7 @@ export function TxLog({ notify }: { notify: (m: string) => void }) {
   const [kind, setKind] = useState<'all' | 'in' | 'out'>('all');
   const [rows, setRows] = useState<InvTx[] | null>(null);
   const del = async (t: InvTx) => {
-    if (!await askConfirm({ title: '이 기록을 지울까요?', message: `${Number(t.date.slice(5, 7))}월 ${Number(t.date.slice(8))}일 ${t.item_name} ${KIND_LABEL[t.kind]} ${fmtQty(t.qty)} ${t.stock_unit} · 되돌림: ${effect(t) || '재고 변화 없음'}`, ok: '삭제', kind: 'delete' })) return;
+    if (!await askConfirm({ title: '이 기록을 지울까요?', message: `${Number(t.date.slice(5, 7))}월 ${Number(t.date.slice(8))}일 ${t.item_name} ${KIND_LABEL[t.kind]} ${fmtQty(t.qty)} ${t.stock_unit} · 되돌림: ${effect(t) || '재고 변화 없음'}`, kind: 'delete' })) return;
     try { await invSend('DELETE', `/tx/${t.id}`); notify('기록을 지우고 재고를 되돌렸어요.'); announceInventory(); void load(); } catch (e) { notify(errText(e)); }
   };
   const [inv, setInv] = useState<number | null>(null);
