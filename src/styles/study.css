@@ -83,3 +83,5 @@
 .note-pen-dot i{width:16px;height:16px;border-radius:50%;display:block}
 @media (pointer:coarse){.note-pen-bar button{height:40px}.note-pen-bar .note-pen-dot{width:40px}}
 .study-format-tools .study-ai{display:inline-flex;align-items:center;gap:6px;border-color:#c9d6e3;background:#ecf1f6;color:#44617c;font-weight:600}.study-format-tools .study-ai:disabled{opacity:.7}
+.study-ink-tools button{color:#d0342c}.study-ink-tools button:nth-of-type(2){color:#2b46c8}.study-ink-tools button:nth-of-type(3){background:#f2f2f2;color:#222}
+.note-page .cornell-materials{grid-template-columns:1fr;gap:16px;margin-top:20px}.note-page .note-body>.cornell-materials:first-child{margin-top:0}.note-page .cornell-materials img{max-height:none}

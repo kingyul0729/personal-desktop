@@ -146,6 +146,8 @@ export function StudyArchive({ onDirtyChange, onSubs, goto, onLocation }: { onDi
     if (added.some(file => !/\.(png|jpe?g|webp|pdf)$/i.test(file.name) || file.size > 10 * 1024 * 1024 || !file.size)) { setError('파일당 10MB 이하의 JPG, PNG, WEBP 또는 PDF를 선택해 주세요.'); return; }
     if ([...files, ...added].reduce((sum, file) => sum + file.size, 0) > 25 * 1024 * 1024) { setError('한 번에 추가하는 파일은 총 25MB 이하로 선택해 주세요.'); return; }
     setFiles(current => [...current, ...added]); setError('');
+    // 정리한 노트 사진만 올릴 때: 제목이 비어 있으면 첫 파일 이름으로 채운다(고칠 수 있음)
+    if (added[0]) setEditor(current => current && !current.title.trim() ? { ...current, title: added[0].name.replace(/\.[^.]+$/, '').slice(0, 100) || '노트' } : current);
     if (!editor.title && added[0]) field('title', added[0].name.replace(/\.[^.]+$/, '').slice(0, 100));
   };
   const save = async () => {
@@ -225,7 +227,7 @@ export function StudyArchive({ onDirtyChange, onSubs, goto, onLocation }: { onDi
     status={editor || reading ? undefined : <>{itemCount}개 항목{notice ? ` · ${notice}` : ''}</>} scale={editor || reading ? undefined : scale} onScale={setScale}>
   <div className={`study-archive study-finder${reading && !editor ? ' study-reading' : ''}`} onKeyDown={event => { if (editor && (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') { event.preventDefault(); void save(); } }}>
     <main className="study-main">
-      {error && <div className="study-alert" role="alert">{error}<button onClick={() => void load()} disabled={busy}>목록 새로고침</button></div>}
+      {error && <div className="study-alert" role="alert">{error}{!editor && <button onClick={() => void load()} disabled={busy}>목록 새로고침</button>}</div>}
       {notice && (editor || reading) && <div className="study-notice" role="status"><Check size={16} />{notice}</div>}
       {!ready ? <div className="study-empty"><BookOpen size={32} /><strong>{error ? '보관함을 불러오지 못했어요' : '보관함을 불러오는 중…'}</strong></div>
       : !authenticated ? <div className="study-empty"><img src="/icons/pink-folder-ribbon.png" alt="" /><h2>나만의 공부 기록을 시작해요</h2><p>이미지·PDF와 공부 메모를 저장하고<br />다른 기기에서도 같은 계정으로 열어보세요.</p><a className="study-primary" href="/signin-with-chatgpt?return_to=%2F" target="_top">로그인하고 시작하기</a></div>
