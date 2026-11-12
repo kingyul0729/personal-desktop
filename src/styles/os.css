@@ -2536,3 +2536,82 @@ input[type="date"]::-webkit-date-and-time-value, input[type="month"]::-webkit-da
 .iv-pinv { display: inline-block; font-size: 12px; font-weight: 700; padding: 2px 10px; border-radius: 6px; border: 1px solid #d5dee8; background: #fff; color: #2D3136; white-space: nowrap; font-family: inherit; }
 button.iv-pinv { cursor: zoom-in; }
 .iv-pinv.is-missing { border-color: #f0c9c6; color: #c2504a; }
+/* ───────── 주문·받기 정돈(2026-11-12 사용자 '레이아웃만 정돈'): 기능·색 그대로, 간격 4·8 배수,
+   카드 안 16~20 · 카드 사이 16~24, 탭·입력·버튼 높이 하나(40), 단계 머리 하나, 버튼은 카드 오른쪽 아래 ───────── */
+.sf-wrap .iv-split { --ob-h: 40px; --ob-card: 16px 20px; --ob-line: #e0e6ed; gap: 24px; }
+/* 왼쪽 품목 목록: 목록만 따로 스크롤, 탭 크기 모두 같게, 이름 왼쪽 · 배지 오른쪽 */
+.sf-wrap .iv-split-list { position: sticky; top: 0; max-height: calc(100vh - 200px); display: block; overflow-y: auto; overscroll-behavior: contain; padding: 0 8px 8px; }
+.sf-wrap .iv-split-list .iv-split-count { position: sticky; top: 0; z-index: 1; margin: 0 -8px; padding: 12px 20px 8px; background: #fffefc; }
+.sf-wrap .iv-split-list ul { overflow: visible; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.sf-wrap .iv-split-group + .iv-split-group { margin-top: 8px; padding-top: 8px; border-top: 1px solid #e3e9f0; }
+.sf-wrap .iv-split-gtitle { padding: 8px 12px; }
+.sf-wrap .iv-split-list li button { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; width: 100%; height: 44px; padding: 0 12px; border-radius: 8px; font-size: 14px; font-weight: 400; }
+.sf-wrap .iv-split-list li button[aria-current="true"] { background: var(--sage-bg, #ecf1f6); color: var(--sage-ink, #44617c); font-weight: 600; box-shadow: inset 0 0 0 1px #c9d6e3; }
+.sf-wrap .iv-split-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sf-wrap .iv-split-list li button > .iv-tag { justify-self: end; flex: none; white-space: nowrap; }
+/* 오른쪽: 단계 머리(① 주문 · ② 받기) 같은 크기·간격 */
+.sf-wrap .iv-split-detail { padding: 20px; display: flex; flex-direction: column; gap: 24px; }
+.sf-wrap .iv-d-sec { display: flex; flex-direction: column; gap: 16px; margin: 0; }
+.sf-wrap .iv-d-sec h4, .sf-wrap .iv-recv-head h4 { display: flex; align-items: center; gap: 8px; height: 28px; margin: 0; font-size: 15px; font-weight: 700; color: var(--ui-ink, #2d3136); }
+.sf-wrap .iv-step { margin: 0; width: 24px; height: 24px; font-size: 12px; vertical-align: 0; }
+.sf-wrap .iv-recv-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; }
+.sf-wrap .iv-recv-head .iv-recv-date { width: 200px; margin: 0; }
+/* 카드 하나 기준: 주문 옵션 · 받기 주문 · 업체 보관에서 가져오기 · 증정·행사 · 잔량 고치기 */
+.sf-wrap .iv-d-opts { gap: 16px; border: 0; border-radius: 0; }
+.sf-wrap .iv-d-opts li, .sf-wrap .iv-recv-list li, .sf-wrap .iv-recv-keep, .sf-wrap .iv-recv-extra { margin: 0; padding: var(--ob-card); border: 1px solid var(--ob-line); border-radius: 12px; background: #fff; }
+.sf-wrap .iv-d-opts li + li, .sf-wrap .iv-recv-list li + li { border-top: 1px solid var(--ob-line); }
+.sf-wrap .iv-d-opts li { grid-template-columns: minmax(0, 1fr) auto auto; gap: 16px; min-height: 0; }
+.sf-wrap .iv-d-opts li.is-event { background: #f5f8fb; }
+.sf-wrap .iv-recv-list { display: flex; flex-direction: column; gap: 16px; margin: 0; border: 0; border-radius: 0; }
+.sf-wrap .iv-recv-list li, .sf-wrap .iv-recv-keep { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: end; gap: 12px; }
+.sf-wrap .iv-recv-keep { border-color: #c9d6e3; background: #f5f8fb; }
+.sf-wrap .iv-recv-extra { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: end; gap: 12px; }
+/* 줄 순서: 내용 → 변화 줄 → 명세서 사진(왼쪽) | 버튼(오른쪽) */
+.sf-wrap .iv-recv-list li > *, .sf-wrap .iv-recv-keep > * { grid-column: 1 / -1; }
+.sf-wrap :is(.iv-recv-list li, .iv-recv-keep, .iv-recv-extra) > :is(.iv-recv-calc, .iv-calc) { order: 1; grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 0; padding: 0; font-size: 13px; color: #7D838B; }
+.sf-wrap :is(.iv-recv-list li, .iv-recv-keep, .iv-recv-extra) > .iv-photo-pick { order: 2; grid-column: 1; justify-self: start; }
+.sf-wrap :is(.iv-recv-list li, .iv-recv-keep, .iv-recv-extra) > .iv-recv-acts { order: 3; grid-column: 2; justify-self: end; align-self: end; }
+.sf-wrap .iv-recv-keep > .iv-recv-acts { grid-column: 1 / -1; }
+.sf-wrap .iv-recv-keep > .sf-input { grid-column: 1; }
+.sf-wrap .iv-recv-extra:not(:has(.iv-photo-pick)) > .iv-recv-acts { grid-column: 1 / -1; }
+.sf-wrap .iv-recv-what { display: flex; flex-direction: column; gap: 4px; }
+.sf-wrap .iv-recv-what b { font-size: 15px; font-weight: 700; color: var(--ui-ink, #2d3136); }
+.sf-wrap .iv-recv-what small { font-size: 13px; color: #7D838B; }
+.sf-wrap :is(.iv-recv-one, .iv-recv-two) { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; max-width: none; }
+.sf-wrap .iv-recv-more { margin: 0; justify-content: flex-end; }
+.sf-wrap .iv-recv-note { margin: 0; }
+.sf-wrap .iv-recv-none { margin: 0; }
+/* 결제정보: 라벨 | 값 격자(회색 상자 없이 위아래 얇은 선) */
+.sf-wrap .iv-paybox { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 16px; margin: 0; padding: 12px 0; border-top: 1px solid #eef1f4; border-bottom: 1px solid #eef1f4; font-size: 13px; }
+.sf-wrap .iv-paybox > div { display: grid; grid-template-columns: 76px minmax(0, 1fr); align-items: baseline; gap: 8px; min-width: 0; }
+.sf-wrap .iv-paybox dt { color: #7D838B; white-space: nowrap; }
+.sf-wrap .iv-paybox dd { margin: 0; min-width: 0; color: var(--ui-ink, #2d3136); font-weight: 600; overflow-wrap: anywhere; }
+.sf-wrap .iv-paybox .is-amt dd { font-size: 14px; font-weight: 700; }
+/* 입력·단위·사진·버튼 높이 하나 */
+.sf-wrap .iv-split-detail :is(.sf-input input, .sf-input select, .iv-pair input, .iv-pair select) { height: var(--ob-h); width: 100%; font-size: 15px; }
+.sf-wrap .iv-split-detail .sf-input { display: flex; flex-direction: column; gap: 6px; min-width: 0; margin: 0; }
+.sf-wrap .iv-split-detail .sf-input > span:first-child { font-size: 13px; color: #7D838B; }
+.sf-wrap .iv-split-detail .iv-pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(72px, auto); gap: 8px; }
+.sf-wrap .iv-split-detail .iv-pair select { width: auto; min-width: 72px; }
+.sf-wrap .iv-split-detail .iv-photo-pick { height: var(--ob-h); padding: 0 16px; }
+.sf-wrap .iv-split-detail :is(.iv-recv-acts, .iv-d-opts li) .sf-btn, .sf-wrap .iv-recv-more .sf-btn { height: var(--ob-h); min-width: 80px; padding: 0 16px; }
+.sf-wrap .iv-split-detail .iv-recv-acts { display: flex; gap: 8px; justify-content: flex-end; }
+.sf-wrap .iv-d-opts .sf-btn { width: auto; }
+/* 좁아질 때: 아이패드 세로는 그대로 2칸, 휴대폰 폭은 입력 한 줄씩 · 버튼은 글자 길이만큼 오른쪽 */
+@container sfw (max-width: 760px) {
+  .sf-wrap .iv-split { gap: 16px; }
+  .sf-wrap .iv-split-detail { padding: 16px; gap: 24px; }
+  .sf-wrap .iv-paybox { grid-template-columns: minmax(0, 1fr); }
+}
+@container sfw (max-width: 560px) {
+  .sf-wrap .iv-split-list { position: static; max-height: 280px; }
+}
+@container sfw (max-width: 520px) {
+  .sf-wrap :is(.iv-recv-one, .iv-recv-two), .sf-wrap .iv-recv-extra { grid-template-columns: minmax(0, 1fr); }
+  .sf-wrap .iv-recv-extra > .iv-photo-pick { grid-column: 1; }
+  .sf-wrap .iv-recv-extra > .iv-recv-acts { grid-column: 1; }
+  .sf-wrap .iv-recv-head { flex-wrap: wrap; }
+  .sf-wrap .iv-recv-head .iv-recv-date { width: 100%; }
+  .sf-wrap .iv-d-opts li { grid-template-columns: minmax(0, 1fr) auto auto; gap: 12px; }
+  .sf-wrap .iv-d-opts li .sf-btn { grid-column: auto; justify-self: end; min-width: 64px; }
+}

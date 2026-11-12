@@ -90,11 +90,15 @@ export function OrderBoard({ state, q, notify }: { state: InvState; q: string; n
 export function PayInfo({ vendor, amount }: { vendor: InvVendor | null; amount: number | null }) {
   if (!vendor) return null;
   const bank = /계좌|이체|입금/.test(vendor.payment_method || '');
-  return <div className="iv-paybox">
-    <span>{vendor.payment_method || '결제 방법 —'}</span>
-    {bank && <><span>{vendor.company || vendor.name}</span><span>예금주 <b>{vendor.holder || '—'}</b></span><span>{vendor.bank || '은행 —'} <b>{vendor.account || '—'}</b></span></>}
-    <span>총 결제금액 <b>{fmtWon(amount)}</b></span>
-  </div>;
+  // 라벨 | 값 격자(2026-11-12 사용자 '라벨과 값을 구분하고 일정한 그리드로') — 보이는 정보는 그대로
+  return <dl className="iv-paybox">
+    <div><dt>결제 방법</dt><dd>{vendor.payment_method || '—'}</dd></div>
+    {bank && <><div><dt>업체</dt><dd>{vendor.company || vendor.name}</dd></div>
+      <div><dt>예금주</dt><dd>{vendor.holder || '—'}</dd></div>
+      <div><dt>은행</dt><dd>{vendor.bank || '—'}</dd></div>
+      <div><dt>계좌번호</dt><dd>{vendor.account || '—'}</dd></div></>}
+    <div className="is-amt"><dt>총 결제금액</dt><dd>{fmtWon(amount)}</dd></div>
+  </dl>;
 }
 export function ReceiveHere({ item, orders, today, notify, vendor = null }: { item: InvItem; orders: InvOrder[]; today: string; notify: (m: string) => void; vendor?: InvVendor | null }) {
   const [date, setDate] = useState(today);
