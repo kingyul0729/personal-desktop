@@ -2615,3 +2615,39 @@ button.iv-pinv { cursor: zoom-in; }
   .sf-wrap .iv-d-opts li { grid-template-columns: minmax(0, 1fr) auto auto; gap: 12px; }
   .sf-wrap .iv-d-opts li .sf-btn { grid-column: auto; justify-self: end; min-width: 64px; }
 }
+/* ───────── 주문·받기 시안 확정(2026-11-12 사용자): 검색창 없음 · 왼쪽 목록 폭 최대 260 · 품목마다 테두리 흰 상자 · 업체명 묶음,
+   입력 칸은 글자 길이만큼(200, 둘로 나눌 때 160 — 가로로 늘리지 않음), 넓은 화면은 ① 주문 | ② 받기 나란히 + 제목 같은 줄 ───────── */
+@container sfw (min-width: 561px) { .sf-wrap .iv-split { grid-template-columns: minmax(200px, 260px) minmax(0, 1fr); } }
+.sf-wrap .iv-split-list ul { gap: 8px; padding: 0 4px; }
+.sf-wrap .iv-split-list li button { background: #fff; border: 1px solid #d5dde6; box-shadow: none; }
+.sf-wrap .iv-split-list li button:hover { background: #f5f8fb; }
+.sf-wrap .iv-split-list li button[aria-current="true"] { background: #ecf1f6; border-color: #9fb3c7; box-shadow: none; }
+.sf-wrap .iv-recv-list li, .sf-wrap .iv-recv-keep, .sf-wrap .iv-recv-extra { grid-template-columns: minmax(0, 200px) minmax(0, 200px) 1fr; }
+.sf-wrap :is(.iv-recv-one, .iv-recv-two) { grid-template-columns: repeat(2, minmax(0, 200px)); }
+.sf-wrap :is(.iv-recv-list li, .iv-recv-keep, .iv-recv-extra) > .iv-recv-acts { grid-column: 2 / -1; }
+.sf-wrap .iv-recv-keep > .sf-input { grid-column: 1; }
+.sf-wrap .iv-pp-inputs { grid-template-columns: repeat(2, minmax(0, 200px)); }
+.sf-wrap .iv-d-sec h4, .sf-wrap .iv-recv-head h4 { height: 40px; }
+.sf-wrap .iv-recv-head { align-items: center; }
+.sf-wrap .iv-recv-head .iv-recv-date { flex-direction: row; align-items: center; gap: 8px; width: auto; }
+.sf-wrap .iv-recv-head .iv-recv-date > span:first-child { white-space: nowrap; }
+.sf-wrap .iv-recv-head .iv-recv-date input { width: 160px; }
+@container sfw (min-width: 1000px) {
+  .sf-wrap .iv-split-detail { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); align-items: start; gap: 24px; }
+  .sf-wrap .iv-split-detail > :is(.iv-d-head, .iv-d-stats) { grid-column: 1 / -1; }
+  .sf-wrap .iv-split-detail > .iv-d-sec:not(.iv-recv) { grid-column: 1; }
+  .sf-wrap .iv-split-detail > .iv-recv { grid-column: 2; }
+  .sf-wrap .iv-split-detail .iv-paybox { grid-template-columns: minmax(0, 1fr); }
+  .sf-wrap .iv-recv-list li, .sf-wrap .iv-recv-keep, .sf-wrap .iv-recv-extra { grid-template-columns: minmax(0, 160px) minmax(0, 160px) 1fr; }
+  .sf-wrap :is(.iv-recv-one, .iv-recv-two) { grid-template-columns: repeat(2, minmax(0, 160px)); }
+}
+@container sfw (max-width: 520px) {
+  .sf-wrap .iv-recv-list li, .sf-wrap .iv-recv-keep, .sf-wrap .iv-recv-extra, .sf-wrap :is(.iv-recv-one, .iv-recv-two), .sf-wrap .iv-pp-inputs { grid-template-columns: minmax(0, 1fr); }
+  .sf-wrap :is(.iv-recv-list li, .iv-recv-keep, .iv-recv-extra) > :is(.iv-recv-acts, .iv-photo-pick, .sf-input) { grid-column: 1; }
+  .sf-wrap .iv-recv-head { flex-wrap: wrap; }
+  .sf-wrap .iv-recv-head .iv-recv-date input { width: 100%; }
+}
+/* 증정·행사·잔량 고치기 칸: 입력은 앞 두 칸에만(왼쪽·오른쪽 번갈아), 셋째 칸은 빈 자리 */
+.sf-wrap .iv-recv-extra > .sf-input:nth-of-type(odd) { grid-column: 1; }
+.sf-wrap .iv-recv-extra > .sf-input:nth-of-type(even) { grid-column: 2; }
+@container sfw (max-width: 520px) { .sf-wrap .iv-recv-extra > .sf-input:nth-of-type(n) { grid-column: 1; } }

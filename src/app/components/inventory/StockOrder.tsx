@@ -9,12 +9,12 @@ export function StockOrder() {
   const { state, error, reload } = useInventory();
   const [toast, setToast] = useToast();
   const [tab, setTab] = useState<'order' | 'items'>('order');
-  const [q, setQ] = useState('');
+  const q = ''; // 검색창은 2026-11-12 사용자 요청으로 뺌
   if (error) return <Problem error={error} />;
   if (!state) return <LoadingBox />;
   return <Shell toast={toast}>
     <div className="sf-bar iv-obar"><Seg label="보기" value={tab} onChange={setTab} options={[['order', '주문·받기'], ['items', '품목']]} />
-      {tab === 'order' && <input className="iv-search" type="search" placeholder="품목·거래처 검색" aria-label="품목·거래처 검색" value={q} onChange={e => setQ(e.target.value)} />}</div>
+</div>
     {tab === 'order' ? <OrderBoard state={state} q={q} notify={setToast} /> : <ItemEditor state={state} notify={setToast} onChange={reload} />}
   </Shell>;
 }
@@ -35,8 +35,12 @@ export function OrderBoard({ state, q, notify }: { state: InvState; q: string; n
   const Tag = ({ it }: { it: InvItem }) => { const f = flagOf(it, state.orders); return f ? <FlagTag flag={f} /> : onEvent(it) ? <span className="iv-tag is-event">행사</span> : null; };
   const RANK: Record<Flag, number> = { bringing: 5, wait: 4, low: 3, bring: 2 };
   const rank = (it: InvItem) => { const f = flagOf(it, state.orders); return f ? RANK[f] : 0; };
-  const groups: [string, InvItem[]][] = [['선결제 품목', list.filter(i => i.prepaid)], ['일반 품목', list.filter(i => !i.prepaid)]];
-  for (const g of groups) g[1].sort((x, y) => rank(y) - rank(x));
+  // 목록 묶음(2026-11-12 사용자): 선결제 품목은 맨 위, 나머지는 업체명 가나다순 묶음(업체 없는 품목은 맨 끝 '거래처 없음')
+  const byVendor = new Map<string, InvItem[]>();
+  for (const it of list.filter(i => !i.prepaid)) { const k = it.vendor_name || ''; byVendor.set(k, [...(byVendor.get(k) || []), it]); }
+  const vendorKeys = [...byVendor.keys()].sort((a, b) => (a ? 0 : 1) - (b ? 0 : 1) || a.localeCompare(b, 'ko'));
+  const groups: [string, InvItem[]][] = [['선결제 품목', list.filter(i => i.prepaid)], ...vendorKeys.map(k => [k || '거래처 없음', byVendor.get(k)!] as [string, InvItem[]])];
+  for (const g of groups) g[1].sort((x, y) => rank(y) - rank(x) || x.name.localeCompare(y.name, 'ko'));
   const flat = groups.flatMap(g => g[1]);
   const item = flat.find(it => it.id === pickId) ?? flat[0];
   return <>
@@ -147,7 +151,7 @@ export function ReceiveHere({ item, orders, today, notify, vendor = null }: { it
       {!o.prepaid && (a > 0 || k > 0) && <div className="iv-recv-calc">
         <span>병원재고 {fmtQty(item.hospital_stock)} → <b>{fmtQty(Math.round((item.hospital_stock + a) * 1000) / 1000)}</b></span>
         {k > 0 && <span>업체 보관 {fmtQty(item.vendor_stock)} → <b>{fmtQty(Math.round((item.vendor_stock + k) * 1000) / 1000)}</b></span>}
-        {!(o.received_qty || 0) && <span>결제 <b>{fmtWon(o.amount)}</b> (이번 한 번)</span>}
+        {!(o.received_qty || 0) && <span>결제 <b>{fmtWon(o.amount)}</b></span>}
         {over && <span className="is-warn">남은 수량 {fmtQty(left(o))} {u}보다 많아요</span>}</div>}
       <PhotoPick file={photo[`o${o.id}`]} onPick={f => setPhoto(v => ({ ...v, [`o${o.id}`]: f }))} />
       <div className="iv-recv-acts">
