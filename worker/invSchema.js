@@ -223,6 +223,14 @@ export async function ensureInvSchema(db) {
       await db.prepare(`INSERT OR REPLACE INTO inv_meta (key, value) VALUES ('fixes', ?)`).bind(`${fixes} splitfix1`.trim()).run();
       fixes = `${fixes} splitfix1`.trim();
     }
+    if (!fixes.includes('stopvend1')) {
+      // 2026-11-12 사용자 '이건 우리가 주문 안 해, 필요 없어': 간호팀·셀퓨전씨·에스트라·쿠팡을 거래 중단(보고서·새 주문 목록에서 빠짐, 품목·기록은 그대로, 앱 '업체 정보'에서 재개 가능)
+      await db.batch([
+        db.prepare(`UPDATE inv_vendors SET active = 0 WHERE (id = 9 AND name = '간호팀') OR (id = 10 AND name = '셀퓨전씨') OR (id = 11 AND name = '에스트라') OR (id = 13 AND name = '쿠팡')`),
+        db.prepare(`INSERT OR REPLACE INTO inv_meta (key, value) VALUES ('fixes', ?)`).bind(`${fixes} stopvend1`.trim()),
+      ]);
+      fixes = `${fixes} stopvend1`.trim();
+    }
     if (!fixes.includes('dupfix1') && await claimFix(db, 'dupfix1')) {
       // 2026-11-12 사용자 '이중으로 겹치는데': 처음 요청이 동시에 두 번 들어와 splitfix1이 두 번 돌아 10/22 피부미소 입고 4줄이 두 벌(8줄) 생김.
       // 품목마다 처음 한 줄만 남기고 뒤 줄은 지운 기록으로(명세서 사진 연결은 그대로), 그 줄이 늘린 병원재고만 되돌림 — 그 뒤 센 날 수량은 그대로(keepCountStmts).

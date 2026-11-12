@@ -1042,8 +1042,8 @@ test('user 11-12: prepaid bring-in uses the oldest payment first and shows both 
   const h = rep.payments.find(p => p.name === '하라셀');
   assert.deepEqual([h.when, h.amount, h.pay_dates[0], h.in_dates], ['월말 결제', 450000, '2026-11-30', ['2026-11-06']]);
   assert.equal(h.status, new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 7) > '2026-11' ? '결제 완료' : '결제 예정');
-  assert.equal(rep.payments.find(p => p.name === '쿠팡').status, '결제 없음');
-  assert.equal(rep.payments.find(p => p.name === '쿠팡').when, '결제 시점 미정');
+  assert.equal(rep.payments.find(p => p.name === '닥터슈라클').status, '결제 없음');
+  assert.equal(rep.payments.find(p => p.name === '닥터슈라클').when, '결제 시점 미정');
 });
 
 test('dupfix1: splitfix1 run twice (two first requests at once) — extra 10/22 rows removed, stock back, counted 해면 stays, runs once', async () => {
@@ -1068,4 +1068,13 @@ test('dupfix1: splitfix1 run twice (two first requests at once) — extra 10/22 
   assert.equal(rep.inbound.filter(r => r.date === '2026-10-22' && r.kind === 'in').length, 4);
   await call({ ...e, INV_DB: d1(e.inv) }, '/state');
   assert.equal(live().length, 4);
+});
+
+test('stopvend1: 간호팀·셀퓨전씨·에스트라·쿠팡 stopped — gone from the report payments, items and records stay', async () => {
+  const e = env(); const st = (await call(e, '/state')).data;
+  for (const n of ['간호팀', '셀퓨전씨', '에스트라', '쿠팡']) assert.equal(st.vendors.find(v => v.name === n).active, 0, n);
+  assert.equal(st.vendors.find(v => v.name === '닥터슈라클').active, 1);
+  const names = (await call(e, '/report?month=2026-10')).data.payments.map(p => p.name);
+  for (const n of ['간호팀', '셀퓨전씨', '에스트라', '쿠팡']) assert.ok(!names.includes(n), n);
+  assert.ok(st.items.some(i => i.vendor_name === '쿠팡'));
 });
