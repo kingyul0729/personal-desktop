@@ -18,8 +18,10 @@ export function StockMove() {
   </Shell>;
 }
 
+// 가져간 곳: 메모 앞에 붙여 저장해 입출고 내역의 '팀 · 사유' 줄에 보인다(계산에는 쓰지 않음).
+const OUT_TEAMS = ['피부팀', '간호팀', '고객', '직원구매', '기타'];
 export function OutForm({ state, notify }: { state: InvState; notify: (m: string) => void }) {
-  const [f, setF] = useState({ item: '', qty: '', memo: '', date: state.today });
+  const [f, setF] = useState({ item: '', qty: '', memo: '', date: state.today, team: '피부팀' });
   const [busy, setBusy] = useState(false);
   const item = state.items.find(i => String(i.id) === f.item);
   const qty = Number(f.qty) || 0;
@@ -27,11 +29,12 @@ export function OutForm({ state, notify }: { state: InvState; notify: (m: string
     <div className="iv-row">
       <label className="sf-input"><span>날짜</span><input type="date" value={f.date} onChange={e => setF(x => ({ ...x, date: e.target.value }))} /></label>
       <label className="sf-input"><span>품목</span><ItemSelect items={state.items} value={f.item} onChange={v => setF(x => ({ ...x, item: v }))} /></label>
-      <QtyInput item={item} label="사용 수량" value={f.qty} onChange={v => setF(x => ({ ...x, qty: v }))} />
-      <label className="sf-input"><span>메모</span><input value={f.memo} onChange={e => setF(x => ({ ...x, memo: e.target.value }))} placeholder="예: 피부팀 사용" /></label>
+      <QtyInput item={item} label="수량" value={f.qty} onChange={v => setF(x => ({ ...x, qty: v }))} />
+      <label className="sf-input"><span>가져간 곳</span><select value={f.team} onChange={e => setF(x => ({ ...x, team: e.target.value }))}>{OUT_TEAMS.map(t => <option key={t}>{t}</option>)}</select></label>
+      <label className="sf-input"><span>메모</span><input value={f.memo} onChange={e => setF(x => ({ ...x, memo: e.target.value }))} /></label>
       <button type="button" className="sf-btn is-primary" disabled={!item || !(qty > 0) || busy} onClick={async () => {
         setBusy(true);
-        try { await invSend('POST', '/out', { item_id: item!.id, qty, memo: f.memo, date: f.date }); notify('출고했어요.'); announceInventory(); setF(x => ({ ...x, item: '', qty: '', memo: '' })); }
+        try { await invSend('POST', '/out', { item_id: item!.id, qty, memo: [f.team, f.memo.trim()].filter(Boolean).join(' · '), date: f.date }); notify('출고했어요.'); announceInventory(); setF(x => ({ ...x, item: '', qty: '', memo: '' })); }
         catch (e) { notify(errText(e)); } finally { setBusy(false); }
       }}>{busy && <SavingMark />}출고</button>
     </div>
@@ -100,7 +103,7 @@ export function InvoiceDialog({ tx, rows, notify, onClose, onChange }: { tx: Inv
 // 메모 앞부분이 팀(피부팀·간호팀·고객·직원구매 등)이면 떼어 '업체, 팀' 줄로, 나머지는 '사유' 줄로(2026-11-09 사용자)
 export const splitMemo = (memo?: string | null) => {
   const parts = (memo || '').split(' · ').map(x => x.trim()).filter(Boolean);
-  const team = parts.length && /(팀|구매)$/.test(parts[0]) ? parts.shift()! : '';
+  const team = parts.length && (/(팀|구매)$/.test(parts[0]) || parts[0] === '고객' || parts[0] === '기타') ? parts.shift()! : '';
   return { team, reason: parts.join(' · ').replace('선결제 잔량', '업체 보관 잔량') };
 };
 export const KIND_TONE: Record<string, string> = { in: 'in', out: 'out', prepaid_buy: 'pp', prepaid_in: 'pp', adjust: 'adj' };
