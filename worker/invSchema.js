@@ -223,7 +223,41 @@ export async function ensureInvSchema(db) {
       await db.prepare(`INSERT OR REPLACE INTO inv_meta (key, value) VALUES ('fixes', ?)`).bind(`${fixes} splitfix1`.trim()).run();
       fixes = `${fixes} splitfix1`.trim();
     }
+    if (!fixes.includes('dupfix1') && await claimFix(db, 'dupfix1')) {
+      // 2026-11-12 사용자 '이중으로 겹치는데': 처음 요청이 동시에 두 번 들어와 splitfix1이 두 번 돌아 10/22 피부미소 입고 4줄이 두 벌(8줄) 생김.
+      // 품목마다 처음 한 줄만 남기고 뒤 줄은 지운 기록으로(명세서 사진 연결은 그대로), 그 줄이 늘린 병원재고만 되돌림 — 그 뒤 센 날 수량은 그대로(keepCountStmts).
+      // 같은 이유로 aladdin1의 '주문단위 1개 = 단가' 조건이 두 번 생겼으면 하나만 남김(뒤 것은 목록에서 뺌).
+      try {
+        const rows = (await db.prepare(`SELECT id, item_id, hospital_delta FROM inv_tx WHERE deleted_at IS NULL AND date = '2026-10-22' AND kind = 'in' AND memo = '받기 목록 · 거래명세서대로 나눔' AND created_by = 'system' ORDER BY item_id, id`).all()).results || [];
+        const seen = new Set(), now = Date.now();
+        for (const r of rows) {
+          if (!seen.has(r.item_id)) { seen.add(r.item_id); continue; }
+          const it = await db.prepare('SELECT hospital_stock FROM inv_items WHERE id = ?').bind(r.item_id).first();
+          const keep = await keepCountStmts(db, r.item_id, '2026-10-22', -r.hospital_delta, 'system');
+          const net = keep.length ? 0 : r.hospital_delta; // 뒤에 센 날이 있으면 병원재고는 그 날 수량 그대로
+          if (round3((it?.hospital_stock || 0) - net) < 0) continue; // 0 밑으로 내려가면 손대지 않음
+          await db.batch([...keep,
+            db.prepare(`UPDATE inv_tx SET deleted_at = ?, deleted_by = 'system', memo = memo || ' (두 번 들어간 줄 지움)' WHERE id = ?`).bind(now, r.id),
+            db.prepare('UPDATE inv_items SET hospital_stock = round(hospital_stock - ?, 3), updated_at = ? WHERE id = ?').bind(r.hospital_delta, now, r.item_id)]);
+        }
+        const opts = (await db.prepare(`SELECT id, item_id, label, qty, amount FROM inv_options WHERE active = 1 AND item_id IN (1029, 1030, 1031) ORDER BY item_id, id`).all()).results || [];
+        const seenO = new Set();
+        for (const o of opts) { const k = `${o.item_id}|${o.label}|${o.qty}|${o.amount}`; if (seenO.has(k)) await db.prepare('UPDATE inv_options SET active = 0 WHERE id = ?').bind(o.id).run(); else seenO.add(k); }
+        await db.prepare(`INSERT OR REPLACE INTO inv_meta (key, value) VALUES ('fixes', ?)`).bind(`${fixes} dupfix1`.trim()).run();
+        fixes = `${fixes} dupfix1`.trim();
+      } catch (e) { console.error('dupfix1', e); }
+    }
   }
   ready = db;
 }
+// 한 번 고치기를 동시에 두 요청이 돌리지 않게(처음 요청이 겹치면 같은 고치기가 두 번 돌던 문제): inv_meta에 자리를 먼저 잡은 요청만 실행, 1분 넘게 안 끝나면 다시 잡을 수 있음
+async function claimFix(db, name) {
+  const key = `lock_${name}`, now = Date.now();
+  const r = await db.prepare('INSERT OR IGNORE INTO inv_meta (key, value) VALUES (?, ?)').bind(key, String(now)).run();
+  if (r?.meta?.changes) return true;
+  const cur = await db.prepare('SELECT value FROM inv_meta WHERE key = ?').bind(key).first();
+  if (cur && now - Number(cur.value) > 60000) { const u = await db.prepare('UPDATE inv_meta SET value = ? WHERE key = ? AND value = ?').bind(String(now), key, cur.value).run(); return !!u?.meta?.changes; }
+  return false;
+}
+const round3 = n => Math.round(n * 1000) / 1000;
 export const resetInvSchemaCache = () => { ready = null; };

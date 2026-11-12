@@ -1045,3 +1045,27 @@ test('user 11-12: prepaid bring-in uses the oldest payment first and shows both 
   assert.equal(rep.payments.find(p => p.name === '쿠팡').status, '결제 없음');
   assert.equal(rep.payments.find(p => p.name === '쿠팡').when, '결제 시점 미정');
 });
+
+test('dupfix1: splitfix1 run twice (two first requests at once) — extra 10/22 rows removed, stock back, counted 해면 stays, runs once', async () => {
+  const e = env(); await call(e, '/state');
+  const sp = item(e, '일회용해면');
+  await call(e, '/daily', 'POST', { date: '2026-10-21', closing: { [sp.id]: 2 } });
+  await call(e, '/daily', 'POST', { date: '2026-10-26', closing: { [sp.id]: 35 } });
+  const cut = item(e, '절단솜4x6');
+  const lump = () => e.inv.prepare(`INSERT INTO inv_tx (date, kind, item_id, qty, bonus_qty, amount, hospital_delta, vendor_delta, invoice, memo, created_by, created_at) VALUES ('2026-10-22', 'in', ?, 0, 0, 67500, 0, 0, 1, '받기 목록: 절단솜 4×6 외 3건(4개 품목) · 품목별 수량 확인 필요', '예전 앱', 1)`).run(cut.id);
+  const before = Object.fromEntries(['거즈30x35', '절단솜4x6', '비절단솜4x30'].map(n => [n, item(e, n).hospital_stock]));
+  // splitfix1을 두 번 돌린 상태 만들기: 한 번 돌고, 같은 묶음 한 줄이 또 있는 채로 한 번 더(dupfix1은 막아 둠)
+  const fx = f => e.inv.prepare(`UPDATE inv_meta SET value = ? WHERE key = 'fixes'`).run(f(e.inv.prepare(`SELECT value FROM inv_meta WHERE key = 'fixes'`).get().value));
+  lump(); fx(v => v.replaceAll('splitfix1', '').replaceAll('dupfix1', '') + ' dupfix1'); await call({ ...e, INV_DB: d1(e.inv) }, '/state');
+  lump(); fx(v => v.replace('splitfix1', '')); await call({ ...e, INV_DB: d1(e.inv) }, '/state');
+  assert.equal(e.inv.prepare(`SELECT count(*) AS n FROM inv_tx WHERE deleted_at IS NULL AND date = '2026-10-22' AND kind = 'in'`).get().n, 8);
+  fx(v => v.replaceAll('dupfix1', '')); e.inv.prepare(`DELETE FROM inv_meta WHERE key = 'lock_dupfix1'`).run(); await call({ ...e, INV_DB: d1(e.inv) }, '/state');
+  const live = () => e.inv.prepare(`SELECT i.name, t.qty, t.amount FROM inv_tx t JOIN inv_items i ON i.id = t.item_id WHERE t.deleted_at IS NULL AND t.date = '2026-10-22' AND t.kind = 'in' ORDER BY t.id`).all().map(r => ({ ...r }));
+  assert.deepEqual(live(), [{ name: '일회용해면', qty: 60, amount: 270000 }, { name: '거즈30x35', qty: 2, amount: 13000 }, { name: '절단솜4x6', qty: 5, amount: 42500 }, { name: '비절단솜4x30', qty: 1, amount: 8500 }]);
+  assert.equal(item(e, '일회용해면').hospital_stock, 35);
+  for (const [n, q] of [['거즈30x35', 2], ['절단솜4x6', 5], ['비절단솜4x30', 1]]) assert.equal(item(e, n).hospital_stock, before[n] + q, n);
+  const rep = (await call(e, '/report?month=2026-10')).data;
+  assert.equal(rep.inbound.filter(r => r.date === '2026-10-22' && r.kind === 'in').length, 4);
+  await call({ ...e, INV_DB: d1(e.inv) }, '/state');
+  assert.equal(live().length, 4);
+});
