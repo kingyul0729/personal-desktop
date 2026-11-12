@@ -223,6 +223,14 @@ export async function ensureInvSchema(db) {
       await db.prepare(`INSERT OR REPLACE INTO inv_meta (key, value) VALUES ('fixes', ?)`).bind(`${fixes} splitfix1`.trim()).run();
       fixes = `${fixes} splitfix1`.trim();
     }
+    if (!fixes.includes('paytime2')) {
+      // 2026-11-12 사용자: 피부미소는 월말 결제(보고서 시안에서 결제 예정으로 지정). 앱에서 이미 고른 값은 그대로.
+      await db.batch([
+        db.prepare(`UPDATE inv_vendors SET pay_timing = 'month' WHERE id = 5 AND name = '피부미소' AND pay_timing IS NULL`),
+        db.prepare(`INSERT OR REPLACE INTO inv_meta (key, value) VALUES ('fixes', ?)`).bind(`${fixes} paytime2`.trim()),
+      ]);
+      fixes = `${fixes} paytime2`.trim();
+    }
     if (!fixes.includes('stopvend1')) {
       // 2026-11-12 사용자 '이건 우리가 주문 안 해, 필요 없어': 간호팀·셀퓨전씨·에스트라·쿠팡을 거래 중단(보고서·새 주문 목록에서 빠짐, 품목·기록은 그대로, 앱 '업체 정보'에서 재개 가능)
       await db.batch([

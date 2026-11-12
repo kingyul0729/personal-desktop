@@ -1041,7 +1041,8 @@ test('user 11-12: prepaid bring-in uses the oldest payment first and shows both 
   const rep = (await call(e, '/report?month=2026-11')).data;
   const h = rep.payments.find(p => p.name === '하라셀');
   assert.deepEqual([h.when, h.amount, h.pay_dates[0], h.in_dates], ['월말 결제', 450000, '2026-11-30', ['2026-11-06']]);
-  assert.equal(h.status, new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 7) > '2026-11' ? '결제 완료' : '결제 예정');
+  assert.equal(h.status, '결제 예정');
+  assert.deepEqual(h.lines.map(l => [l.date, l.qty, l.note]), [['2026-11-05', 300, '선결제'], ['2026-11-06', 300, '업체 보관에서 입고']]);
   assert.equal(rep.payments.find(p => p.name === '닥터슈라클').status, '결제 없음');
   assert.equal(rep.payments.find(p => p.name === '닥터슈라클').when, '결제 시점 미정');
 });

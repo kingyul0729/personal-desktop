@@ -894,21 +894,25 @@ async function monthReport(db, month, brief = false) {
   if (brief) return out;
   // 결제 내역(2026-11-12 사용자: 원장님 제출용, 모든 업체를 결제 시점별로 · 결제 상태는 자동 — 주문 시 = 결제 완료, 월말 = 그 달 말까지 결제 예정 → 다음 달부터 결제 완료)
   const prepaidPays = await all(db, `SELECT i.vendor_id, t.amount, t.date AS pay_date FROM inv_tx t JOIN inv_items i ON i.id = t.item_id WHERE t.deleted_at IS NULL AND t.kind = 'prepaid_buy' AND t.amount > 0 AND t.date BETWEEN ? AND ?`, from, to);
-  const ins = await all(db, `SELECT i.vendor_id, t.date, t.item_id FROM inv_tx t JOIN inv_items i ON i.id = t.item_id WHERE t.deleted_at IS NULL AND t.cancelled_at IS NULL AND t.daily_date IS NULL AND t.kind IN ('in','prepaid_in') AND t.date BETWEEN ? AND ?`, from, to);
+  // 병원으로 들어온 물건(0원·업체 보관에서 입고 포함) + 선결제 결제 — 업체별 표의 품목 줄(2026-11-12 사용자 '그 달에 거래한 업체는 무조건, 0원도 표시')
+  const ins = await all(db, `SELECT i.vendor_id, t.id, t.date, t.item_id, t.kind, t.qty, t.bonus_qty, t.vendor_delta, i.name AS item_name, i.stock_unit FROM inv_tx t JOIN inv_items i ON i.id = t.item_id
+    WHERE t.deleted_at IS NULL AND t.cancelled_at IS NULL AND t.daily_date IS NULL AND (t.kind IN ('in','prepaid_in') OR (t.kind = 'prepaid_buy' AND t.vendor_delta > 0)) AND t.date BETWEEN ? AND ? ORDER BY t.date, t.id`, from, to);
   const byVendor = new Map();
   for (const r of [...pays, ...prepaidPays]) { const k = r.vendor_id ?? 0; const b = byVendor.get(k) || { amount: 0, dates: new Set() }; b.amount += r.amount || 0; b.dates.add(r.pay_date); byVendor.set(k, b); }
   const allV = await all(db, 'SELECT id, name, company, payment_method, pay_timing, bank, account, holder, active FROM inv_vendors ORDER BY sort, id');
   const lastDay = new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0)).toISOString().slice(0, 10);
-  const closed = month < kstToday().slice(0, 7);
   const WHEN = { order: '주문 시 결제', month: '월말 결제' };
   const rowsOf = v => {
     const b = byVendor.get(v.id ?? 0), timing = timingOf(v), amount = b?.amount || 0;
-    const vin = ins.filter(r => (r.vendor_id ?? 0) === (v.id ?? 0));
+    const mine = ins.filter(r => (r.vendor_id ?? 0) === (v.id ?? 0)), vin = mine.filter(r => r.kind !== 'prepaid_buy');
     const bank = /계좌|이체|입금/.test(v.payment_method || '');
     return { vendor_id: v.id ?? 0, name: v.name, company: v.company || null, payment_method: v.payment_method, timing, when: WHEN[timing] || '결제 시점 미정', amount,
       pay_dates: !amount ? [] : timing === 'month' ? [lastDay] : [...b.dates].sort(),
       in_dates: [...new Set(vin.map(r => r.date))].sort(), in_items: new Set(vin.map(r => r.item_id)).size,
-      status: !amount ? '결제 없음' : timing === 'order' ? '결제 완료' : timing === 'month' ? (closed ? '결제 완료' : '결제 예정') : '—',
+      // 원장님 보고용 표기(2026-11-12 사용자): 주문 시 결제 = 결제 완료, 월말 결제 = '이달 말까지 결제 예정'(날짜가 지나도 보고서 표기는 그대로)
+      status: !amount ? '결제 없음' : timing === 'order' ? '결제 완료' : timing === 'month' ? '결제 예정' : '—',
+      lines: mine.map(r => ({ date: r.date, item: r.item_name, qty: r.kind === 'prepaid_buy' ? r.vendor_delta : round(r.qty + (r.kind === 'in' ? r.bonus_qty || 0 : 0)), unit: r.stock_unit,
+        note: r.kind === 'prepaid_buy' ? '선결제' : r.kind === 'prepaid_in' ? '업체 보관에서 입고' : r.kind === 'in' && r.vendor_delta > 0 ? `업체 보관 ${fmtNum(r.vendor_delta)}` : null })),
       ...(bank ? { holder: v.holder || null, bank: v.bank || null, account: v.account || null } : {}) };
   };
   out.payments = [...allV.filter(v => v.active || byVendor.has(v.id)).map(rowsOf), ...(byVendor.has(0) ? [rowsOf({ id: 0, name: '업체 미지정', payment_method: null })] : [])];

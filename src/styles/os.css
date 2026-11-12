@@ -2516,3 +2516,20 @@ input[type="date"]::-webkit-date-and-time-value, input[type="month"]::-webkit-da
 .sf-wrap .iv-opt-table td.iv-period b { display: inline-block; margin-left: 0; }
 .sf-wrap .iv-opt-table .iv-icon-btn { width: 32px; height: 32px; }
 .iv-opt-table small.iv-period { display: block; margin-top: 2px; font-size: 12px; color: #7D838B; }
+/* 월말보고 입고·결제 내역(2026-11-12 사용자 시안 5): 칸마다 선 있는 보고서 표, 칸 색칠 없음 — 금액 굵게·상태 작은 태그(결제 완료 연초록 · 결제 예정 연핑크), 계좌입금 줄 연핑크, 머리·합계 줄 연그레이 */
+.iv-form-tbl { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 620px; background: #fff; }
+.iv-form-tbl th, .iv-form-tbl td { border: 1px solid #b9bec5; padding: 8px 10px; vertical-align: middle; }
+.iv-form-tbl th { background: #f1f2f4; font-weight: 700; color: #2D3136; text-align: center; white-space: nowrap; }
+.iv-form-tbl .c { text-align: center; }
+.iv-form-tbl .num { text-align: right; white-space: nowrap; }
+.iv-form-tbl .w-no { width: 44px; }
+.iv-form-tbl tr.is-total th, .iv-form-tbl tr.is-total td { background: #f1f2f4; }
+.iv-form-tbl tr.is-bank td { background: #fdf2f5; }
+.iv-form-tbl .iv-pamt { font-size: 14px; color: #1f2328; }
+.iv-form-tbl td.is-done { color: #3f7a58; font-weight: 700; }
+.iv-form-tbl td.is-due { color: #b24a6b; font-weight: 700; }
+.iv-pstate { display: inline-block; margin-top: 4px; padding: 2px 12px; border-radius: 999px; font-size: 12px; font-weight: 700; white-space: nowrap; }
+.iv-pstate.is-done { background: #e6f2ea; color: #3f7a58; }
+.iv-pstate.is-due { background: #fbe9ee; color: #b24a6b; }
+.iv-paysub { margin: 20px 0 8px; font-size: 14px; font-weight: 800; }
+.iv-paysub::before { content: '■ '; color: #3a3f45; }

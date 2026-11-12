@@ -249,11 +249,12 @@ test('2027-01 가상 운영', async t => {
     assert.equal(pay('하라셀').when, '월말 결제'); assert.equal(pay('하라셀').amount, 450000);
     assert.equal(pay('더마소드').when, '주문 시 결제'); assert.equal(pay('더마소드').amount, cardOrder.amount);
     // 결제 시점(2026-11-12 사용자): 중외 = 주문 시 결제, 피부미소는 아직 안 정함(결제 시점 미정 — 입고일 달에 셈), 하라셀 = 월말
-    assert.equal(pay('중외').when, '주문 시 결제'); assert.equal(pay('피부미소').when, '결제 시점 미정');
+    assert.equal(pay('중외').when, '주문 시 결제'); assert.equal(pay('피부미소').when, '월말 결제'); // 피부미소 = 월말(2026-11-12 사용자)
     for (const n of ['피부미소', '중외']) assert.ok('holder' in pay(n) && 'bank' in pay(n) && 'account' in pay(n), n);
-    assert.equal(pay('하라셀').status, '결제 완료'); assert.equal(pay('더마소드').status, '결제 완료'); // 1월 보고서를 2/1에 봄 → 월말 결제도 완료
+    assert.equal(pay('하라셀').status, '결제 예정'); assert.equal(pay('더마소드').status, '결제 완료'); // 원장님 보고용 표기: 월말 결제 = 결제 예정(날짜 지나도)
     assert.deepEqual(pay('하라셀').pay_dates, ['2027-01-31']);
-    assert.equal(rep.pay_done + rep.payments.filter(x => x.status === '—').reduce((a, x) => a + x.amount, 0), rep.spend_total);
+    assert.equal(rep.pay_done + rep.pay_due + rep.payments.filter(x => x.status === '—').reduce((a, x) => a + x.amount, 0), rep.spend_total);
+    assert.ok(rep.payments.every(x => (x.lines || []).every(l => l.date >= '2027-01-01' && l.date <= '2027-01-31')));
     assert.equal(rep.payments.length, 12); // 거래 중인 업체 모두 표시(간호팀·셀퓨전씨·에스트라·쿠팡은 거래 중단 — 2026-11-12 사용자)
     assert.ok(!('account' in pay('더마소드')));
     assert.equal(pay('피부미소').amount, 45000); // 입고를 취소해도 결제는 그대로
