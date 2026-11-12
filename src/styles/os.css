@@ -2710,3 +2710,10 @@ button.iv-pinv { cursor: zoom-in; }
 .sf-wrap .iv-recv-head { min-height: 44px; }
 .sf-wrap .iv-split-list li button[aria-current="true"] { background: #f2f6fa; border-color: var(--ln, #e3e8ee); color: inherit; }
 .sf-wrap .iv-split-list li button[aria-current="true"] .iv-split-name { color: var(--ink, #2d3136); }
+
+/* 연말 보고 표(2026-11-12): 아이패드 세로에서 표가 카드보다 넓어 '월'·'업체' 칸이 옆으로 밀려 잘리던 것 → 좁은 폭에서는 칸 사이 여백을 줄여 한 화면에 다 보이게 */
+@container sfw (max-width: 900px) {
+  .sf-wrap .iv-year th, .sf-wrap .iv-year td { padding-left: 8px; padding-right: 8px; }
+  .sf-wrap .iv-year th:first-child, .sf-wrap .iv-year td:first-child { padding-left: 4px; }
+  .sf-wrap .iv-year th:last-child, .sf-wrap .iv-year td:last-child { padding-right: 4px; }
+}
