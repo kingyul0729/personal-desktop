@@ -181,7 +181,7 @@ test('AI organize needs a key, limits size, and returns only the model text', as
     const ok = await call(env, path2, { method: 'POST', body: { text: '정규화는 분해하는 과정' } });
     assert.equal(ok.status, 200); assert.equal(ok.data.text, '1) 정규화\n- 분해하는 과정');
     assert.equal(sent.url, 'https://api.anthropic.com/v1/messages'); assert.equal(sent.init.headers['x-api-key'], 'test-key');
-    assert.equal(sent.body.model, 'claude-haiku-5-5'); assert.match(sent.body.messages[0].content, /정규화는 분해하는 과정/);
+    assert.equal(sent.body.model, 'claude-opus-5-5'); assert.match(sent.body.messages[0].content, /정규화는 분해하는 과정/);
     globalThis.fetch = async () => new Response(JSON.stringify({ error: { type: 'authentication_error' } }), { status: 401 });
     assert.equal((await call(env, path2, { method: 'POST', body: { text: '글' } })).status, 502);
     assert.equal((await call(env, path2, { method: 'POST', body: { text: '글' }, owner: '' })).status, 401);

@@ -21,7 +21,7 @@ function mimeOf(bytes) {
   return null;
 }
 // AI 정리(2026-11-12 사용자 선택): 수정 화면의 본문을 외부 AI(Anthropic Messages API)로 보내 노트 양식으로 다시 적어 받는다.
-// 키는 Cloudflare 비밀 값 ANTHROPIC_API_KEY(저장소에 적지 않음), 모델은 STUDY_AI_MODEL(없으면 claude-haiku-5-5). 받은 글은 화면 본문 칸에만 넣고 저장은 사용자가 한다.
+// 키는 Cloudflare 비밀 값 ANTHROPIC_API_KEY(저장소에 적지 않음), 모델은 STUDY_AI_MODEL(없으면 claude-opus-5-5 — 2026-11-12 사용자 선택). 받은 글은 화면 본문 칸에만 넣고 저장은 사용자가 한다.
 const ORGANIZE_RULES = `너는 개인 공부 노트를 정리하는 편집자다. 사용자가 붙여 넣은 글을 아래 노트 양식의 일반 텍스트로 다시 적는다.
 
 양식(줄 맨 앞 표시만 쓴다. 마크다운 #, 코드 블록, 머리말·맺음말·설명 문장은 쓰지 않는다)
@@ -48,7 +48,7 @@ async function organize(request, env) {
   try {
     response = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST', signal: AbortSignal.timeout(120000),
       headers: { 'content-type': 'application/json', 'x-api-key': env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
-      body: JSON.stringify({ model: env.STUDY_AI_MODEL || 'claude-haiku-5-5', max_tokens: 16000, system: ORGANIZE_RULES, messages: [{ role: 'user', content: `<글>\n${text}\n</글>` }] }) });
+      body: JSON.stringify({ model: env.STUDY_AI_MODEL || 'claude-opus-5-5', max_tokens: 16000, system: ORGANIZE_RULES, messages: [{ role: 'user', content: `<글>\n${text}\n</글>` }] }) });
   } catch (error) { console.error('study organize failed', error); return json({ error: 'AI에 연결하지 못했어요. 잠시 후 다시 해 주세요.' }, 502); }
   const data = await response.json().catch(() => null);
   if (!response.ok) { console.error('study organize rejected', response.status, data?.error?.type); return json({ error: response.status === 401 ? 'AI 키를 확인해 주세요.' : response.status === 429 ? 'AI 사용량이 많아요. 잠시 후 다시 해 주세요.' : 'AI가 정리하지 못했어요. 잠시 후 다시 해 주세요.' }, 502); }
