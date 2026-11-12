@@ -15,6 +15,7 @@ import { StockCheck, StockMove, StockOrder, StockReport } from './components/Inv
 import { activeWindow, desktopReducer, initialDesktop, type WindowId } from './desktopState';
 import { DesktopProvider, useDesktop } from './useDesktop';
 import { DesktopNotice, LoadingBox } from './components/Feedback';
+import { AlertHost } from './components/AlertDialog';
 
 // 앱 화면은 Finder 창 하나: 왼쪽 메뉴 + 오른쪽(도구 막대·내용·경로·상태). 떠다니는 창·작업표시줄은 없다.
 // 한 번 연 화면은 숨겨 두기만 해서 메뉴를 오가도 입력 중인 내용(계산기 등)이 남는다.
@@ -40,6 +41,7 @@ export default function App() {
   const [desktop, dispatch] = useReducer(desktopReducer, initialDesktop, state => desktopReducer(state, { type: 'open', id: HOME }));
   return <DesktopProvider openWindow={(id) => dispatch({ type: 'open', id })}>
     <AppShell desktop={desktop} dispatch={dispatch} />
+    <AlertHost />
   </DesktopProvider>;
 }
 

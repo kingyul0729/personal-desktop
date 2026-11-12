@@ -2651,3 +2651,62 @@ button.iv-pinv { cursor: zoom-in; }
 .sf-wrap .iv-recv-extra > .sf-input:nth-of-type(odd) { grid-column: 1; }
 .sf-wrap .iv-recv-extra > .sf-input:nth-of-type(even) { grid-column: 2; }
 @container sfw (max-width: 520px) { .sf-wrap .iv-recv-extra > .sf-input:nth-of-type(n) { grid-column: 1; } }
+/* ───────── 확인 팝업(2026-11-12 사용자가 macOS '휴지통 비우기' 알림으로 지정, `AlertDialog`): 묻기·삭제·마지막 저장 확인 공통 ───────── */
+.mac-alert-back { position: fixed; inset: 0; z-index: 9000; display: grid; place-items: center; padding: 16px; background: rgba(30, 34, 40, .18); }
+.mac-alert { width: min(280px, 100%); display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 20px 16px 16px; border-radius: 14px; background: rgba(242, 242, 244, .97); -webkit-backdrop-filter: blur(20px) saturate(1.4); backdrop-filter: blur(20px) saturate(1.4); box-shadow: 0 0 0 .5px rgba(0, 0, 0, .18), 0 18px 48px rgba(0, 0, 0, .22); text-align: center; animation: mac-alert-in .16s ease-out; font-family: inherit; }
+.mac-alert-icon { display: grid; place-items: center; width: 56px; height: 56px; margin-bottom: 4px; border-radius: 14px; background: #fff; color: #557591; box-shadow: 0 1px 2px rgba(0, 0, 0, .08); }
+.mac-alert-icon.is-delete { color: #6b7179; }
+.mac-alert strong { font-size: 14px; line-height: 19px; font-weight: 700; color: #1f2328; word-break: keep-all; }
+.mac-alert p { margin: 0; font-size: 12px; line-height: 17px; color: #4d535b; word-break: keep-all; }
+.mac-alert-btns { width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+.mac-alert-btns button { height: 32px; border: 0; border-radius: 8px; font: inherit; font-size: 13px; font-weight: 500; cursor: pointer; background: #dcdde0; color: #1f2328; }
+.mac-alert-btns button:hover { filter: brightness(.97); }
+.mac-alert-btns button.is-primary { background: #557591; color: #fff; }
+.mac-alert-btns button.is-danger { background: #557591; color: #fff; }
+.mac-alert-btns button:focus-visible { outline: 3px solid rgba(85, 117, 145, .45); outline-offset: 1px; }
+@keyframes mac-alert-in { from { opacity: 0; transform: scale(.96); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .mac-alert { animation: none; } }
+/* ───────── 재고주문 다듬기(2026-11-12 사용자: 목록 위·아래 여백 같게 · 입고 필요 색 강조 · 고른 품목 연하게 · 숫자/단위 대비 · 간격 8 배수 · 선 하나) ───────── */
+/* 목록 상자: 위·아래 여백 같게(16) — 내용 칸 높이 = 화면 − 100 */
+@container sfw (min-width: 561px) { .sf-wrap .iv-split-list { position: sticky; top: 16px; height: calc(100dvh - 132px); max-height: none; } }
+/* 입고 필요 = 진한 청회색 채움 */
+.sf-wrap .iv-tag.is-bring { background: #557591; color: #fff; border-color: #557591; box-shadow: none; }
+/* 고른 품목 = 연한 바탕만 */
+.sf-wrap .iv-split-list li button[aria-current="true"] { background: #f2f6fa; border-color: #d5dde6; color: inherit; font-weight: 400; }
+/* 재고주문 다듬기(시안): 간격 8 배수 · 선 하나(#e3e8ee) · 글자 위계 */
+.sf-wrap .iv-split { --ln: #e3e8ee; --sub: #8a9099; --ink: #2d3136; gap: 24px; }
+/* 왼쪽 목록 */
+.sf-wrap .iv-split-list { border-color: var(--ln); }
+.sf-wrap .iv-split-list ul { gap: 8px; padding: 0 8px; }
+.sf-wrap .iv-split-gtitle { padding: 16px 12px 8px; font-size: 12px; font-weight: 700; letter-spacing: .02em; color: #557591; }
+.sf-wrap .iv-split-group + .iv-split-group { margin-top: 8px; padding-top: 0; border-top: 0; }
+.sf-wrap .iv-split-list li button { height: 56px; padding: 0 12px 0 16px; border: 1px solid var(--ln); border-radius: 10px; display: flex; align-items: center; gap: 8px; }
+.sf-wrap .iv-split-text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.sf-wrap .iv-split-name { font-size: 14px; font-weight: 600; line-height: 20px; color: var(--ink); }
+.sf-wrap .iv-split-sub { font-size: 12px; font-weight: 400; line-height: 16px; color: var(--sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sf-wrap .iv-split-list li button > .iv-tag { flex: none; }
+/* 오른쪽 */
+.sf-wrap .iv-split-detail { padding: 24px; gap: 32px; border-color: var(--ln); }
+.sf-wrap .iv-d-stats { padding: 20px 0; background: #f5f7fa; border-radius: 12px; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); }
+.sf-wrap .iv-d-stats > div { gap: 8px; padding: 0 16px; }
+.sf-wrap .iv-d-stats > div + div { border-left: 1px solid var(--ln); }
+.sf-wrap .iv-d-stats dt { font-size: 12px; font-weight: 500; color: var(--sub); }
+.sf-wrap .iv-d-stats dd { display: flex; align-items: baseline; gap: 4px; font-size: 14px; }
+.sf-wrap .iv-d-stats .iv-num { font-size: 22px; line-height: 28px; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; }
+.sf-wrap .iv-d-stats dd.is-low .iv-num { color: #c2504a; }
+.sf-wrap .iv-d-stats .iv-unit { font-size: 13px; font-weight: 500; color: var(--sub); }
+.sf-wrap .iv-d-sec { gap: 16px; }
+.sf-wrap :is(.iv-d-opts li, .iv-recv-list li, .iv-recv-keep, .iv-recv-extra) { padding: 24px; border-color: var(--ln); border-radius: 12px; row-gap: 16px; }
+.sf-wrap .iv-recv { gap: 16px; }
+.sf-wrap .iv-paybox { padding: 16px 0; gap: 10px 16px; border-color: var(--ln); }
+.sf-wrap .iv-split-detail .sf-input { gap: 8px; }
+.sf-wrap .iv-split-detail .sf-input > span:first-child { font-size: 12px; font-weight: 500; color: var(--sub); line-height: 16px; }
+.sf-wrap .iv-split-detail :is(.sf-input input, .sf-input select, .iv-pair input, .iv-pair select) { height: 44px; border-radius: 8px; border-color: #d9dfe6; padding: 0 14px; }
+.sf-wrap .iv-split-detail .iv-photo-pick, .sf-wrap .iv-split-detail :is(.iv-recv-acts, .iv-d-opts li) .sf-btn, .sf-wrap .iv-recv-more .sf-btn { height: 44px; padding: 0 20px; border-radius: 8px; }
+.sf-wrap :is(.iv-recv-list li, .iv-recv-keep, .iv-recv-extra) > :is(.iv-photo-pick, .iv-recv-acts) { align-self: center; }
+.sf-wrap .iv-recv-calc { padding: 4px 0; }
+.sf-wrap .iv-d-stats .iv-unit { background: none; padding: 0; border: 0; box-shadow: none; }
+.sf-wrap .iv-d-sec h4, .sf-wrap .iv-recv-head h4 { height: 44px; }
+.sf-wrap .iv-recv-head { min-height: 44px; }
+.sf-wrap .iv-split-list li button[aria-current="true"] { background: #f2f6fa; border-color: var(--ln, #e3e8ee); color: inherit; }
+.sf-wrap .iv-split-list li button[aria-current="true"] .iv-split-name { color: var(--ink, #2d3136); }

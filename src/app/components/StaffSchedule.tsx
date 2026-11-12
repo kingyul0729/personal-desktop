@@ -1,3 +1,4 @@
+import { askConfirm } from './AlertDialog';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { LoadingBox, SavingMark } from './Feedback';
@@ -98,7 +99,6 @@ function Schedule({ month, data, notify }: { month: string; data: Data; notify: 
   const [busy, setBusy] = useState<number | null>(null);
   const [bulk, setBulk] = useState(false);
   const [importing, setImporting] = useState(false);
-  const [confirmClear, setConfirmClear] = useState(false);
   const { staff, all, cum } = data;
   const recOf = useCallback((sid: number, date: string) => (all[sid]?.attendance || []).find(r => r.work_date === date) || null, [all]);
   const leader = staff.find(s => s.is_leader);
@@ -107,13 +107,11 @@ function Schedule({ month, data, notify }: { month: string; data: Data; notify: 
   const isHoliday = (date: string) => isRedDay(date) || clinicOff(date) || (!!leader && ['공휴일', '병원휴무'].includes(recOf(leader.id, date)?.attendance || ''));
 
   // 성과는 팀장 기준이라 팀장 근태를 바꾸면 그날 직원 성과도 바뀐다 — 직원 실적이 이미 있는 날이면 먼저 묻는다(2026-11-08 사용자 요청)
-  const [pending, setPending] = useState<{ text: string; run: () => void } | null>(null);
   const staffWithPerf = (date: string) => staff.filter(x => !x.is_leader && (() => { const r = recOf(x.id, date); return !!r && (r.managed_count != null || r.designated_count != null); })()).length;
   const save = async (s: StaffMember, date: string, patch: Partial<AttendanceRecord>, msg = '저장되었습니다', asked = false) => {
     const onlyMemo = Object.keys(patch).every(k => k === 'memo');
     const n = s.is_leader && !onlyMemo && !asked ? staffWithPerf(date) : 0;
-    if (n) { setPending({ text: `${dayLabelKo(date)}에 직원 ${n}명의 관리 실적이 있어요. 성과는 팀장 기준이라 팀장 근태를 바꾸면 이 날 직원 근무시간·관리수가 다시 계산돼요. 바꿀까요?`, run: () => void save(s, date, patch, msg, true) }); return; }
-    setPending(null);
+    if (n && !await askConfirm({ title: '팀장 근태를 바꿀까요?', message: `${dayLabelKo(date)} 직원 ${n}명의 관리 실적이 다시 계산돼요.`, ok: '바꾸기' })) return;
     setBusy(s.id);
     try { await staffPost('/attendance', payloadFor(s, date, recOf(s.id, date), patch)); notify(msg); await data.reload(true); }
     catch (e) { notify(e instanceof Error ? e.message : '저장 실패'); }
@@ -150,13 +148,7 @@ function Schedule({ month, data, notify }: { month: string; data: Data; notify: 
       <div className="sf-dhead"><h3>{dayLabelKo(sel)}</h3>
         <span className="sf-dhead-btns"><button type="button" className="sf-btn" onClick={() => setImporting(true)}>파일로 넣기</button>
         <button type="button" className="sf-btn" onClick={() => setBulk(true)}>일괄 설정</button></span></div>
-      {off && <div className="sf-confirm">{confirmClear ? <>이 날짜의 휴일을 해제할까요?
-        <span><button type="button" className="sf-btn" onClick={() => setConfirmClear(false)}>취소</button>
-          <button type="button" className="sf-btn is-primary" onClick={async () => { try { await staffPost('/day-status', { work_date: sel, clear: true }); setConfirmClear(false); await data.reload(true); } catch (e) { notify(e instanceof Error ? e.message : '휴무 해제 실패'); } }}>해제</button></span></>
-        : <>병원 휴일로 정해진 날이에요. <button type="button" className="sf-btn" onClick={() => setConfirmClear(true)}>휴일 해제</button></>}</div>}
-      {pending && <div className="sf-confirm">{pending.text}
-        <span><button type="button" className="sf-btn" onClick={() => setPending(null)}>취소</button>
-          <button type="button" className="sf-btn is-primary" onClick={() => pending.run()}>바꾸기</button></span></div>}
+      {off && <div className="sf-confirm">병원 휴일로 정해진 날이에요. <button type="button" className="sf-btn" onClick={async () => { if (!await askConfirm({ title: '이 날짜의 휴일을 해제할까요?', message: dayLabelKo(sel), ok: '해제' })) return; try { await staffPost('/day-status', { work_date: sel, clear: true }); await data.reload(true); } catch (e) { notify(e instanceof Error ? e.message : '휴무 해제 실패'); } }}>휴일 해제</button></div>}
       {list.map(s => {
         const rec = recOf(s.id, sel), st = stateOf(rec), locked = isReadonly(s, sel) || off, opts = optionsFor(s);
         if (WORK_STATES.includes(st || '')) working++;
@@ -303,13 +295,14 @@ function BulkDialog({ month, staff, all, onClose, onDone }: { month: string; sta
         for (const x of others) { try { byStaff[x.id].push(...(((await staffGet('/month', { staff_id: x.id, month: mo })) as MonthData).attendance || [])); } catch { /* 못 불러오면 그 달은 안내에서 빠짐 */ } }
       perfDays = targets.filter(d => others.some(x => byStaff[x.id].some(r => r.work_date === d && (r.managed_count != null || r.designated_count != null)))).length;
     }
-    setAsk(`${targets.length}일에 '${finalSt === '2출' ? '출퇴근 기타 · 2출' : finalSt}' 적용${over ? ` · 기존 기록 ${over}건 바뀜` : ''}${perfDays ? ` · 직원 관리 실적이 있는 ${perfDays}일은 팀장 기준으로 직원 성과가 다시 계산됨` : ''}${dates.length > targets.length ? ` · 휴일 ${dates.length - targets.length}일 제외` : ''}`);
-    return { targets, recs };
+    const msg = `${targets.length}일에 '${finalSt === '2출' ? '출퇴근 기타 · 2출' : finalSt}' 적용${over ? ` · 기존 기록 ${over}건 바뀜` : ''}${perfDays ? ` · 직원 관리 실적이 있는 ${perfDays}일은 팀장 기준으로 직원 성과가 다시 계산됨` : ''}${dates.length > targets.length ? ` · 휴일 ${dates.length - targets.length}일 제외` : ''}`;
+    return { targets, recs, msg };
   };
   const apply = async () => {
     if (!s || !finalSt) return;
+    const p = await plan(); if (!p) return;
+    if (!await askConfirm({ title: '일괄 설정을 적용할까요?', message: p.msg, ok: '적용', kind: 'save' })) return;
     setRunning(true);
-    const p = await plan(); if (!p) { setRunning(false); return; }
     let ok = 0; const fail: string[] = [];
     for (const d of p.targets) {
       try { await staffPost('/attendance', payloadFor(s, d, p.recs[d] || null, statePatch(finalSt, s, d, p.recs[d] || null, times))); ok++; }
@@ -337,10 +330,8 @@ function BulkDialog({ month, staff, all, onClose, onDone }: { month: string; sta
       </div></div>}
       <p className="sf-hint">{dates.length}일 선택</p>
       {error && <p className="sf-hint is-warn">{error}</p>}
-      {ask && <p className="sf-ask">{ask}</p>}
       <div className="sf-modal-foot"><button type="button" className="sf-btn" onClick={onClose}>닫기</button>
-        {ask ? <button type="button" className="sf-btn is-primary" disabled={running} onClick={() => void apply()}>{running && <SavingMark />}적용</button>
-          : <button type="button" className="sf-btn is-primary" onClick={() => void plan()}>확인</button>}</div>
+        <button type="button" className="sf-btn is-primary" disabled={running} onClick={() => void apply()}>{running && <SavingMark />}적용</button></div>
     </div>
   </div>;
 }

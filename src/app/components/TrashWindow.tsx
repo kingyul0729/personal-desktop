@@ -1,13 +1,12 @@
+import { askConfirm } from './AlertDialog';
 import { useEffect, useState } from 'react';
 import { BookOpen, FileText, Folder, Image as ImageIcon, Layers, Presentation, StickyNote } from 'lucide-react';
 import { useDesktop } from '../useDesktop';
 import { formatMemoTime } from '../memos';
-import { KittyDialog } from './KittyDialog';
 import type { TrashEntry } from '../desktopModel';
 import { announceTrash, useTrashChange } from '../trash';
 
 const ICONS = { folder: Folder, file: FileText, memo: StickyNote, price: ImageIcon, capsule: Layers };
-const KIND_TEXT = { folder: '폴더는 안의 파일까지', file: '파일은', memo: '메모는', price: '가격표는 이미지까지', capsule: '작업은' };
 
 // 업무 자료·공부 기록은 각자 저장소(/api/work, /api/study)에 있어 여기서 따로 불러와 같은 목록에 보인다.
 type Extra = { type: 'work' | 'study'; id: string; name: string; trashedAt: number; version: number; location: string };
@@ -41,7 +40,6 @@ export function TrashWindow() {
     finally { setBusy(false); }
   };
   const total = data.trash.length + extra.length;
-  const [confirm, setConfirm] = useState<TrashEntry | Extra | 'all' | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const run = async (body: Record<string, unknown>, done: (result: Record<string, unknown>) => string) => {
@@ -51,44 +49,41 @@ export function TrashWindow() {
     if (!result.ok) { setError(result.error); return false; }
     notify(done(result.data)); return true;
   };
+  // 완전 삭제는 확인 팝업(AlertDialog)으로 한 번 묻고 진행
+  const purge = async (target: TrashEntry | Extra | 'all') => {
+    setError('');
+    const yes = await askConfirm(target === 'all'
+      ? { title: '휴지통을 비울까요?', message: '이 작업은 되돌릴 수 없습니다.', ok: '휴지통 비우기', kind: 'delete' }
+      : { title: `‘${target.name}’을 완전히 삭제할까요?`, message: `${'kind' in target ? '' : '첨부까지 함께 지워지며 '}이 작업은 되돌릴 수 없습니다.`, ok: '완전 삭제', kind: 'delete' });
+    if (!yes) return;
+    if (target === 'all') {
+      setBusy(true);
+      try { for (const item of extra) await extraCall(item, 'DELETE'); } catch (e) { setError((e as Error).message); }
+      setBusy(false);
+      if (extra.length) { announceTrash('work'); announceTrash('study'); await loadExtra(); }
+      if (data.trash.length) await run({ action: 'empty-trash' }, result => result.skipped ? `잠긴 항목 ${result.skipped}개는 남겨 두었습니다.` : '휴지통을 비웠습니다.'); else notify('휴지통을 비웠습니다.');
+    } else if (!('kind' in target)) await runExtra(target, 'DELETE');
+    else await run({ action: 'purge-file', type: target.type, id: target.id }, () => '완전히 삭제했습니다.');
+  };
   return <div className="trash-window">
     <div className="file-window-bar">
       <span className="file-window-path">휴지통 {total}개</span>
-      <button type="button" disabled={!total || busy} onClick={() => { setError(''); setConfirm('all'); }}>휴지통 비우기</button>
+      <button type="button" disabled={!total || busy} onClick={() => void purge('all')}>휴지통 비우기</button>
     </div>
     {total ? <ul className="trash-list">
       {data.trash.map(item => { const Icon = ICONS[item.kind] ?? FileText; return <li key={`${item.type}:${item.id}`}>
         <Icon size={18} />
         <div><strong>{item.name}</strong><small>{formatMemoTime(item.trashedAt)} 삭제 · 원래 위치 {item.location}</small></div>
         <button type="button" disabled={busy} onClick={() => void run({ action: 'restore-file', type: item.type, id: item.id }, result => item.type === 'file' && result.restoredTo === null && item.location !== '바탕화면' ? '원래 폴더가 없어 바탕화면으로 복원했습니다.' : `${item.location}(으)로 복원했습니다.`).then(ok => { if (ok && item.type !== 'file') announceTrash(item.type); })}>복원</button>
-        <button type="button" className="is-danger" disabled={busy} onClick={() => { setError(''); setConfirm(item); }}>완전 삭제</button>
+        <button type="button" className="is-danger" disabled={busy} onClick={() => void purge(item)}>완전 삭제</button>
       </li>; })}
       {[...extra].sort((a, b) => b.trashedAt - a.trashedAt).map(item => { const Icon = item.type === 'work' ? Presentation : BookOpen; return <li key={`${item.type}:${item.id}`}>
         <Icon size={18} />
         <div><strong>{item.name}</strong><small>{formatMemoTime(item.trashedAt)} 삭제 · 원래 위치 {item.location}</small></div>
         <button type="button" disabled={busy} onClick={() => void runExtra(item, 'PATCH')}>복원</button>
-        <button type="button" className="is-danger" disabled={busy} onClick={() => { setError(''); setConfirm(item); }}>완전 삭제</button>
+        <button type="button" className="is-danger" disabled={busy} onClick={() => void purge(item)}>완전 삭제</button>
       </li>; })}
     </ul> : <p className="settings-empty">휴지통이 비어 있습니다.</p>}
-    {error && !confirm && <p className="settings-message" role="alert">{error}</p>}
-    {confirm && <KittyDialog title="완전 삭제" busy={busy} onClose={() => setConfirm(null)}>
-      <p className="kitty-question">{confirm === 'all' ? '휴지통의 모든 항목이 완전히 삭제되며 복구할 수 없습니다.' : <>‘{confirm.name}’<br />이 {'kind' in confirm ? KIND_TEXT[confirm.kind] ?? '항목은' : confirm.type === 'work' ? '자료는 첨부까지' : '기록은 첨부까지'} 완전히 삭제되며 복구할 수 없습니다.</>}</p>
-      {error && <p className="kitty-error" role="alert">{error}</p>}
-      <footer className="kitty-dialog-actions">
-        <button type="button" disabled={busy} onClick={() => setConfirm(null)}>취소</button>
-        <button type="button" className="kitty-primary" disabled={busy} onClick={async () => {
-          let ok: boolean;
-          if (confirm === 'all') {
-            setBusy(true);
-            try { for (const item of extra) await extraCall(item, 'DELETE'); } catch (e) { setError((e as Error).message); }
-            setBusy(false);
-            if (extra.length) { announceTrash('work'); announceTrash('study'); await loadExtra(); }
-            ok = data.trash.length ? await run({ action: 'empty-trash' }, result => result.skipped ? `잠긴 항목 ${result.skipped}개는 남겨 두었습니다.` : '휴지통을 비웠습니다.') : (notify('휴지통을 비웠습니다.'), true);
-          } else if (!('kind' in confirm)) ok = await runExtra(confirm, 'DELETE');
-          else ok = await run({ action: 'purge-file', type: confirm.type, id: confirm.id }, () => '완전히 삭제했습니다.');
-          if (ok) setConfirm(null);
-        }}>{busy ? '삭제 중…' : '완전 삭제'}</button>
-      </footer>
-    </KittyDialog>}
+    {error && <p className="settings-message" role="alert">{error}</p>}
   </div>;
 }

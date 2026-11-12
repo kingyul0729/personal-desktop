@@ -1,6 +1,7 @@
 import { Fragment, useCallback, useEffect, useState } from 'react';
 import { ChevronDown, ChevronLeft, ChevronRight, Pencil, Trash2 } from 'lucide-react';
 import { LoadingBox, SavingMark } from '../Feedback';
+import { askConfirm } from '../AlertDialog';
 import { type InvState, type InvTx, type KeepSource, KIND_LABEL, md, announceInventory, fmtQty, fmtWon, invGet, invSend, invUploadInvoice, invoiceSrc, shiftMonth, todayLocal, useInventory, subscribeInventory } from '../../inventoryApi';
 import { InvThumb, ItemSelect, Modal, Problem, QtyInput, Seg, Shell, errText, useToast, withUnit } from './shared';
 
@@ -63,7 +64,7 @@ export function InvoiceDialog({ tx, rows, notify, onClose, onChange }: { tx: Inv
   // 명세서 한 장 = 같은 날·같은 업체 입고(2026-11-10 사용자 지정). 품목·수량은 기록마다 따로, 사진은 한 번만.
   const group = rows.filter(r => r.date === tx.date && (r.vendor_id ?? 0) === (tx.vendor_id ?? 0) && INVOICE_KINDS.includes(r.kind));
   const [pick, setPick] = useState<number[]>(() => group.filter(r => r.id === tx.id || !photosOf(r).length).map(r => r.id));
-  const [busy, setBusy] = useState(false), [big, setBig] = useState<string | null>(null), [drop, setDrop] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false), [big, setBig] = useState<string | null>(null);
   const photos = photosOf(tx);
   const others = [...new Set(group.filter(r => r.id !== tx.id).flatMap(photosOf))].filter(id => !photos.includes(id)); // 같은 묶음에 이미 올린 사진
   const done = (m: string) => { notify(m); onChange(); announceInventory(); };
@@ -77,12 +78,11 @@ export function InvoiceDialog({ tx, rows, notify, onClose, onChange }: { tx: Inv
     try { await invSend('POST', `/invoices/${id}/links`, { tx_ids: pick }); done(pick.length > 1 ? `같은 명세서에 ${pick.length}건을 걸었어요.` : '같은 명세서에 걸었어요.'); }
     catch (e) { notify(errText(e)); } finally { setBusy(false); }
   };
-  const remove = async (id: string) => { try { await invSend('DELETE', `/invoices/${id}`); setDrop(null); done('사진을 지웠어요.'); } catch (e) { notify(errText(e)); } };
+  const remove = async (id: string) => { try { await invSend('DELETE', `/invoices/${id}`); done('사진을 지웠어요.'); } catch (e) { notify(errText(e)); } };
   return <Modal title={`${Number(tx.date.slice(5, 7))}/${Number(tx.date.slice(8))} ${tx.vendor_name || tx.item_name} 명세서`} onClose={onClose}>
     {photos.length > 0 && <ul className="iv-inv-photos">{photos.map(id => <li key={id}>
       <button type="button" className="iv-inv-thumb" onClick={() => setBig(id)} aria-label="크게 보기"><InvThumb id={id} /></button>
-      {drop === id ? <span className="iv-inv-ask">지울까요? <button type="button" className="sf-btn is-danger" onClick={() => void remove(id)}>삭제</button><button type="button" className="sf-btn" onClick={() => setDrop(null)}>아니요</button></span>
-        : <button type="button" className="sf-btn" onClick={() => setDrop(id)}>삭제</button>}</li>)}</ul>}
+      <button type="button" className="sf-btn" onClick={async () => { if (await askConfirm({ title: '이 사진을 지울까요?', message: '이 명세서에 걸린 기록에서 모두 빠져요.', ok: '삭제', kind: 'delete' })) void remove(id); }}>삭제</button></li>)}</ul>}
     {group.length > 1 && <fieldset className="iv-inv-rows"><legend>같은 명세서 · {group.length}건</legend>
       {group.map(r => <label key={r.id} className="iv-check"><input type="checkbox" checked={pick.includes(r.id)} disabled={r.id === tx.id} onChange={e => setPick(p => e.target.checked ? [...p, r.id] : p.filter(x => x !== r.id))} />
         {r.item_name} · {KIND_LABEL[r.kind]} {fmtQty(r.qty)} {r.stock_unit}{(r.amount || 0) > 0 ? ` · ${fmtWon(r.amount)}` : ''}{photosOf(r).length ? ' · 사진 있음' : ''}</label>)}</fieldset>}
@@ -108,7 +108,10 @@ export function TxLog({ notify }: { notify: (m: string) => void }) {
   const [month, setMonth] = useState(todayLocal().slice(0, 7));
   const [kind, setKind] = useState<'all' | 'in' | 'out'>('all');
   const [rows, setRows] = useState<InvTx[] | null>(null);
-  const [ask, setAsk] = useState<InvTx | null>(null);
+  const del = async (t: InvTx) => {
+    if (!await askConfirm({ title: '이 기록을 지울까요?', message: `${Number(t.date.slice(5, 7))}월 ${Number(t.date.slice(8))}일 ${t.item_name} ${KIND_LABEL[t.kind]} ${fmtQty(t.qty)} ${t.stock_unit} · 되돌림: ${effect(t) || '재고 변화 없음'}`, ok: '삭제', kind: 'delete' })) return;
+    try { await invSend('DELETE', `/tx/${t.id}`); notify('기록을 지우고 재고를 되돌렸어요.'); announceInventory(); void load(); } catch (e) { notify(errText(e)); }
+  };
   const [inv, setInv] = useState<number | null>(null);
   const [src, setSrc] = useState<InvTx | null>(null);
   const [edit, setEdit] = useState<{ tx: InvTx; v: string; d: string; why?: string } | null>(null);
@@ -140,7 +143,7 @@ export function TxLog({ notify }: { notify: (m: string) => void }) {
           : <span className="iv-inv-mini is-none" aria-hidden="true">—</span>}</span>
         <span role="cell" className="iv-row-btns">
           {editable(t) ? <button type="button" className="iv-icon-btn" aria-label="수정" title="수정" onClick={() => setEdit({ tx: t, v: String(Math.abs(t.hospital_delta)), d: t.date })}><Pencil size={16} strokeWidth={1.8} /></button> : <span className="iv-icon-btn is-empty" aria-hidden="true" />}
-          <button type="button" className="iv-icon-btn is-danger" aria-label="삭제" title="삭제" onClick={() => setAsk(t)}><Trash2 size={16} strokeWidth={1.8} /></button></span>
+          <button type="button" className="iv-icon-btn is-danger" aria-label="삭제" title="삭제" onClick={() => void del(t)}><Trash2 size={16} strokeWidth={1.8} /></button></span>
       </div>; };
   // 입고 묶음(2026-11-11 사용자): 같은 날·같은 업체의 입고만 한 줄로 묶고(2건 이상), 누르면 실제 입고 건마다 펼침. 다른 업체는 같은 날이어도 따로.
   // 묶음 줄의 'N건'은 입고 건수, 품목 줄의 숫자는 입고 수량(단위 붙임). 수정·취소·명세서는 펼친 개별 건에서.
@@ -199,12 +202,6 @@ export function TxLog({ notify }: { notify: (m: string) => void }) {
     </Modal>}
     {src && <SourceDialog tx={src} onClose={() => setSrc(null)} />}
     {inv != null && rows && rows.find(r => r.id === inv) && <InvoiceDialog tx={rows.find(r => r.id === inv)!} rows={rows} notify={notify} onClose={() => setInv(null)} onChange={() => void load()} />}
-    {ask && <Modal title="기록 삭제" onClose={() => setAsk(null)}>
-      <p>{Number(ask.date.slice(5, 7))}월 {Number(ask.date.slice(8))}일 {ask.item_name} {KIND_LABEL[ask.kind]} {fmtQty(ask.qty)} {ask.stock_unit}</p>
-      <p className="sf-ask">지우면 이 기록이 바꾼 재고를 되돌려요: {effect(ask) || '재고 변화 없음'}</p>
-      <div className="sf-modal-foot"><button type="button" className="sf-btn" onClick={() => setAsk(null)}>취소</button>
-        <button type="button" className="sf-btn is-danger" onClick={async () => { try { await invSend('DELETE', `/tx/${ask.id}`); notify('기록을 지우고 재고를 되돌렸어요.'); setAsk(null); announceInventory(); void load(); } catch (e) { notify(errText(e)); } }}>삭제</button></div>
-    </Modal>}
   </>;
 }
 

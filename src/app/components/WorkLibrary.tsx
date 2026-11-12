@@ -1,3 +1,4 @@
+import { askConfirm } from './AlertDialog';
 import { SavingMark } from './Feedback';
 import { useEffect, useMemo, useRef, useState, type PointerEvent } from 'react';
 import { ArrowLeft, FileText, Folder, ImagePlus, Pencil, Plus, Presentation, Search, Trash2, Upload, X } from 'lucide-react';
@@ -78,9 +79,9 @@ export function WorkLibrary({ onDirtyChange, onSubs, goto, onLocation }: { onDir
   const visible = useMemo(() => docs.filter(doc => !doc.trashedAt && (filter === 'all' || doc.kind === filter) && matchesWorkDoc(doc, query))
     .sort((a, b) => b.updatedAt - a.updatedAt), [docs, filter, query]);
   const reading = docs.find(doc => doc.id === readingId && !doc.trashedAt) ?? null;
-  const leave = (next: () => void) => {
+  const leave = async (next: () => void) => {
     if (busyRef.current) return;
-    if (!dirty || window.confirm('저장하지 않은 변경 사항이 있습니다. 저장하지 않고 이동할까요?')) { setEditor(null); setFiles([]); setError(''); next(); }
+    if (!dirty || await askConfirm({ title: '저장하지 않고 이동할까요?', message: '저장하지 않은 변경 사항이 있어요.', ok: '이동' })) { setEditor(null); setFiles([]); setError(''); next(); }
   };
   useEffect(() => { if (goto) leave(() => { setReadingId(null); setFilter(goto.id as Filter); }); }, [goto?.n]);
   const openDoc = (doc: WorkDoc) => { if (doc.trashedAt) return; setReadingId(doc.id); setNotice(''); setError(''); };
@@ -125,6 +126,13 @@ export function WorkLibrary({ onDirtyChange, onSubs, goto, onLocation }: { onDir
     } catch (e) { setError((e as Error).message); }
     finally { busyRef.current = false; setBusy(false); }
   };
+  // 휴지통으로 옮기기 전 확인 팝업(AlertDialog, 2026-11-12 사용자 지정 모양)
+  useEffect(() => {
+    if (!removing) return;
+    let live = true;
+    void askConfirm({ title: '자료를 삭제할까요?', message: `‘${removing.title}’ · 휴지통에서 복원할 수 있어요.`, ok: '휴지통으로 이동', kind: 'delete' }).then(ok => { if (!live) return; if (ok) void mutate(removing, 'trash').finally(() => setRemoving(null)); else setRemoving(null); });
+    return () => { live = false; };
+  }, [removing]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Finder 모양: 처음엔 분류 폴더(업무 매뉴얼·상담자료), 폴더를 열면 자료 썸네일. ‹ 는 한 단계 위로.
   const inFolder = filter !== 'all';
@@ -201,10 +209,6 @@ export function WorkLibrary({ onDirtyChange, onSubs, goto, onLocation }: { onDir
       </div>; })}
     </div>}
 
-    {removing && <div className="wl-modal-backdrop"><div className="wl-modal" role="dialog" aria-modal="true" aria-labelledby="wl-remove-title">
-      <h2 id="wl-remove-title">자료를 삭제할까요?</h2><p>‘{removing.title}’을 휴지통으로 옮깁니다. 휴지통에서 복원할 수 있습니다.</p>
-      <footer><button type="button" onClick={() => setRemoving(null)} disabled={busy}>취소</button><button type="button" className="wl-primary" onClick={() => void mutate(removing, 'trash')} disabled={busy}>{busy ? <><SavingMark />이동 중…</> : '휴지통으로 이동'}</button></footer>
-    </div></div>}
     {preview && <div className="wl-preview" role="dialog" aria-modal="true" aria-label={preview.name} onClick={event => { if (event.target === event.currentTarget) setPreview(null); }}>
       <header><strong>{preview.name}</strong><button type="button" onClick={() => setPreview(null)} aria-label="미리보기 닫기"><X size={20} /></button></header>
       <img src={preview.url} alt={preview.name} />

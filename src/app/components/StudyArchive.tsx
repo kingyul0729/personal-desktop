@@ -1,3 +1,4 @@
+import { askConfirm } from './AlertDialog';
 import { DownloadMark, SavingMark } from './Feedback';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, BookOpen, CalendarDays, Check, ChevronLeft, ChevronRight, FileText, FolderOpen, ImagePlus, LayoutGrid, Layers, Pencil, Plus, Search, Star, Trash2, Upload, X } from 'lucide-react';
@@ -74,7 +75,7 @@ export function StudyArchive({ onDirtyChange, onSubs, goto, onLocation }: { onDi
     if (category && item.category !== category) return false;
     return `${item.title} ${item.content} ${item.keywords || ''} ${item.summary || ''} ${item.category} ${item.tags} ${item.attachments.map(file => file.name).join(' ')}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase());
   }).sort((a, b) => sort === 'title' ? a.title.localeCompare(b.title, 'ko') : sort === 'updated' ? b.updatedAt - a.updatedAt : b.studiedOn.localeCompare(a.studiedOn) || b.updatedAt - a.updatedAt), [records, filter, category, query, sort]);
-  const leave = (next: () => void) => { if (busyRef.current) return; if (!dirty || window.confirm('저장하지 않은 변경 사항이 있습니다. 저장하지 않고 이동할까요?')) { setEditor(null); setFiles([]); setError(''); next(); } };
+  const leave = async (next: () => void) => { if (busyRef.current) return; if (!dirty || await askConfirm({ title: '저장하지 않고 이동할까요?', message: '저장하지 않은 변경 사항이 있어요.', ok: '이동' })) { setEditor(null); setFiles([]); setError(''); next(); } };
   const open = (record?: RecordItem) => leave(() => {
     setReadingId(record?.id || null);
     const value: Editor = record ? toEditor(record) : { id: newRecordId(), title: '', category: category || STUDY_CATEGORIES[0], studiedOn: today(), content: '', tags: '', keywords: '', summary: '', version: 0, attachments: [] };
@@ -95,6 +96,13 @@ export function StudyArchive({ onDirtyChange, onSubs, goto, onLocation }: { onDi
     } catch (e) { setError((e as Error).message); }
     finally { busyRef.current = false; setBusy(false); }
   };
+  // 휴지통으로 옮기기 전 확인 팝업(AlertDialog, 2026-11-12 사용자 지정 모양)
+  useEffect(() => {
+    if (!removing) return;
+    let live = true;
+    void askConfirm({ title: '기록을 삭제할까요?', message: `‘${removing.title}’ · 첨부 자료도 함께 옮겨요. 휴지통에서 복원할 수 있어요.`, ok: '휴지통으로 이동', kind: 'delete' }).then(ok => { if (!live) return; if (ok) void mutate(removing, 'trash').finally(() => setRemoving(null)); else setRemoving(null); });
+    return () => { live = false; };
+  }, [removing]); // eslint-disable-line react-hooks/exhaustive-deps
   const addFiles = (added: File[]) => {
     if (!editor || busyRef.current) return;
     if (files.length + added.length + editor.attachments.length > 12) { setError('한 기록에 최대 12개까지 첨부할 수 있습니다.'); return; }
@@ -122,7 +130,7 @@ export function StudyArchive({ onDirtyChange, onSubs, goto, onLocation }: { onDi
     if (!/\.(md|markdown|txt)$/i.test(file.name) || file.size > 800 * 1024) {
       setError('800KB 이하의 Markdown 또는 텍스트 파일을 선택해 주세요.'); return;
     }
-    if (editor.content.trim() && !window.confirm('현재 본문을 가져온 파일 내용으로 바꿀까요?')) return;
+    if (editor.content.trim() && !await askConfirm({ title: '본문을 바꿀까요?', message: '현재 본문을 가져온 파일 내용으로 바꿔요.', ok: '바꾸기' })) return;
     busyRef.current = true; setBusy(true); setError('');
     try {
       const content = (await file.text()).replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
@@ -240,7 +248,6 @@ export function StudyArchive({ onDirtyChange, onSubs, goto, onLocation }: { onDi
         </div>; })}
       </div>}
     </main>
-    {removing && <div className="study-modal-backdrop"><div className="study-modal" role="dialog" aria-modal="true" aria-labelledby="study-delete-title"><h2 id="study-delete-title">기록을 삭제할까요?</h2><p>‘{removing.title}’ 기록과 첨부 자료를<br />휴지통으로 옮깁니다. 휴지통에서 복원할 수 있어요.</p>{error && <p role="alert">{error}</p>}<div><button onClick={() => setRemoving(null)} disabled={busy}>취소</button><button className="study-primary" onClick={() => void mutate(removing, 'trash')} disabled={busy}>{busy ? <><SavingMark />이동 중…</> : '휴지통으로 이동'}</button></div></div></div>}
     {preview && <div className="study-preview" role="dialog" aria-modal="true" aria-label={preview.name} onKeyDown={event => { if (event.key === 'Escape') setPreview(null); }}><header><strong>{preview.name}</strong><a href={`${preview.url}?download=1`} target="_blank" rel="noopener noreferrer"><DownloadMark />다운로드</a><button onClick={() => setPreview(null)} aria-label="미리보기 닫기"><X size={22} /></button></header>{preview.mime.startsWith('image/') ? <img src={preview.url} alt={preview.name} /> : <div className="study-pdf"><a href={preview.url} target="_blank" rel="noopener noreferrer">PDF가 보이지 않으면 새 창에서 열기</a><iframe src={preview.url} title={preview.name} /></div>}</div>}
   </div>
   </FinderMain>;
