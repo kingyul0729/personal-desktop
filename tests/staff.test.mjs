@@ -229,3 +229,57 @@ test('performance-not-written day: everyone at work left the day count empty or 
   assert.deepEqual([three.work_days, three.total_hours, three.total_managed, three.total_designated], [1, 9.5, null, 1]);
   for (const r of [lead, two, three]) assert.deepEqual(r.exclusions.filter(x => x.reason === '성과 미작성일').map(x => x.date), ['2026-10-06']);
 });
+
+// 일일 예약표(2026-11-13 사용자 지정): 파일로 넣은 예약 줄에 관리담당·관리(S·M·더마·히알·X, 여러 개)·취소를 표시,
+// 당일예약·신환은 직접 더하고, 집계는 예약 / 당일예약 / 신환을 각각 따로. 성과표 숫자는 건드리지 않는다.
+test('booking sheet: import, mark, cancel, same-day rows and a separate summary per kind', async () => {
+  const e = env();
+  await call(e, '/api/staff/list');
+  assert.equal((await call(e, '/api/staff/book?date=2026-11-10', { owner: null })).status, 401);
+  const rows = [{ time: '10:00', name: '가나다', laser: 'ldm+gt 1/3' }, { time: '10:30', name: '라마바', laser: 'pt+wc 5/5' }, { time: '11:00', name: '사아자', laser: 'lt 2/2' }];
+  const imp = await call(e, '/api/staff/book/import', { method: 'POST', body: { date: '2026-11-10', rows } });
+  assert.deepEqual([imp.status, imp.data.added, imp.data.skipped], [200, 3, 0], JSON.stringify(imp.data));
+  // 같은 파일을 다시 올려도 줄이 두 번 생기지 않는다
+  const again = await call(e, '/api/staff/book/import', { method: 'POST', body: { date: '2026-11-10', rows } });
+  assert.deepEqual([again.data.added, again.data.skipped], [0, 3]);
+  // 관리담당 목록은 그날 출근한 사람 위주: 근태가 없으면 비어 있고(화면은 모두 보임), 정상근무를 적으면 그 사람만
+  let day = (await call(e, '/api/staff/book?date=2026-11-10')).data;
+  assert.equal(day.rows.length, 3); assert.deepEqual(day.working, []);
+  await call(e, '/api/staff/attendance', { method: 'POST', body: { staff_id: 1, work_date: '2026-11-10', attendance: '정상근무' } });
+  await call(e, '/api/staff/attendance', { method: 'POST', body: { staff_id: 2, work_date: '2026-11-10', attendance: '정상근무' } });
+  await call(e, '/api/staff/attendance', { method: 'POST', body: { staff_id: 3, work_date: '2026-11-10', attendance: '휴무' } });
+  day = (await call(e, '/api/staff/book?date=2026-11-10')).data;
+  assert.deepEqual(day.working.sort(), [1, 2]);
+  const [a, b, c] = day.rows;
+  const up = (body) => call(e, '/api/staff/book/update', { method: 'POST', body });
+  assert.deepEqual((await up({ id: a.id, staff_id: 2, care: ['히알', 'M'] })).data.row.care, ['M', '히알']); // 여러 개, 정해진 순서로
+  assert.deepEqual((await up({ id: b.id, staff_id: 2, care: ['X'] })).data.row.care, ['X']);
+  assert.deepEqual((await up({ id: b.id, care: ['X', 'S'] })).data.row.care, ['S']); // X는 다른 관리와 같이 안 됨
+  await up({ id: b.id, care: ['X'] });
+  assert.equal((await up({ id: c.id, cancelled: true })).data.row.cancelled, true);
+  assert.equal((await up({ id: a.id, staff_id: 999 })).status, 400);
+  // 당일예약·신환은 직접 더한다
+  const add = (body) => call(e, '/api/staff/book/add', { method: 'POST', body: { date: '2026-11-10', ...body } });
+  const d1 = await add({ kind: 'day_book', time: '15:00', customer: '차카타', laser: 'lt 1/5' });
+  assert.equal(d1.status, 200, JSON.stringify(d1.data));
+  await up({ id: d1.data.row.id, staff_id: 1, care: ['더마'] });
+  const d2 = await add({ kind: 'day_care', customer: '파하가' });
+  await up({ id: d2.data.row.id, staff_id: 2, care: ['S'] });
+  assert.equal((await add({ kind: 'book', customer: '안됨' })).status, 400);
+  assert.equal((await add({ kind: 'day_care', customer: ' ' })).status, 400);
+  // 월 집계: 종류마다 따로, 취소는 고객 수에서 빼고 취소 칸에
+  const sum = (await call(e, '/api/staff/book/summary?period=2026-11')).data.kinds;
+  const s2 = sum.book.find(x => x.staff_id === 2), none = sum.book.find(x => x.staff_id == null);
+  assert.deepEqual([s2.count, s2.care.M, s2.care['히알'], s2.care.X, s2.cancelled], [2, 1, 1, 1, 0]);
+  assert.deepEqual([none.name, none.count, none.cancelled], ['담당 없음', 0, 1]);
+  assert.deepEqual(sum.day_book.map(x => [x.staff_id, x.count, x.care['더마']]), [[1, 1, 1]]);
+  assert.deepEqual(sum.day_care.map(x => [x.staff_id, x.count, x.care.S]), [[2, 1, 1]]);
+  assert.equal((await call(e, '/api/staff/book/summary?period=2026')).data.kinds.book.length, 2); // 연말은 연도로
+  assert.equal((await call(e, '/api/staff/book/summary?period=2026-10')).data.kinds.book.length, 0);
+  // 성과표의 관리 수는 예약표와 연결하지 않는다
+  const perf = (await call(e, '/api/staff/performance?month=2026-11')).data;
+  assert.ok(perf.every(p => !p.total_managed), JSON.stringify(perf.map(p => p.total_managed)));
+  // 지우기
+  await call(e, '/api/staff/book/delete', { method: 'POST', body: { id: d2.data.row.id } });
+  assert.equal((await call(e, '/api/staff/book?date=2026-11-10')).data.rows.length, 4);
+});

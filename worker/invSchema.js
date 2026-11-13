@@ -1,3 +1,4 @@
+import { BOOK_SCHEMA } from './staffBook.js';
 import { VENDOR_BASE, ITEMS, EXTRA_ITEMS } from './invMaster.js';
 import { moveTxDate, keepCountStmts } from './invTxDate.js';
 // 예전 재고관리 앱의 직원 표 구조(마이그레이션 0009·0010·0014·0022) — tests/fixtures/inv-staff.sql 에서 만든 것.
@@ -238,6 +239,12 @@ export async function ensureInvSchema(db) {
         db.prepare(`INSERT OR REPLACE INTO inv_meta (key, value) VALUES ('fixes', ?)`).bind(`${fixes} stopvend1`.trim()),
       ]);
       fixes = `${fixes} stopvend1`.trim();
+    }
+    if (!fixes.includes('book1')) {
+      // 2026-11-13 일일 예약표: 표만 더함(기존 자료는 그대로)
+      for (const q of BOOK_SCHEMA) await db.prepare(q).run(); // 표 다음에 색인(차례로)
+      await db.prepare(`INSERT OR REPLACE INTO inv_meta (key, value) VALUES ('fixes', ?)`).bind(`${fixes} book1`.trim()).run();
+      fixes = `${fixes} book1`.trim();
     }
     if (!fixes.includes('dupfix1') && await claimFix(db, 'dupfix1')) {
       // 2026-11-12 사용자 '이중으로 겹치는데': 처음 요청이 동시에 두 번 들어와 splitfix1이 두 번 돌아 10/22 피부미소 입고 4줄이 두 벌(8줄) 생김.

@@ -1,5 +1,6 @@
 import { ensureInvSchema } from './invSchema.js';
 import { isRedDay } from './redDays.js';
+import { handleBook } from './staffBook.js';
 // 직원 스케줄·성과·연차 — 예전 재고관리 앱(webapp, src/staff.ts)의 서버 계산을 그대로 옮김.
 // 데이터는 팀 공용 D1(바인딩 INV_DB, 표는 invSchema.js가 만든다). 주문·결제 표는 없다.
 // 근무시간·연차 차감은 원본과 같다. 성과 집계는 사용자 규칙(2026-11-08: 풀상담일 제외·원본 보존)만 반영했다.
@@ -811,7 +812,9 @@ staff.get("/performance", async (c) => {
 
 export async function handleStaff(request, env, url) {
   if (!env.INV_DB) return Response.json({ error: '직원 자료(예전 재고관리 DB)가 아직 연결되지 않았어요.', unavailable: true }, { status: 503 });
-  try { await ensureInvSchema(env.INV_DB); return await staff.handle(request, env, url.pathname.slice('/api/staff'.length) || '/'); }
+  try { await ensureInvSchema(env.INV_DB); const sub = url.pathname.slice('/api/staff'.length) || '/';
+    if (sub === '/book' || sub.startsWith('/book/')) return await handleBook(request, env.INV_DB, sub, url); // 일일 예약표
+    return await staff.handle(request, env, sub); }
   catch (e) {
     // 원인을 화면에서 바로 볼 수 있게(로그인한 직원에게만) DB 오류 문구와 예전 DB의 표 이름을 함께 돌려준다.
     let tables = [];

@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useReducer, useState, type ReactNode } from 'react';
 import { ToneDot } from './components/ToneFolder';
-import { ArrowLeftRight, BookOpen, Calculator, CalendarCheck, CalendarDays, ChevronDown, ClipboardCheck, PanelLeftClose, PanelLeftOpen, FileBarChart, GraduationCap, ShoppingCart, FileText, FolderOpen, Settings, Trash2, X, type LucideIcon } from 'lucide-react';
+import { ArrowLeftRight, BookOpen, Calculator, CalendarCheck, CalendarDays, ListChecks, ChevronDown, ClipboardCheck, PanelLeftClose, PanelLeftOpen, FileBarChart, GraduationCap, ShoppingCart, FileText, FolderOpen, Settings, Trash2, X, type LucideIcon } from 'lucide-react';
 import { StudyArchive, STUDY_CATEGORIES } from './components/StudyArchive';
 import { FileExplorer } from './components/FileExplorer';
 import { ControlPanel } from './components/ControlPanel';
@@ -11,6 +11,7 @@ import { TrashWindow } from './components/TrashWindow';
 import { FinderMain, FinderPath } from './components/FinderFrame';
 import StaffSchedule from './components/StaffSchedule';
 import StaffLeave from './components/StaffLeave';
+import StaffBook from './components/StaffBook';
 import { StockCheck, StockMove, StockOrder, StockReport } from './components/Inventory';
 import { activeWindow, desktopReducer, initialDesktop, type WindowId } from './desktopState';
 import { DesktopProvider, useDesktop } from './useDesktop';
@@ -24,7 +25,7 @@ type MenuItem = { id: WindowId; label: string; icon: LucideIcon };
 export const SIDEBAR_GROUPS: { title: string; items: MenuItem[] }[] = [
   { title: '상담', items: [{ id: 'fileExplorer', label: '가격표', icon: FolderOpen }, { id: 'priceCalculator', label: '계산', icon: Calculator }] },
   { title: '재고', items: [{ id: 'stockCheck', label: '재고체크', icon: ClipboardCheck }, { id: 'stockOrder', label: '재고주문', icon: ShoppingCart }, { id: 'stockMove', label: '재고입출고', icon: ArrowLeftRight }, { id: 'stockReport', label: '월말/연말보고서', icon: FileBarChart }] },
-  { title: '직원', items: [{ id: 'staffSchedule', label: '직원스케줄/성과표', icon: CalendarDays }, { id: 'staffLeave', label: '직원연차', icon: CalendarCheck }, { id: 'staffTraining', label: '신입교육', icon: GraduationCap }] },
+  { title: '직원', items: [{ id: 'staffSchedule', label: '직원스케줄/성과표', icon: CalendarDays }, { id: 'staffLeave', label: '직원연차', icon: CalendarCheck }, { id: 'staffBook', label: '예약표', icon: ListChecks }, { id: 'staffTraining', label: '신입교육', icon: GraduationCap }] },
   { title: '개인', items: [{ id: 'terminal', label: '공부', icon: BookOpen }, { id: 'notepad', label: '메모', icon: FileText }] },
   { title: '설정', items: [{ id: 'trash', label: '휴지통', icon: Trash2 }, { id: 'controlPanel', label: '환경설정', icon: Settings }] },
 ];
@@ -153,6 +154,7 @@ export function AppShell({ desktop, dispatch }: { desktop: typeof initialDesktop
         {pane('notepad', <Notepad />)}
         {pane('staffSchedule', <StaffSchedule />)}
         {pane('staffLeave', <StaffLeave />)}
+        {pane('staffBook', <StaffBook />)}
         {pane('stockCheck', <StockCheck />)}
         {pane('stockOrder', <StockOrder />)}
         {pane('stockMove', <StockMove />)}

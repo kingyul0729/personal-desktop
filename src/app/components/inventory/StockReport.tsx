@@ -5,6 +5,7 @@ import { fmtQty, invGet, shiftMonth, todayLocal } from '../../inventoryApi';
 import { InvThumb, Seg, errText, withUnit } from './shared';
 import { invoiceSrc } from '../../inventoryApi';
 import { staffGet } from '../../staffApi';
+import { BookSummary, bookHasAny, type BookSum } from '../StaffBook';
 
 export type MonthRep = { month: string; spend_total: number; spend_general: number; spend_prepaid: number; in_count: number; no_invoice: number; no_amount: number; patients: number; open_days: number;
   usage: { id: number; name: string; stock_unit: string; used: number; per_day: number | null }[];
@@ -55,16 +56,19 @@ export function StockReport() {
   const [rep, setRep] = useState<{ a: MonthRep; b: MonthRep } | null>(null);
   const [yr, setYr] = useState<MonthRep[] | null>(null);
   const [team, setTeam] = useState<YearStaff[] | null>(null);
+  const [book, setBook] = useState<BookSum | null>(null); // 예약표 집계(보고 월 또는 연도)
   const [error, setError] = useState('');
   useEffect(() => {
     if (tab !== 'month') return; setRep(null);
     Promise.all([invGet('/report', { month }), invGet('/report', { month: cmp })]).then(([a, b]) => setRep({ a, b }), e => setError(errText(e)));
+    setBook(null); staffGet('/book/summary', { period: month }).then(r => setBook(r.kinds), () => setBook(null));
   }, [tab, month, cmp]);
   // 연말 보고(2026-11-12 사용자 '물품별 개수는 빼고 재고·직원관리 내용'): 달마다 월말 보고 자료를 받아 한 해로 모으고, 직원 자료(연차·성과)를 함께 받는다.
   useEffect(() => {
     if (tab !== 'year' || !/^\d{4}$/.test(year)) return; setYr(null); setTeam(null);
     const ms = Array.from({ length: 12 }, (_, i) => `${year}-${String(i + 1).padStart(2, '0')}`);
     Promise.all(ms.map(m => invGet('/report', { month: m }))).then(setYr, e => setError(errText(e)));
+    setBook(null); staffGet('/book/summary', { period: year }).then(r => setBook(r.kinds), () => setBook(null));
     Promise.all([staffGet('/list'), ...ms.map(m => staffGet('/performance', { month: m, include_retired: 0 }))])
       .then(([list, ...perf]) => setTeam(yearStaff(list, perf)), () => setTeam([]));
   }, [tab, year]);
@@ -76,7 +80,7 @@ export function StockReport() {
         : <label className="sf-input"><span>연도</span><input type="number" value={year} onChange={e => setYear(e.target.value)} /></label>}
         <button type="button" className="sf-btn is-primary" onClick={() => window.print()}>PDF로 저장·인쇄</button></div></div>
     {error && <p className="sf-hint is-warn">{error}</p>}
-    {tab === 'month' ? (rep ? <MonthReport a={rep.a} b={rep.b} /> : <LoadingBox />) : (yr ? <YearReport year={year} months={yr} team={team || []} /> : <LoadingBox />)}
+    {tab === 'month' ? (rep ? <MonthReport a={rep.a} b={rep.b} book={book} /> : <LoadingBox />) : (yr ? <YearReport year={year} months={yr} team={team || []} book={book} /> : <LoadingBox />)}
   </div>;
 }
 
@@ -86,7 +90,7 @@ export const diff = (a: number, b: number, f: (v: number) => string) => { const 
 export function Block({ n, title, sub, children }: { n: number; title: string; sub?: string; children: React.ReactNode }) {
   return <section className="iv-block"><h3 className="iv-num"><i>{n}</i>{title}{sub && <small>{sub}</small>}</h3>{children}</section>;
 }
-export function MonthReport({ a, b }: { a: MonthRep; b: MonthRep }) {
+export function MonthReport({ a, b, book }: { a: MonthRep; b: MonthRep; book?: BookSum | null }) {
   const ml = (m: string) => `${m.slice(0, 4)}년 ${Number(m.slice(5))}월`;
   const mm = (m: string) => `${Number(m.slice(5))}월`;
   const names = Array.from(new Set([...a.usage, ...b.usage].map(u => u.name)));
@@ -122,6 +126,7 @@ export function MonthReport({ a, b }: { a: MonthRep; b: MonthRep }) {
       <div className="iv-scroll"><table className="iv-form-tbl"><thead><tr><th className="c">결제 완료</th><th className="c">결제 예정</th><th className="c">합 계</th></tr></thead>
         <tbody><tr><td className="num is-done">{won(a.pay_done || 0)}</td><td className="num is-due">{won(a.pay_due || 0)}</td><td className="num"><b>{won(list.reduce((x, p) => x + p.amount, 0))}</b></td></tr></tbody></table></div>
     </Block>; })()}
+    {bookHasAny(book) && <Block n={++n} title="예약표 집계"><BookSummary sum={book!} /></Block>}
     <p className="iv-foot">출력 {new Date().toLocaleString('ko-KR')}</p>
   </article>;
 }
@@ -142,7 +147,7 @@ export function yearStaff(list: StaffRow[], perf: PerfMonth[]): YearStaff[] {
 }
 
 // 연말 보고(2026-11-12 사용자): 물품별 개수 칸 없이 ① 연간 확인 내용 ② 월별 합계 ③ 업체별 결제 ④ 업체 보관 잔량 ⑤ 직원 근무·연차.
-export function YearReport({ year, months, team = [] }: { year: string; months: MonthRep[]; team?: YearStaff[] }) {
+export function YearReport({ year, months, team = [], book }: { year: string; months: MonthRep[]; team?: YearStaff[]; book?: BookSum | null }) {
   const sum = (k: 'spend_total' | 'spend_general' | 'spend_prepaid' | 'patients' | 'in_count' | 'no_invoice') => months.reduce((s, m) => s + (m[k] || 0), 0);
   const dash = (v: number, f: (v: number) => string = String) => (v ? f(v) : '—');
   const tiles: [string, string, boolean][] = [
@@ -187,6 +192,7 @@ export function YearReport({ year, months, team = [] }: { year: string; months: 
           <tr className="iv-total-row"><td>합계</td><td className="num">{tsum('work_days')}일</td><td className="num">{tsum('hours')}시간</td><td className="num">{tsum('managed')}명</td><td className="num">{tsum('designated')}명</td>
             <td className="num">{tsum('sat_off')}회</td><td /></tr></tbody></table></div>}
     </Block>
+    {bookHasAny(book) && <Block n={++n} title="예약표 집계"><BookSummary sum={book!} /></Block>}
     <p className="iv-foot">출력 {new Date().toLocaleString('ko-KR')}</p>
   </article>;
 }

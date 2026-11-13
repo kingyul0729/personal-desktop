@@ -2717,3 +2717,36 @@ button.iv-pinv { cursor: zoom-in; }
   .sf-wrap .iv-year th:first-child, .sf-wrap .iv-year td:first-child { padding-left: 4px; }
   .sf-wrap .iv-year th:last-child, .sf-wrap .iv-year td:last-child { padding-right: 4px; }
 }
+
+/* 일일 예약표(2026-11-13): 흰 카드 + 얇은 선 표. 칸 폭 고정, 취소 줄은 줄긋기. */
+.bk-sum { display: flex; gap: 0; margin: 0; background: #fff; border: 1px solid var(--ui-line); border-radius: var(--ui-card-r); }
+.bk-sum > div { flex: 1; padding: 12px 16px; text-align: center; }
+.bk-sum > div + div { border-left: 1px solid var(--ui-line); }
+.bk-sum dt { font-size: 12px; color: var(--ui-sub); }
+.bk-sum dd { margin: 2px 0 0; font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--sage-ink); }
+.bk-card { background: #fff; border: 1px solid var(--ui-line); border-radius: var(--ui-card-r); padding: 16px 20px; }
+.bk-card h3 { margin: 0 0 8px; font-size: 15px; font-weight: 600; display: flex; align-items: baseline; gap: 8px; }
+.bk-card h3 small { font-size: 13px; font-weight: 500; color: var(--ui-sub); font-variant-numeric: tabular-nums; }
+.bk-scroll { overflow-x: auto; }
+.bk-table { width: 100%; min-width: 660px; border-collapse: collapse; font-size: 14px; table-layout: fixed; }
+.bk-table th { text-align: left; font-weight: 500; font-size: 12px; color: var(--ui-sub); padding: 6px 8px; border-bottom: 1px solid var(--ui-line-strong); }
+.bk-table td { padding: 8px; border-bottom: 1px solid var(--ui-line); vertical-align: middle; }
+.bk-table tbody tr:last-child td { border-bottom: 0; }
+.bk-table th:nth-child(1) { width: 64px; } .bk-table th:nth-child(2) { width: 84px; } .bk-table th:nth-child(3) { width: 92px; }
+.bk-table th:nth-child(4) { width: 216px; } .bk-table th:nth-child(6) { width: 96px; }
+.bk-time { font-variant-numeric: tabular-nums; color: var(--ui-sub); }
+.bk-name { font-weight: 600; }
+.bk-laser { color: var(--ui-ink); word-break: break-all; }
+.bk-table select, .bk-table input { width: 100%; min-width: 0; height: 34px; padding: 0 8px; border: 1px solid var(--ui-line); border-radius: var(--ui-r); background: #fff; font: inherit; font-size: 13px; color: var(--ui-ink); appearance: none; }
+.bk-table select:focus, .bk-table input:focus { outline: 2px solid var(--sage-ink); outline-offset: -1px; }
+.bk-care { display: inline-flex; gap: 4px; }
+.bk-care button { min-width: 34px; height: 30px; padding: 0 8px; border: 1px solid var(--ui-line); border-radius: 999px; background: #fff; font: inherit; font-size: 12px; color: var(--ui-sub); cursor: pointer; }
+.bk-care button[aria-pressed="true"] { background: var(--sage-bg); border-color: var(--sage); color: var(--sage-ink); font-weight: 600; }
+.bk-act { text-align: right; white-space: nowrap; }
+.bk-cancel { height: 30px; padding: 0 10px; border: 1px solid var(--ui-line); border-radius: var(--ui-r); background: #fff; font: inherit; font-size: 12px; color: var(--ui-sub); cursor: pointer; }
+.bk-cancel[aria-pressed="true"] { background: #fbeceb; border-color: #e7b9b5; color: #c2504a; font-weight: 600; }
+.bk-del { width: 30px; height: 30px; margin-left: 4px; border: 0; background: none; color: var(--ui-faint); cursor: pointer; vertical-align: middle; }
+.bk-del:hover { color: #c2504a; }
+.bk-table tr.is-cancelled .bk-time, .bk-table tr.is-cancelled .bk-name, .bk-table tr.is-cancelled .bk-laser { text-decoration: line-through; color: var(--ui-faint); }
+.bk-table tr.is-cancelled button:disabled, .bk-table tr.is-cancelled select:disabled { opacity: .45; cursor: default; }
+.bk-add td { padding-top: 10px; }
