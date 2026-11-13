@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { Folder, FolderOpen, FolderPlus, ImagePlus, Pencil, Search, Trash2, X } from 'lucide-react';
+import { Folder, FolderInput, FolderOpen, FolderPlus, ImagePlus, Pencil, Search, Trash2, X } from 'lucide-react';
 import { FinderMain, FinderPath } from './FinderFrame';
 import { ToneDot, ToneFolder } from './ToneFolder';
 import { ImageDocumentViewer } from './ImageDocumentViewer';
@@ -34,6 +34,7 @@ export function FileExplorer({ onFolders, goto, onLocation }: { onFolders?: (fol
   const [notice, setNotice] = useState('');
   const [preview, setPreview] = useState('');
   const upload = useRef<HTMLInputElement>(null);
+  const bundle = useRef<HTMLInputElement>(null);
   const currentFolder = files.folders.find(folder => folder.id === location);
 
   async function refresh(signal?: AbortSignal) {
@@ -93,6 +94,39 @@ export function FileExplorer({ onFolders, goto, onLocation }: { onFolders?: (fol
     finally { setPending(false); }
   };
 
+  // 묶음 파일로 넣기(2026-11-13 사용자 '각 가격표 탭 페이지에 구분해서 올려줘'): Claude가 가격표 사진을 폴더별로 묶어 만든 파일
+  // { format: 'dachaeum-pricelist', folders: [{ name, images: [{ name, type, data(base64) }] }] } 을 한 번 올리면
+  // 폴더가 없으면 만들고(같은 이름이 있으면 거기에), 사진을 순서대로 넣는다. 같은 폴더에 같은 이름이 이미 있으면 건너뛴다.
+  // 저장은 화면에서 하나씩 올릴 때와 같은 길(create-folder → POST /api/price-images). 가격표 사진·묶음 파일은 저장소에 넣지 않는다.
+  const importBundle = async (file?: File) => {
+    if (!file || pending) return;
+    setPending(true); setError(''); setCanRetry(false);
+    let added = 0, skipped = 0, current = files;
+    const read = async (response: Response) => { const data = await response.json().catch(() => null); if (!response.ok || !data) throw new Error(data?.error || '저장하지 못했습니다. 다시 시도해 주세요.'); return data as PriceFiles; };
+    try {
+      const j = JSON.parse(await file.text());
+      if (j?.format !== 'dachaeum-pricelist' || !Array.isArray(j.folders)) throw new Error('가격표 묶음 파일이 아니에요.');
+      const total = j.folders.reduce((n: number, f: { images?: unknown[] }) => n + (f.images?.length ?? 0), 0);
+      for (const f of j.folders as { name: string; images: { name: string; type: string; data: string }[] }[]) {
+        let folder = current.folders.find(x => x.name === f.name);
+        if (!folder) {
+          current = await read(await fetch('/api/price-files', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'create-folder', name: f.name, variant }) }));
+          folder = current.folders.find(x => x.name === f.name);
+          if (!folder) throw new Error(`'${f.name}' 폴더를 만들지 못했어요.`);
+        }
+        for (const image of f.images || []) {
+          if (current.images.some(x => x.folderId === folder!.id && x.name === image.name)) { skipped++; continue; }
+          const bytes = Uint8Array.from(atob(image.data), c => c.charCodeAt(0));
+          const form = new FormData(); form.set('file', new File([bytes], `${image.name}.${(image.type || 'image/webp').split('/')[1]}`, { type: image.type || 'image/webp' })); form.set('name', image.name); form.set('folderId', folder.id);
+          current = await read(await fetch('/api/price-images', { method: 'POST', body: form }));
+          added++; setFiles(current); setNotice(`${added + skipped}/${total}`);
+        }
+      }
+      setFiles(current); setNotice(skipped ? `${added}장 넣음 · 이미 있는 ${skipped}장` : `${added}장 넣었습니다.`);
+    } catch (e) { setFiles(current); setError(`${(e as Error).message || '파일을 읽지 못했어요.'}${added ? ` (${added}장까지 넣음)` : ''}`); }
+    finally { setPending(false); }
+  };
+
   const normalizedQuery = query.trim().toLocaleLowerCase('ko');
   const folderName = (id: string) => files.folders.find(folder => folder.id === id)?.name ?? '';
   // 검색은 보관함 전체(폴더 이름 포함)에서, 검색이 없으면 연 폴더 안의 가격표만.
@@ -130,11 +164,13 @@ export function FileExplorer({ onFolders, goto, onLocation }: { onFolders?: (fol
       {currentFolder && !normalizedQuery && <button type="button" aria-label="폴더 이름 변경" title="폴더 이름 변경" onClick={() => openEditor({ type: 'folder', folder: currentFolder })}><Pencil size={18} strokeWidth={1.6} /></button>}
       <button type="button" aria-label="새 폴더" title="새 폴더" onClick={() => openEditor({ type: 'folder' })}><FolderPlus size={19} strokeWidth={1.6} /></button>
       <button type="button" aria-label="이미지 추가" title="이미지 추가" onClick={() => upload.current?.click()}><ImagePlus size={19} strokeWidth={1.6} /></button>
+      <button type="button" aria-label="묶음 파일로 넣기" title="묶음 파일로 넣기" disabled={pending} onClick={() => bundle.current?.click()}><FolderInput size={19} strokeWidth={1.6} /></button>
     </> : <a className="finder-login" href="/signin-with-chatgpt?return_to=%2F" target="_top">로그인 후 정리</a>}
     {searching || query ? <label className="finder-search"><Search size={15} /><input autoFocus type="search" aria-label="가격표 검색" placeholder="검색" value={query}
       onChange={event => setQuery(event.target.value)} onKeyDown={event => { if (event.key === 'Escape') { setQuery(''); setSearching(false); } }} onBlur={() => { if (!query) setSearching(false); }} />
       {query && <button type="button" aria-label="검색어 지우기" onClick={() => { setQuery(''); setSearching(false); }}><X size={14} /></button>}</label>
       : <button type="button" className="finder-search-button" aria-label="검색" title="검색" onClick={() => setSearching(true)}><Search size={19} strokeWidth={1.6} /></button>}
+    <input ref={bundle} type="file" accept="application/json,.json" hidden onChange={event => { const file = event.target.files?.[0]; event.target.value = ''; void importBundle(file); }} />
     <input ref={upload} type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={event => {
       const file = event.target.files?.[0]; event.target.value = '';
       if (!file) return;
