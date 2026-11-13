@@ -222,3 +222,25 @@ test('malformed requests are rejected as client errors instead of storage outage
   assert.equal((await worker.fetch(post('/api/price-images', 'x', 'text/plain'), env)).status, 400);
   assert.equal((await worker.fetch(request('/api/price-images/%E0%A4%A'), env)).status, 404);
 });
+
+test('deleting a folder hides it and sends its price lists to the trash; restoring one brings the folder back', async () => {
+  const env = environment();
+  const before = await (await handleApi(request('/api/price-files'), env)).json();
+  const folder = before.folders[0];
+  const inside = before.images.filter(item => item.folderId === folder.id);
+  assert.ok(inside.length > 0);
+  assert.equal((await handleApi(request('/api/price-files', { action: 'delete-folder', id: folder.id }, 'someone-else'), env)).status, 404);
+  const after = await (await handleApi(request('/api/price-files', { action: 'delete-folder', id: folder.id }), env)).json();
+  assert.equal(after.folders.length, before.folders.length - 1);
+  assert.equal(after.images.length, before.images.length - inside.length);
+  assert.equal((await handleApi(request('/api/price-files', { action: 'delete-folder', id: folder.id }), env)).status, 404, 'already deleted');
+  assert.equal((await handleApi(request('/api/price-files', { action: 'rename-folder', id: folder.id, name: '다시' }), env)).status, 404);
+  // 다시 불러와도 기본 폴더가 되살아나지 않는다
+  const again = await (await handleApi(request('/api/price-files'), env)).json();
+  assert.equal(again.folders.length, before.folders.length - 1);
+  const restored = await handleApi(request('/api/desktop', { action: 'restore-file', type: 'price', id: inside[0].id }), env);
+  assert.equal(restored.status, 200);
+  const back = await (await handleApi(request('/api/price-files'), env)).json();
+  assert.equal(back.folders.length, before.folders.length);
+  assert.equal(back.images.filter(item => item.folderId === folder.id).length, 1);
+});

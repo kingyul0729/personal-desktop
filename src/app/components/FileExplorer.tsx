@@ -4,6 +4,7 @@ import { FinderMain, FinderPath } from './FinderFrame';
 import { ToneDot, ToneFolder } from './ToneFolder';
 import { ImageDocumentViewer } from './ImageDocumentViewer';
 import { KittyDialog } from './KittyDialog';
+import { askConfirm } from './AlertDialog';
 import { LoadingBox, SavingMark } from './Feedback';
 import { announceTrash, useTrashChange } from '../trash';
 import { initialPriceFiles, type PriceFiles, type PriceFolder, type PriceImage } from '../priceFiles';
@@ -159,9 +160,25 @@ export function FileExplorer({ onFolders, goto, onLocation }: { onFolders?: (fol
     </div>);
   }
 
+  // 폴더 삭제: 폴더와 안의 가격표를 모두 휴지통으로(휴지통에서 가격표를 복원하면 폴더도 돌아온다)
+  const deleteFolder = async (folder: PriceFolder) => {
+    if (pending) return;
+    const count = files.images.filter(image => image.folderId === folder.id).length;
+    if (!await askConfirm({ title: '삭제하시겠습니까?', message: `‘${folder.name}’ 폴더 · 가격표 ${count}장`, kind: 'delete' })) return;
+    setPending(true); setError(''); setNotice('');
+    try {
+      const response = await fetch('/api/price-files', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'delete-folder', id: folder.id }) });
+      const data = await response.json().catch(() => null);
+      if (!response.ok || !data) throw new Error(data?.error || '삭제하지 못했습니다. 다시 시도해 주세요.');
+      setFiles(data); setNotice('휴지통으로 이동했습니다.'); announceTrash('price'); setGallery(null); setHistory({ list: ['root'], at: 0 });
+    } catch (e) { setError((e as Error).message || '삭제하지 못했습니다. 다시 시도해 주세요.'); }
+    finally { setPending(false); }
+  };
+
   const tools = <>
     {files.authenticated ? <>
       {currentFolder && !normalizedQuery && <button type="button" aria-label="폴더 이름 변경" title="폴더 이름 변경" onClick={() => openEditor({ type: 'folder', folder: currentFolder })}><Pencil size={18} strokeWidth={1.6} /></button>}
+      {currentFolder && !normalizedQuery && <button type="button" aria-label="폴더 삭제" title="폴더 삭제" disabled={pending} onClick={() => { void deleteFolder(currentFolder); }}><Trash2 size={18} strokeWidth={1.6} /></button>}
       <button type="button" aria-label="새 폴더" title="새 폴더" onClick={() => openEditor({ type: 'folder' })}><FolderPlus size={19} strokeWidth={1.6} /></button>
       <button type="button" aria-label="이미지 추가" title="이미지 추가" onClick={() => upload.current?.click()}><ImagePlus size={19} strokeWidth={1.6} /></button>
       <button type="button" aria-label="묶음 파일로 넣기" title="묶음 파일로 넣기" disabled={pending} onClick={() => bundle.current?.click()}><FolderInput size={19} strokeWidth={1.6} /></button>

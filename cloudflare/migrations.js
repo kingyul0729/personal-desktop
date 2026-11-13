@@ -88,5 +88,11 @@ export default [
   "statements": [
    "ALTER TABLE `study_records` ADD `ink` text DEFAULT '' NOT NULL;"
   ]
+ },
+ {
+  "name": "0011_price_folder_trash",
+  "statements": [
+   "ALTER TABLE `price_folders` ADD `trashed_at` integer;"
+  ]
  }
 ];

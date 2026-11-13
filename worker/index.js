@@ -95,7 +95,7 @@ async function seed(env, owner) {
 async function list(env, owner) {
   await seed(env, owner);
   const [folders, images] = await Promise.all([
-    statement(env, 'SELECT id, name, variant FROM price_folders WHERE owner = ? ORDER BY created_at, rowid', owner).all(),
+    statement(env, 'SELECT id, name, variant FROM price_folders WHERE owner = ? AND trashed_at IS NULL ORDER BY created_at, rowid', owner).all(),
     statement(env, 'SELECT id, name, folder_id AS folderId, source FROM price_images WHERE owner = ? AND trashed_at IS NULL ORDER BY created_at, rowid', owner).all(),
   ]);
   return { authenticated: true, folders: folders.results,
@@ -257,6 +257,8 @@ async function appTrash(env, owner) {
 async function restoreApp(env, owner, type, id) {
   const table = { memo: 'memos', price: 'price_images', capsule: 'work_capsules' }[type];
   const result = await statement(env, `UPDATE ${table} SET trashed_at = NULL WHERE id = ? AND owner = ? AND trashed_at IS NOT NULL`, id, owner).run();
+  // 지운 폴더에 있던 가격표를 복원하면 폴더도 같이 돌아온다
+  if (type === 'price' && result.meta.changes) await statement(env, 'UPDATE price_folders SET trashed_at = NULL WHERE owner = ? AND trashed_at IS NOT NULL AND id = (SELECT folder_id FROM price_images WHERE id = ? AND owner = ?)', owner, id, owner).run();
   return result.meta.changes ? { restoredTo: null } : fail('휴지통에서 항목을 찾을 수 없습니다.', 404);
 }
 async function purgeApp(env, owner, type, id) {
@@ -699,7 +701,7 @@ export async function handleApi(request, env) {
     const name = cleanName(form.get('name'));
     const folderId = form.get('folderId');
     if (!(file instanceof File) || !name || file.size > 10 * 1024 * 1024 || file.size === 0) return json({ error: '이름과 10MB 이하 이미지를 확인해 주세요.' }, 400);
-    const folder = await statement(env, 'SELECT id FROM price_folders WHERE id = ? AND owner = ?', folderId, owner).first();
+    const folder = await statement(env, 'SELECT id FROM price_folders WHERE id = ? AND owner = ? AND trashed_at IS NULL', folderId, owner).first();
     if (!folder) return json({ error: '저장할 폴더를 선택해 주세요.' }, 400);
     const bytes = await file.arrayBuffer();
     const mime = imageType(bytes);
@@ -723,18 +725,27 @@ export async function handleApi(request, env) {
       await statement(env, 'INSERT INTO price_folders (id, owner, name, variant, created_at) VALUES (?, ?, ?, ?, ?)', crypto.randomUUID(), owner, name, variant, Date.now()).run();
     } else if (body.action === 'edit-image') {
       if (!name) return json({ error: '가격표 이름을 입력해 주세요.' }, 400);
-      const folder = await statement(env, 'SELECT id FROM price_folders WHERE id = ? AND owner = ?', body.folderId, owner).first();
+      const folder = await statement(env, 'SELECT id FROM price_folders WHERE id = ? AND owner = ? AND trashed_at IS NULL', body.folderId, owner).first();
       if (!folder) return json({ error: '저장할 폴더를 선택해 주세요.' }, 400);
       const result = await statement(env, 'UPDATE price_images SET name = ?, folder_id = ? WHERE id = ? AND owner = ? AND trashed_at IS NULL', name, body.folderId, body.id, owner).run();
       if (!result.meta.changes) return json({ error: '가격표를 찾을 수 없습니다.' }, 404);
     } else if (body.action === 'rename-folder') {
       if (!name) return json({ error: '폴더 이름을 입력해 주세요.' }, 400);
-      const result = await statement(env, 'UPDATE price_folders SET name = ? WHERE id = ? AND owner = ?', name, body.id, owner).run();
+      const result = await statement(env, 'UPDATE price_folders SET name = ? WHERE id = ? AND owner = ? AND trashed_at IS NULL', name, body.id, owner).run();
       if (!result.meta.changes) return json({ error: '폴더를 찾을 수 없습니다.' }, 404);
     } else if (body.action === 'delete-image') {
       // Goes to the trash; the record and stored image are removed only when purged there.
       const result = await statement(env, 'UPDATE price_images SET trashed_at = ? WHERE id = ? AND owner = ? AND trashed_at IS NULL', Date.now(), body.id, owner).run();
       if (!result.meta.changes) return json({ error: '가격표를 찾을 수 없습니다.' }, 404);
+    } else if (body.action === 'delete-folder') {
+      // 폴더 삭제(2026-11-13 사용자 '파일삭제기능'): 폴더는 숨기고 안의 가격표는 모두 휴지통으로 — 휴지통에서 가격표를 복원하면 폴더도 같이 돌아온다.
+      // 폴더 줄은 지우지 않는다(기본 폴더가 다시 생기지 않게).
+      const now = Date.now();
+      const [folder] = await env.DB.batch([
+        statement(env, 'UPDATE price_folders SET trashed_at = ? WHERE id = ? AND owner = ? AND trashed_at IS NULL', now, body.id, owner),
+        statement(env, 'UPDATE price_images SET trashed_at = ? WHERE folder_id = ? AND owner = ? AND trashed_at IS NULL AND EXISTS (SELECT 1 FROM price_folders WHERE id = ? AND owner = ?)', now, body.id, owner, body.id, owner),
+      ]);
+      if (!folder.meta.changes) return json({ error: '폴더를 찾을 수 없습니다.' }, 404);
     } else return json({ error: '지원하지 않는 작업입니다.' }, 400);
     return json(await list(env, owner));
   }
