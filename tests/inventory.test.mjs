@@ -955,7 +955,8 @@ test('최종 수정일·수정자: qty/date/memo edits stamp the row; delete kee
 test('aladdin1: 알라딘 필링 prices + one order option, vendor pays by card or transfer; vendor payment info saved from the app', async () => {
   const e = env(); await call(e, '/state');
   const p = id => e.inv.prepare('SELECT price FROM inv_items WHERE id = ?').get(id).price;
-  assert.deepEqual([p(1030), p(1031), p(1029)], [979000, 44000, 165000]);
+  assert.deepEqual([p(1030), p(1031), p(1029)], [979000, 44000, 169000]); // 액티베이터는 2026-11-13부터 169,000원(aladdin2)
+  assert.equal(e.inv.prepare('SELECT amount FROM inv_options WHERE item_id = 1029 AND active = 1').get().amount, 169000);
   assert.equal(e.inv.prepare('SELECT amount FROM inv_options WHERE item_id = 1030 AND active = 1').get().amount, 979000);
   assert.equal(e.inv.prepare('SELECT payment_method FROM inv_vendors WHERE id = 7').get().payment_method, '카드결제·계좌입금');
   const r = await call(e, '/vendors', 'POST', { id: 7, company: '테스트상사', payment_method: '카드결제·계좌입금', bank: '테스트은행', account: '000-00-0000', holder: '홍길동' });

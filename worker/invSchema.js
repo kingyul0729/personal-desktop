@@ -183,6 +183,15 @@ export async function ensureInvSchema(db) {
       await db.prepare(`INSERT OR REPLACE INTO inv_meta (key, value) VALUES ('fixes', ?)`).bind(`${fixes} aladdin1`.trim()).run();
       fixes = `${fixes} aladdin1`.trim();
     }
+    if (!fixes.includes('aladdin2')) {
+      // 2026-11-13 사용자 '담부터는 알라딘 필링 액티베이터 주문할 때 169,000원': 아직 165,000원 그대로인 단가·구매조건만 169,000원으로(앱에서 이미 바꾼 값은 그대로, 지난 주문·입고 기록 금액은 손대지 않음)
+      await db.batch([
+        db.prepare('UPDATE inv_items SET price = 169000, updated_at = ? WHERE id = 1029 AND price = 165000').bind(Date.now()),
+        db.prepare('UPDATE inv_options SET amount = 169000 WHERE item_id = 1029 AND active = 1 AND amount = 165000'),
+        db.prepare(`INSERT OR REPLACE INTO inv_meta (key, value) VALUES ('fixes', ?)`).bind(`${fixes} aladdin2`.trim()),
+      ]);
+      fixes = `${fixes} aladdin2`.trim();
+    }
     if (!fixes.includes('paytime1')) {
       // 2026-11-12 사용자: 업체마다 결제 시점(주문 시 결제 / 월말 결제)을 저장, 옵션(구매조건·선결제 옵션)에 행사 기간(시작~끝, 비우면 늘).
       // 사용자가 정해 준 업체만 넣고(주문 시: 더마소드·쎄라덤·중외·알라딘 필링·카프리가스·스키노바·상떼화장품·바이더퀄리티 / 월말: 하라셀),
