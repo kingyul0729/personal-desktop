@@ -2838,3 +2838,13 @@ button.iv-pinv { cursor: zoom-in; }
   .ed-form-grid { grid-template-columns: minmax(0, 1fr); }
 }
 @container sfw (max-width: 560px) { .ed-who.is-none { display: none; } }
+/* 신입교육 자료(2026-11-14 사용자 '카메라 이름표 대신 클립 색이 바뀌게'): 자료가 있으면 클립이 진한 청회색으로 채워지고 누르면 바로 보기, 여러 장이면 작은 숫자 */
+.ed-clip { border: 0; background: none; padding: 0; font: inherit; }
+.ed-clip.is-on { background: #557591; color: #fff; }
+.ed-clip.is-on:hover { background: #44617c; color: #fff; }
+.ed-clip i { position: absolute; top: -4px; right: -4px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 999px; background: #fff; color: #44617c; border: 1px solid #557591; font-size: 10px; font-style: normal; font-weight: 700; line-height: 14px; }
+.ed-view-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+.ed-view-tabs button { height: 32px; padding: 0 12px; border: 1px solid #c9d6e3; border-radius: 999px; background: #fff; color: #44617c; font: inherit; font-size: 13px; cursor: pointer; }
+.ed-view-tabs button[aria-pressed="true"] { background: #ecf1f6; font-weight: 600; }
+.ed-view-add { position: relative; overflow: hidden; display: inline-flex; align-items: center; }
+.ed-view-add input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }

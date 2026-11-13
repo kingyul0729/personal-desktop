@@ -132,7 +132,9 @@ export default function StaffTraining() {
         await run('t', () => api(`/trainees/${edit.id}`, 'DELETE'), '지웠어요.'); setEdit(null); setSel(null);
       }} busy={busy === 't'} />}
     {view && <div className="ed-view" role="dialog" aria-modal="true" aria-label={view.name} onClick={e => { if (e.target === e.currentTarget) setView(null); }}>
-      <header><strong>{view.name}</strong><span><button type="button" className="sf-btn" onClick={() => void dropDoc(view)}>삭제</button><a className="sf-btn" href={docSrc(view.id)} target="_blank" rel="noopener noreferrer">원본 열기</a><button type="button" className="iv-icon-btn" aria-label="닫기" onClick={() => setView(null)}><X size={20} /></button></span></header>
+      <header><span className="ed-view-tabs">{(docsBy[view.item_key] || [view]).map((d, i) => <button key={d.id} type="button" aria-pressed={d.id === view.id} onClick={() => setView(d)}>자료 {i + 1}</button>)}</span><span>
+        <label className="sf-btn ed-view-add">{busy === `doc-${view.item_key}` ? <SavingMark /> : '자료 추가'}<input type="file" accept="image/*,application/pdf" onChange={e => { void upload(view.item_key, e.target.files?.[0]); e.currentTarget.value = ''; }} /></label>
+        <button type="button" className="sf-btn" onClick={() => void dropDoc(view)}>삭제</button><a className="sf-btn" href={docSrc(view.id)} target="_blank" rel="noopener noreferrer">원본 열기</a><button type="button" className="iv-icon-btn" aria-label="닫기" onClick={() => setView(null)}><X size={20} /></button></span></header>
       {view.mime === 'application/pdf' ? <iframe src={docSrc(view.id)} title={view.name} /> : <img src={docSrc(view.id)} alt={view.name} />}
     </div>}
     {rules && <div className="sf-modal" role="dialog" aria-modal="true" aria-label="교육 원칙 · 최종 목표">
@@ -157,9 +159,10 @@ function Day({ d, t, isDone, isCur, docsBy, busy, onCheck, onEval, onUpload, onV
       return <li key={key} className={c ? 'is-on' : ''}>
         <button type="button" className="ed-ck" role="checkbox" aria-checked={!!c} aria-label={text} disabled={busy === key} onClick={() => onCheck(key, role, text)}>{busy === key ? <SavingMark /> : c ? '✓' : ''}</button>
         <span className="ed-text">{text}
-          {docs.length > 0 && <span className="ed-docs">{docs.map(doc => <button key={doc.id} type="button" className="ed-doc" onClick={() => onView(doc)}>{doc.mime === 'application/pdf' ? '📄' : '📷'} {doc.name}</button>)}</span>}</span>
-        <label className="ed-clip" title="자료 붙이기" aria-label={`${text} 자료 붙이기`}>{busy === `doc-${key}` ? <SavingMark /> : <Paperclip size={15} strokeWidth={1.8} />}
-          <input type="file" accept="image/*,application/pdf" onChange={e => { onUpload(key, e.target.files?.[0]); e.currentTarget.value = ''; }} /></label>
+</span>
+        {docs.length ? <button type="button" className="ed-clip is-on" aria-label={`${text} 자료 보기`} onClick={() => onView(docs[0])}><Paperclip size={15} strokeWidth={2} />{docs.length > 1 && <i>{docs.length}</i>}</button>
+          : <label className="ed-clip" aria-label={`${text} 자료 붙이기`}>{busy === `doc-${key}` ? <SavingMark /> : <Paperclip size={15} strokeWidth={1.8} />}
+            <input type="file" accept="image/*,application/pdf" onChange={e => { onUpload(key, e.target.files?.[0]); e.currentTarget.value = ''; }} /></label>}
         <span className={`ed-who${c ? "" : " is-none"}`}>{c ? `${c.teacher} · ${md(c.at)}` : "—"}</span>
       </li>; })}</ul>
   </div> : null;
