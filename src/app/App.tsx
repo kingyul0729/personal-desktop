@@ -12,6 +12,7 @@ import { FinderMain, FinderPath } from './components/FinderFrame';
 import StaffSchedule from './components/StaffSchedule';
 import StaffLeave from './components/StaffLeave';
 import StaffBook from './components/StaffBook';
+import StaffTraining from './components/StaffTraining';
 import { StockCheck, StockMove, StockOrder, StockReport } from './components/Inventory';
 import { activeWindow, desktopReducer, initialDesktop, type WindowId } from './desktopState';
 import { DesktopProvider, useDesktop } from './useDesktop';
@@ -31,7 +32,6 @@ export const SIDEBAR_GROUPS: { title: string; items: MenuItem[] }[] = [
 ];
 // 아직 기존 자료 파일을 옮겨 오기 전인 화면
 const PENDING: Partial<Record<WindowId, string>> = {
-  staffTraining: '신입 직원 교육 자료',
 };
 const HOME: WindowId = 'fileExplorer';
 // 메뉴에 없는 화면(환경설정에서 여는 휴지통·파일)은 환경설정 아래에 있는 것으로 보이고 닫기 버튼이 붙는다.
@@ -155,6 +155,7 @@ export function AppShell({ desktop, dispatch }: { desktop: typeof initialDesktop
         {pane('staffSchedule', <StaffSchedule />)}
         {pane('staffLeave', <StaffLeave />)}
         {pane('staffBook', <StaffBook />)}
+        {pane('staffTraining', <StaffTraining />)}
         {pane('stockCheck', <StockCheck />)}
         {pane('stockOrder', <StockOrder />)}
         {pane('stockMove', <StockMove />)}

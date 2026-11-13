@@ -2750,3 +2750,91 @@ button.iv-pinv { cursor: zoom-in; }
 .bk-table tr.is-cancelled .bk-time, .bk-table tr.is-cancelled .bk-name, .bk-table tr.is-cancelled .bk-laser { text-decoration: line-through; color: var(--ui-faint); }
 .bk-table tr.is-cancelled button:disabled, .bk-table tr.is-cancelled select:disabled { opacity: .45; cursor: default; }
 .bk-add td { padding-top: 10px; }
+/* ───────── 신입교육(2026-11-14 사용자 지정, `StaffTraining`): 왼쪽 신입 목록 | 오른쪽 20일 체크리스트(팀장/직원 구분·평가일·항목별 자료) ───────── */
+.ed-wrap { --ln: #e3e8ee; --sub: #8a9099; --ink: #2d3136; padding: var(--pg-top, 24px) var(--pg-x, 28px); }
+.ed-split { display: grid; grid-template-columns: minmax(200px, 240px) minmax(0, 1fr); gap: 24px; align-items: start; }
+.ed-list { position: sticky; top: 16px; padding: 8px; background: #fff; border: 1px solid var(--ln); border-radius: 12px; }
+.ed-gt { margin: 0; padding: 12px 12px 8px; font-size: 12px; font-weight: 700; color: #557591; }
+.ed-list ul { list-style: none; margin: 0; padding: 0 4px; display: flex; flex-direction: column; gap: 8px; }
+.ed-list li button { width: 100%; height: 56px; display: flex; align-items: center; gap: 10px; padding: 0 12px; border: 1px solid var(--ln); border-radius: 10px; background: #fff; font: inherit; text-align: left; cursor: pointer; }
+.ed-list li button[aria-current="true"] { background: #f2f6fa; }
+.ed-pname { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.ed-pname b { font-size: 14px; font-weight: 600; color: var(--ink); }
+.ed-pname small { font-size: 12px; color: var(--sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ed-add { margin: 12px 4px 4px; display: inline-flex; align-items: center; gap: 4px; height: 40px; }
+.ed-main { padding: 24px; background: #fff; border: 1px solid var(--ln); border-radius: 12px; display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+.ed-empty { min-height: 240px; display: grid; place-items: center; color: var(--sub); }
+.ed-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+.ed-title { display: flex; align-items: center; gap: 10px; }
+.ed-title h2 { margin: 0; font-size: 20px; }
+.ed-tag { font-size: 12px; padding: 2px 8px; border-radius: 6px; background: #ecf1f6; color: #44617c; }
+.ed-sub { margin: 4px 0 0; font-size: 13px; color: var(--sub); }
+.ed-head-btns { display: flex; gap: 8px; }
+.ed-head-btns .sf-btn { height: 40px; }
+.ed-stats { margin: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); padding: 16px 0; background: #f5f7fa; border-radius: 12px; }
+.ed-stats > div { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 0 12px; text-align: center; }
+.ed-stats > div + div { border-left: 1px solid var(--ln); }
+.ed-stats dt { font-size: 12px; color: var(--sub); }
+.ed-stats dd { margin: 0; display: flex; align-items: baseline; gap: 4px; }
+.ed-stats .iv-num { font-size: 22px; font-weight: 700; color: var(--ink); }
+.ed-stats .iv-unit { font-size: 13px; color: var(--sub); background: none; padding: 0; }
+.ed-stats dd.is-text { font-size: 15px; font-weight: 700; line-height: 28px; word-break: keep-all; }
+.ed-stages { display: flex; flex-wrap: wrap; gap: 8px; }
+.ed-stages button small { margin-left: 4px; font-size: 11px; color: var(--sub); }
+.ed-days { display: flex; flex-direction: column; gap: 12px; }
+.ed-day { padding: 16px 20px; border: 1px solid var(--ln); border-radius: 12px; background: #fff; }
+.ed-day.is-done .ed-grp, .ed-day.is-done .ed-dh b { opacity: .6; }
+.ed-day.is-cur { border-color: #c9d6e3; }
+.ed-dh { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.ed-dh b { font-size: 15px; }
+.ed-dt { font-size: 13px; color: #5b6168; }
+.ed-dr { margin-left: auto; font-size: 12px; color: var(--sub); }
+.ed-day.is-cur .ed-dr { color: #44617c; font-weight: 600; }
+.ed-ev { font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 6px; background: #557591; color: #fff; }
+.ed-grp { display: grid; grid-template-columns: 48px minmax(0, 1fr); gap: 10px; padding: 8px 0; }
+.ed-grp + .ed-grp { border-top: 1px solid #f0f2f5; }
+.ed-role { align-self: start; margin-top: 6px; padding: 3px 0; border-radius: 6px; font-size: 12px; font-weight: 700; text-align: center; }
+.ed-role.is-lead { background: #557591; color: #fff; }
+.ed-role.is-staff { background: #eef0f3; color: #5b6168; }
+.ed-grp ul { list-style: none; margin: 0; padding: 0; }
+.ed-grp li { display: grid; grid-template-columns: 28px minmax(0, 1fr) 32px auto; align-items: center; gap: 8px; min-height: 36px; padding: 2px 0; }
+.ed-ck { width: 22px; height: 22px; padding: 0; display: grid; place-items: center; border: 1.5px solid #c9d6e3; border-radius: 6px; background: #fff; color: #fff; font-size: 12px; cursor: pointer; }
+.ed-grp li.is-on .ed-ck { background: #557591; border-color: #557591; }
+.ed-grp li.is-on .ed-text { color: var(--sub); }
+.ed-text { font-size: 14px; line-height: 20px; word-break: keep-all; }
+.ed-docs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.ed-doc { font: inherit; font-size: 12px; padding: 3px 10px; border: 1px solid #c9d6e3; border-radius: 999px; background: #fff; color: #44617c; cursor: pointer; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ed-clip { position: relative; width: 32px; height: 32px; display: grid; place-items: center; border-radius: 8px; color: #8a9099; cursor: pointer; }
+.ed-clip:hover { background: #f2f6fa; color: #44617c; }
+.ed-clip input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.ed-who { min-width: 88px; font-size: 12px; color: var(--sub); text-align: right; white-space: nowrap; }
+.ed-evbox { margin-top: 8px; padding: 10px 12px; border-radius: 8px; background: #f5f7fa; display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; font-size: 13px; }
+.ed-evbtn { margin-left: auto; display: flex; gap: 6px; }
+.ed-evbtn button { height: 32px; padding: 0 12px; border: 1px solid #c9d6e3; border-radius: 999px; background: #fff; color: #44617c; font: inherit; font-size: 12px; cursor: pointer; }
+.ed-evbtn button[aria-pressed="true"] { background: #557591; border-color: #557591; color: #fff; }
+.ed-evbox small { font-size: 12px; color: var(--sub); }
+.ed-teach, .ed-form { width: min(420px, 100%); }
+.ed-teach-item { margin: 0 0 12px; font-size: 13px; color: #5b6168; }
+.ed-teach-names { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.ed-teach-names .sf-btn { display: inline-flex; align-items: center; gap: 6px; height: 40px; }
+.ed-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.ed-del { margin-right: auto; color: #c2504a; }
+.ed-rules { width: min(560px, 100%); max-height: 80vh; overflow: auto; }
+.ed-rules h4 { margin: 12px 0 8px; font-size: 14px; }
+.ed-rules ol, .ed-rules ul { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; font-size: 14px; line-height: 20px; }
+.ed-view { position: fixed; inset: 0; z-index: 8000; display: flex; flex-direction: column; background: rgba(20, 24, 28, .82); }
+.ed-view header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; background: #fff; }
+.ed-view header span { display: flex; align-items: center; gap: 8px; }
+.ed-view img { margin: auto; max-width: 96%; max-height: calc(100% - 80px); object-fit: contain; }
+.ed-view iframe { flex: 1; border: 0; background: #fff; }
+@container sfw (max-width: 760px) { .ed-split { grid-template-columns: minmax(180px, 210px) minmax(0, 1fr); gap: 16px; } .ed-main { padding: 16px; } .ed-who { min-width: 0; } }
+@container sfw (max-width: 560px) {
+  .ed-split { grid-template-columns: minmax(0, 1fr); }
+  .ed-list { position: static; }
+  .ed-grp { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .ed-role { justify-self: start; padding: 2px 8px; margin: 0; }
+  .ed-grp li { grid-template-columns: 28px minmax(0, 1fr) 32px; }
+  .ed-who { grid-column: 2 / -1; text-align: left; }
+  .ed-form-grid { grid-template-columns: minmax(0, 1fr); }
+}
+@container sfw (max-width: 560px) { .ed-who.is-none { display: none; } }
