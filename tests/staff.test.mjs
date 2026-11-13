@@ -265,6 +265,10 @@ test('booking sheet: import, mark, cancel, same-day rows and a separate summary 
   await up({ id: d1.data.row.id, staff_id: 1, care: ['더마'] });
   const d2 = await add({ kind: 'day_care', customer: '파하가' });
   await up({ id: d2.data.row.id, staff_id: 2, care: ['S'] });
+  // 더할 때 관리담당·관리를 같이 골라도 된다
+  const d3 = await add({ kind: 'day_book', customer: '같이고름', staff_id: 1, care: ['히알', 'M'] });
+  assert.deepEqual([d3.data.row.staff_id, d3.data.row.care], [1, ['M', '히알']]);
+  await call(e, '/api/staff/book/delete', { method: 'POST', body: { id: d3.data.row.id } });
   assert.equal((await add({ kind: 'book', customer: '안됨' })).status, 400);
   assert.equal((await add({ kind: 'day_care', customer: ' ' })).status, 400);
   // 월 집계: 종류마다 따로, 취소는 고객 수에서 빼고 취소 칸에

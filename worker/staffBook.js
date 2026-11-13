@@ -62,8 +62,11 @@ export async function handleBook(request, db, sub, url) {
   if (sub === '/book/add') {
     const customer = text(body.customer, 40);
     if (!isDate(body.date) || !['day_book', 'day_care'].includes(body.kind) || !customer) return bad('날짜·고객명을 확인해 주세요');
-    const r = await db.prepare(`INSERT INTO staff_book (date, kind, time, customer, laser, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING *`)
-      .bind(body.date, body.kind, timeOf(body.time), customer, text(body.laser, 200), now, now).first();
+    // 더할 때 관리담당·관리도 같이 고를 수 있다(2026-11-13 사용자 '당일예약·신환에도 이름·관리 동일하게')
+    let staffId = null;
+    if (body.staff_id != null && body.staff_id !== '') { const s = await db.prepare('SELECT id FROM staff WHERE id = ?').bind(Number(body.staff_id)).first(); if (!s) return bad('직원을 확인해 주세요'); staffId = s.id; }
+    const r = await db.prepare(`INSERT INTO staff_book (date, kind, time, customer, laser, staff_id, care, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`)
+      .bind(body.date, body.kind, timeOf(body.time), customer, text(body.laser, 200), staffId, cleanCare(body.care).join(','), now, now).first();
     return json({ ok: true, row: rowOut(r) });
   }
   if (sub === '/book/update') {

@@ -48,7 +48,7 @@ export default function StaffBook() {
     try { await staffPost('/book/delete', { id: row.id }); setDay(cur => cur && { ...cur, rows: cur.rows.filter(r => r.id !== row.id) }); }
     catch (e) { setToast(e instanceof Error ? e.message : '삭제 실패'); }
   };
-  const add = async (kind: BookKind, f: { time: string; customer: string; laser: string }) => {
+  const add = async (kind: BookKind, f: AddForm) => {
     try { const r = await staffPost('/book/add', { date, kind, ...f }); setDay(cur => cur && { ...cur, rows: [...cur.rows, r.row] }); return true; }
     catch (e) { setToast(e instanceof Error ? e.message : '저장 실패'); return false; }
   };
@@ -99,11 +99,12 @@ export default function StaffBook() {
   </div>;
 }
 
-type AddForm = { time: string; customer: string; laser: string };
+type AddForm = { time: string; customer: string; laser: string; staff_id: number | null; care: string[] };
+const EMPTY_ADD: AddForm = { time: '', customer: '', laser: '', staff_id: null, care: [] };
 export function BookTable({ title, rows, people, staff, onUpdate, onRemove, onAdd }: { title: string; rows: BookRow[]; people: BookStaff[]; staff: BookStaff[];
   onUpdate: (row: BookRow, patch: Partial<BookRow>) => void; onRemove: (row: BookRow) => void; onAdd?: (f: AddForm) => Promise<boolean> }) {
-  const [f, setF] = useState<AddForm>({ time: '', customer: '', laser: '' });
-  const submit = async () => { if (!f.customer.trim() || !onAdd) return; if (await onAdd(f)) setF({ time: '', customer: '', laser: '' }); };
+  const [f, setF] = useState<AddForm>(EMPTY_ADD);
+  const submit = async () => { if (!f.customer.trim() || !onAdd) return; if (await onAdd(f)) setF(EMPTY_ADD); };
   return <section className="bk-card" aria-label={title}>
     <h3>{title}<small>{rows.filter(r => !r.cancelled).length}</small></h3>
     {rows.length === 0 && !onAdd ? <p className="sf-hint">기록 없음</p> : <div className="bk-scroll"><table className="bk-table">
@@ -126,7 +127,9 @@ export function BookTable({ title, rows, people, staff, onUpdate, onRemove, onAd
         {onAdd && <tr className="bk-add">
           <td><input type="time" aria-label={`${title} 시간`} value={f.time} onChange={e => setF({ ...f, time: e.target.value })} /></td>
           <td><input type="text" aria-label={`${title} 고객명`} placeholder="고객명" value={f.customer} onChange={e => setF({ ...f, customer: e.target.value })} onKeyDown={e => { if (e.key === 'Enter') void submit(); }} /></td>
-          <td /><td />
+          <td><select aria-label={`${title} 관리담당`} value={f.staff_id ?? ''} onChange={e => setF({ ...f, staff_id: e.target.value ? Number(e.target.value) : null })}>
+            <option value="">—</option>{people.map(s => <option key={s.id} value={s.id}>{short(s.name)}</option>)}</select></td>
+          <td><span className="bk-care" role="group" aria-label={`${title} 관리`}>{BOOK_CARE.map(k => <button key={k} type="button" aria-pressed={f.care.includes(k)} onClick={() => setF({ ...f, care: toggleCare(f.care, k) })}>{k}</button>)}</span></td>
           <td><input type="text" aria-label={`${title} 레이저`} placeholder="레이저" value={f.laser} onChange={e => setF({ ...f, laser: e.target.value })} onKeyDown={e => { if (e.key === 'Enter') void submit(); }} /></td>
           <td className="bk-act"><button type="button" className="sf-btn is-primary" disabled={!f.customer.trim()} onClick={() => void submit()}>추가</button></td>
         </tr>}
