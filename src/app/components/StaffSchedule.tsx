@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { LoadingBox, SavingMark } from './Feedback';
 import { OldDataBanner } from './Inventory';
 import { StaffAvatar } from './staffTone';
+import StaffLeave from './StaffLeave';
 import { staffGet, staffPost, StaffApiError } from '../staffApi';
 import {
   type AttendanceRecord, type MonthData, type StaffMember, WEEKDAYS, WORK_STATES, ST_LEADER, ST_STAFF, calendarLines, dateIn, dayLabelKo, daysInMonth, diffMin,
@@ -64,13 +65,30 @@ export function StaffUnavailable({ message, unavailable, detail }: { message: st
     {detail && <pre className="sf-detail">{detail}</pre>}</div>;
 }
 
-export default function StaffSchedule() {
-  const [tab, setTab] = useState<'schedule' | 'perf'>('schedule');
+// 스케줄·연차·성과 한 화면(2026-11-20 사용자 '한 페이지에, 기능은 그대로 상단에 탭만'): 맨 위 알약 탭 셋, 각 탭은 예전 화면 그대로.
+// 한 번 연 탭은 숨겨 두기만 해서(입력·고른 달 유지) 탭을 오가도 남는다.
+type HubTab = 'schedule' | 'leave' | 'perf';
+export default function StaffHub() {
+  const [tab, setTab] = useState<HubTab>('schedule');
+  const [seen, setSeen] = useState<Record<string, boolean>>({ schedule: true });
+  const go = (t: HubTab) => { setTab(t); setSeen(v => ({ ...v, [t]: true, ...(t === 'perf' ? { schedule: true } : {}) })); };
+  const tabs = <div className="sf-pills sf-hubtabs" role="tablist" aria-label="직원">
+    {([['schedule', '스케줄'], ['leave', '연차'], ['perf', '성과']] as [HubTab, string][]).map(([k, label]) =>
+      <button key={k} type="button" role="tab" aria-pressed={tab === k} aria-selected={tab === k} onClick={() => go(k)}>{label}</button>)}
+  </div>;
+  return <>
+    <StaffSchedule tab={tab === 'perf' ? 'perf' : 'schedule'} tabs={tabs} hide={tab === 'leave'} />
+    {seen.leave && <StaffLeave tabs={tabs} hide={tab !== 'leave'} />}
+  </>;
+}
+
+function StaffSchedule({ tab, tabs, hide }: { tab: 'schedule' | 'perf'; tabs: React.ReactNode; hide: boolean }) {
   const [month, setMonth] = useState(() => todayLocal().slice(0, 7));
   const data = useStaffMonth(month);
   const [toast, setToast] = useState('');
   useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(''), 2200); return () => clearTimeout(t); }, [toast]);
-  return <div className="sf-wrap">
+  return <div className="sf-wrap" hidden={hide}>
+    {tabs}
     <OldDataBanner />
     <div className="sf-bar">
       <div className="sf-month">
@@ -78,10 +96,6 @@ export default function StaffSchedule() {
         <strong>{monthLabel(month)}</strong>
         <button type="button" aria-label="다음 달" onClick={() => setMonth(m => shiftMonth(m, 1))}><ChevronRight size={18} strokeWidth={2} /></button>
         <button type="button" className="sf-today" onClick={() => setMonth(todayLocal().slice(0, 7))}>오늘</button>
-      </div>
-      <div className="sf-seg" role="tablist" aria-label="보기">
-        <button type="button" role="tab" aria-selected={tab === 'schedule'} onClick={() => setTab('schedule')}>스케줄</button>
-        <button type="button" role="tab" aria-selected={tab === 'perf'} onClick={() => setTab('perf')}>성과</button>
       </div>
     </div>
     {data.loading && !data.staff.length ? <LoadingBox /> : data.error ? <StaffUnavailable message={data.error} unavailable={data.unavailable} detail={data.detail} />

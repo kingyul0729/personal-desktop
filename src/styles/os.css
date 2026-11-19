@@ -3017,3 +3017,6 @@ button.iv-pinv { cursor: zoom-in; }
 .lv-fix-note b { color: #2d3136; }
 .lv-fix-foot { display: flex; justify-content: flex-end; gap: 8px; }
 @media (max-width: 520px) { .lv-hist-row { flex-wrap: wrap; } .lv-fix-2 { grid-template-columns: minmax(0, 1fr); } }
+/* 스케줄·연차·성과 한 화면(2026-11-20): 맨 위 알약 탭 줄 */
+.sf-wrap .sf-hubtabs { margin: 0 0 16px; }
+.sf-wrap[hidden] { display: none !important; }

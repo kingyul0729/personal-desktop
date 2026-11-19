@@ -14,7 +14,7 @@ const LEAVE_REASONS = ['포상 연차 지급', '재계약 연차 재세팅', '�
 const LOG_TYPE: Record<string, string> = { use: '연차 사용', revert: '사용 되돌림', adjust: '수동 수정', grant: '월 지급연차', convert: '정직원 전환', fix: '정정', pending: '미리 등록' };
 type LeaveLog = { id: number; log_type: string; log_date?: string | null; amount?: number | null; reason?: string | null; memo?: string | null; before_total?: number | null; after_total?: number | null; before_used?: number | null; after_used?: number | null; after_remain?: number | null; editor?: string | null; created_at?: string; cancelled_at?: string | null; cancel_reason?: string | null; ref_id?: number | null; remain_now?: number; can_fix?: boolean };
 
-export default function StaffLeave() {
+export default function StaffLeave({ tabs, hide = false }: { tabs?: React.ReactNode; hide?: boolean } = {}) {
   const [month, setMonth] = useState(() => todayLocal().slice(0, 7));
   const year = month.slice(0, 4);
   const [staff, setStaff] = useState<StaffMember[]>([]);
@@ -33,10 +33,11 @@ export default function StaffLeave() {
     } catch (e) { setState({ loading: false, error: e instanceof Error ? e.message : '불러오지 못했어요.', unavailable: e instanceof StaffApiError && e.unavailable, detail: e instanceof StaffApiError ? e.detail : '' }); }
   }, [year]);
   useEffect(() => { void load(); const on = () => void load(); window.addEventListener('staff-data-changed', on); return () => window.removeEventListener('staff-data-changed', on); }, [load]);
-  if (state.loading && !staff.length) return <LoadingBox />;
-  if (state.error) return <StaffUnavailable message={state.error} unavailable={state.unavailable} detail={state.detail} />;
+  if ((state.loading && !staff.length) || state.error) return hide ? null : <div className="sf-wrap sf-leave">{tabs}
+    {state.error ? <StaffUnavailable message={state.error} unavailable={state.unavailable} detail={state.detail} /> : <LoadingBox />}</div>;
   const today = todayLocal(), n = daysInMonth(month), lead = weekdayOf(`${month}-01`); // 달력은 늘 6줄(42칸)로 그려 달마다 카드 높이가 같게
-  return <div className="sf-wrap sf-leave">
+  return <div className="sf-wrap sf-leave" hidden={hide}>
+    {tabs}
     <OldDataBanner />
     <div className="sf-bar">
       <div className="sf-month">
