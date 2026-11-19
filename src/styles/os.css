@@ -2980,3 +2980,40 @@ button.iv-pinv { cursor: zoom-in; }
   .sf-wrap .iv-hub-log .iv-txrow .iv-unit-t { display: inline; }
 }
 .sf-wrap .iv-difftbl { width: 100%; }
+/* ───────── 연차 이력 · 수정·취소(2026-11-20 사용자 지정) — 기록 줄 아래에서 바로 고침 ───────── */
+.sf-modal-panel.lv-hist { width: min(560px, calc(100vw - 32px)); }
+.lv-hist-sum { margin: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); padding: 10px 0; background: #f0f3f7; border-radius: 12px; text-align: center; }
+.lv-hist-sum > div + div { border-left: 1px solid #d8dfe7; }
+.lv-hist-sum dt { font-size: 12px; color: #8d9197; }
+.lv-hist-sum dd { margin: 2px 0 0; font-size: 19px; font-weight: 700; color: #2d3136; font-variant-numeric: tabular-nums; }
+.lv-hist-sum dd.is-r { color: #44617c; }
+.lv-hist-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.lv-hist-list > li { border-top: 1px solid #eef1f4; padding: 10px 2px; }
+.lv-hist-list > li.is-fix { background: #f7f9fb; border-radius: 8px; border-top-color: transparent; padding-left: 10px; padding-right: 10px; }
+.lv-hist-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.lv-hist-main { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.lv-hist-main b { font-size: 14px; font-weight: 600; color: #2d3136; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.lv-hist-main small { font-size: 12.5px; color: #8d9197; }
+.lv-hist-list > li.is-fix .lv-hist-title { color: #44617c; }
+.lv-hist-list > li.is-cx .lv-hist-title { color: #a6acb3; text-decoration: line-through; }
+.lv-chip { display: inline-block; font-size: 11.5px; font-weight: 600; padding: 1px 7px; border-radius: 999px; border: 1px solid; white-space: nowrap; }
+.lv-chip.is-g { color: #3f7a58; border-color: #cfe3d6; background: #eef6f1; }
+.lv-chip.is-u { color: #b0524c; border-color: #efd2cf; background: #fbefee; }
+.lv-chip.is-a, .lv-chip.is-f { color: #44617c; border-color: #c9d6e3; background: #ecf1f6; }
+.lv-chip.is-c { color: #6b7179; border-color: #dfe2e6; background: #f3f4f6; }
+.lv-hist-acts { display: flex; gap: 6px; flex: none; }
+.lv-hist-acts .sf-btn { height: 32px; padding: 0 12px; font-size: 13px; }
+.lv-hist-acts .sf-btn.is-on { background: #ecf1f6; border-color: #c9d6e3; color: #44617c; font-weight: 700; }
+.lv-fix { margin-top: 10px; padding: 14px; background: #f7f9fb; border: 1px solid #e3e9f0; border-radius: 12px; display: flex; flex-direction: column; gap: 10px; }
+.lv-fix .sf-input { display: flex; flex-direction: column; gap: 5px; margin: 0; min-width: 0; }
+.lv-fix .sf-input input, .lv-fix .sf-input select { width: 100%; min-width: 0; height: 40px; }
+.lv-fix-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.lv-fix-tbl { width: 100%; border-collapse: collapse; font-size: 13px; background: #fff; border-radius: 8px; font-variant-numeric: tabular-nums; }
+.lv-fix-tbl th { font-size: 12px; font-weight: 600; color: #8d9197; text-align: right; padding: 6px 10px; border-bottom: 1px solid #e1e4e8; }
+.lv-fix-tbl td { text-align: right; padding: 7px 10px; border-bottom: 1px solid #eef1f4; }
+.lv-fix-tbl :is(th, td):first-child { text-align: left; }
+.lv-fix-tbl td.is-ch { color: #44617c; font-weight: 700; }
+.lv-fix-note { margin: 0; font-size: 12.5px; color: #8d9197; }
+.lv-fix-note b { color: #2d3136; }
+.lv-fix-foot { display: flex; justify-content: flex-end; gap: 8px; }
+@media (max-width: 520px) { .lv-hist-row { flex-wrap: wrap; } .lv-fix-2 { grid-template-columns: minmax(0, 1fr); } }

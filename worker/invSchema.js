@@ -288,6 +288,14 @@ export async function ensureInvSchema(db) {
         fixes = `${fixes} jwbal2`.trim();
       } catch (e) { console.error('jwbal2', e); }
     }
+    if (!fixes.includes('leavelog1')) {
+      // 2026-11-20 사용자: 연차 기록 수정·취소 — 기록은 지우지 않고 취소 표시(취소일·사유)와 정정 줄 연결(ref_id)만 더함. 있는 기록·숫자는 그대로.
+      for (const col of ['cancelled_at TEXT', 'cancel_reason TEXT', 'ref_id INTEGER']) {
+        try { await db.prepare(`ALTER TABLE staff_leave_log ADD COLUMN ${col}`).run(); } catch (e) { if (!/duplicate column/i.test(String(e?.message || e))) throw e; }
+      }
+      await db.prepare(`INSERT OR REPLACE INTO inv_meta (key, value) VALUES ('fixes', ?)`).bind(`${fixes} leavelog1`.trim()).run();
+      fixes = `${fixes} leavelog1`.trim();
+    }
     if (!fixes.includes('leavefix1') && await claimFix(db, 'leavefix1')) {
       // 2026-11-19 사용자 '잘못 누름, 삭제해줘': 김유리 연차 이력의 11/19 '수동 수정 · 포상 연차 지급' 한 줄을 지움.
       // 그 수정이 지급·사용연차를 바꿨으면 지금 값이 그 결과 그대로일 때만 수정 전으로 되돌림(화면 '삭제'와 같은 규칙).

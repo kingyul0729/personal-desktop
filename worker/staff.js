@@ -606,11 +606,106 @@ staff.post("/leave-log-delete/:log_id", async (c) => {
   await c.env.DB.prepare(`DELETE FROM staff_leave_log WHERE id=?`).bind(log.id).run();
   return c.json({ ok: true, reverted: changed });
 });
+// ── 연차 기록 수정·취소(2026-11-20 사용자 지정) ──
+// 기록은 지우지 않는다: 고친 기록은 바뀐 값, 취소한 기록은 취소 표시(cancelled_at·cancel_reason), 그리고 '정정'(fix) 줄 하나(변경 전후 지급·사용·잔여, 사유).
+// 지급연차·사용연차는 지금 값에 차이만 더하고 빼서(뒤 기록은 그대로) 잔여연차 = 지급 − 사용이 저절로 다시 계산된다. 0보다 적어지면 막음. 취소된 기록·정정 줄은 다시 고칠 수 없음.
+// 연차 사용은 직원스케줄의 '연차'와 한 몸이라 화면이 먼저 스케줄을 바꾸고(같은 POST /attendance 길) 여기서는 표시·연결만(use-cancel / use-move).
+const leaveDelta = (l) => {
+  if (l.log_type === "pending") return { dT: 0, dU: 0 };
+  const n = (v) => (v == null ? null : Number(v));
+  const dT = n(l.after_total) != null && n(l.before_total) != null ? n(l.after_total) - n(l.before_total) : (l.log_type === "grant" ? Number(l.amount || 0) : 0);
+  const dU = n(l.after_used) != null && n(l.before_used) != null ? n(l.after_used) - n(l.before_used) : (l.log_type === "use" || l.log_type === "revert" ? Number(l.amount || 0) : 0);
+  return { dT, dU };
+};
+const kstDay = () => new Date(Date.now() + 9 * 3600 * 1e3).toISOString().slice(0, 10);
+const mdOf = (d) => `${Number(String(d).slice(5, 7))}/${Number(String(d).slice(8, 10))}`;
+const okDay = (d) => /^\d{4}-\d{2}-\d{2}$/.test(String(d || ""));
+staff.post("/leave-fix/:log_id", async (c) => {
+  const db = c.env.DB, b = await c.req.json();
+  const reason = String(b.reason || "").trim();
+  if (!reason) return c.json({ error: "사유를 적어 주세요" }, 400);
+  const log = await db.prepare(`SELECT * FROM staff_leave_log WHERE id=?`).bind(Number(c.req.param("log_id"))).first();
+  if (!log) return c.json({ error: "기록을 찾을 수 없어요" }, 404);
+  if (log.cancelled_at) return c.json({ error: "취소된 기록은 고칠 수 없어요" }, 409);
+  const cur = await db.prepare(`SELECT * FROM staff WHERE id=?`).bind(log.staff_id).first();
+  if (!cur) return c.json({ error: "직원을 찾을 수 없어요" }, 404);
+  const T = Number(cur.total_leave || 0), U = Number(cur.used_leave || 0);
+  const act = String(b.action || "");
+  let nT = T, nU = U, memo = "", logUpd = null, cancel = false;
+  if (log.log_type === "grant" && Number(log.amount || 0) > 0) {
+    const amt = Number(log.amount), od = log.log_date || String(log.created_at || "").slice(0, 10);
+    if (act === "cancel") { nT = T - amt; cancel = true; memo = `연차 지급 취소 · ${mdOf(od)} ${amt}일`; }
+    else if (act === "edit") {
+      const na = Number(b.amount), nd = b.date || od;
+      if (!Number.isInteger(na) || na < 1 || na > 30) return c.json({ error: "지급일수를 확인해 주세요" }, 400);
+      if (!okDay(nd)) return c.json({ error: "지급일을 확인해 주세요" }, 400);
+      if (na === amt && nd === od) return c.json({ error: "바뀐 것이 없어요" }, 400);
+      nT = T + (na - amt);
+      memo = "연차 지급 수정 · " + [nd !== od ? `지급일 ${mdOf(od)} → ${mdOf(nd)}` : "", na !== amt ? `지급일수 ${amt} → ${na}` : ""].filter(Boolean).join(" · ");
+      logUpd = db.prepare(`UPDATE staff_leave_log SET amount=?, log_date=? WHERE id=?`).bind(na, nd, log.id);
+    } else return c.json({ error: "잘못된 요청이에요" }, 400);
+  } else if (log.log_type === "adjust") {
+    const { dT, dU } = leaveDelta(log);
+    if (act === "cancel") { nT = T - dT; nU = U - dU; cancel = true; memo = "수동 수정 취소"; }
+    else if (act === "edit") {
+      const at = Number(b.total), au = Number(b.used);
+      if (!Number.isInteger(at) || !Number.isInteger(au) || at < 0 || au < 0) return c.json({ error: "지급·사용연차를 확인해 주세요" }, 400);
+      const ndT = at - Number(log.before_total ?? at), ndU = au - Number(log.before_used ?? au);
+      if (ndT === dT && ndU === dU) return c.json({ error: "바뀐 것이 없어요" }, 400);
+      nT = T + (ndT - dT); nU = U + (ndU - dU);
+      memo = "수동 수정 정정 · " + [ndT !== dT ? `지급연차 ${log.after_total} → ${at}` : "", ndU !== dU ? `사용연차 ${log.after_used} → ${au}` : ""].filter(Boolean).join(" · ");
+      logUpd = db.prepare(`UPDATE staff_leave_log SET after_total=?, after_used=?, after_remain=? WHERE id=?`).bind(at, au, at - au, log.id);
+    } else return c.json({ error: "잘못된 요청이에요" }, 400);
+  } else if (log.log_type === "use" && (act === "use-cancel" || act === "use-move")) {
+    // 화면이 스케줄을 먼저 바꾼 뒤(연차 해제 → 서버가 '사용 되돌림'을 남김) 부른다. 그날이 아직 연차로 셈해져 있으면 막음.
+    const net = await db.prepare(`SELECT COALESCE(SUM(amount),0) AS n FROM staff_leave_log WHERE staff_id=? AND log_date=? AND log_type IN ('use','revert')`).bind(log.staff_id, log.log_date).first();
+    if (Number(net?.n || 0) > 0) return c.json({ error: "그날 스케줄이 아직 연차예요" }, 409);
+    if (act === "use-move" && !okDay(b.date)) return c.json({ error: "사용일을 확인해 주세요" }, 400);
+    const rev = await db.prepare(`SELECT * FROM staff_leave_log WHERE staff_id=? AND log_date=? AND log_type='revert' AND id>? AND ref_id IS NULL ORDER BY id DESC LIMIT 1`).bind(log.staff_id, log.log_date, log.id).first();
+    memo = act === "use-move" ? `연차 사용일 ${mdOf(log.log_date)} → ${mdOf(b.date)}` : `연차 사용 취소 · ${mdOf(log.log_date)}`;
+    // 숫자는 스케줄 저장이 이미 바꿨다: 정정 줄의 '전'은 되돌림 전 값, '후'는 지금 값(사용일 수정은 같음)
+    const bU = act === "use-move" ? U : rev ? Number(rev.before_used ?? U) : U;
+    const ins = await db.prepare(`INSERT INTO staff_leave_log (staff_id, log_type, log_date, amount, before_total, after_total, before_used, after_used, after_remain, reason, memo, editor, ref_id)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(log.staff_id, "fix", kstDay(), 0, T, T, bU, U, T - U, reason, memo, "관리자", log.id).run();
+    const fixId = ins.meta?.last_row_id ?? log.id;
+    await db.batch([
+      db.prepare(`UPDATE staff_leave_log SET cancelled_at=?, cancel_reason=? WHERE id=?`).bind(kstDay(), act === "use-move" ? `사용일 수정 · ${reason}` : reason, log.id),
+      ...(rev ? [db.prepare(`UPDATE staff_leave_log SET ref_id=? WHERE id=?`).bind(fixId, rev.id)] : []),
+    ]);
+    return c.json({ ok: true, total_leave: T, used_leave: U, remain_leave: T - U });
+  } else return c.json({ error: "이 기록은 고칠 수 없어요" }, 400);
+  if (nT < 0 || nU < 0) return c.json({ error: "지급·사용연차가 0보다 적어져요" }, 409);
+  if (nT - nU < 0 && nT - nU < T - U) return c.json({ error: "잔여연차가 0보다 적어져요" }, 409);
+  await db.batch([
+    db.prepare(`UPDATE staff SET total_leave=?, used_leave=?, updated_at=CURRENT_TIMESTAMP WHERE id=? AND total_leave=? AND used_leave=?`).bind(nT, nU, log.staff_id, T, U),
+    ...(logUpd ? [logUpd] : []),
+    ...(cancel ? [db.prepare(`UPDATE staff_leave_log SET cancelled_at=?, cancel_reason=? WHERE id=?`).bind(kstDay(), reason, log.id)] : []),
+    db.prepare(`INSERT INTO staff_leave_log (staff_id, log_type, log_date, amount, before_total, after_total, before_used, after_used, after_remain, reason, memo, editor, ref_id)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(log.staff_id, "fix", kstDay(), 0, T, nT, U, nU, nT - nU, reason, memo, "관리자", log.id),
+  ]);
+  return c.json({ ok: true, total_leave: nT, used_leave: nU, remain_leave: nT - nU });
+});
+// 연차 이력: 줄마다 지금 기준 잔여연차(remain_now = 지금 잔여 − 그 뒤 기록들의 증감)와 고칠 수 있는지(can_fix)를 붙여 보낸다.
+// 앞 기록을 고치면 뒤 줄 잔여연차도 이 계산으로 함께 바뀐다.
 staff.get("/leave-log/:id", async (c) => {
   const id = Number(c.req.param("id"));
   const logs = (await c.env.DB.prepare(
     `SELECT * FROM staff_leave_log WHERE staff_id=? ORDER BY created_at DESC, id DESC`
   ).bind(id).all()).results;
+  const sf = await c.env.DB.prepare(`SELECT total_leave, used_leave FROM staff WHERE id=?`).bind(id).first();
+  let remain = Number(sf?.total_leave || 0) - Number(sf?.used_leave || 0);
+  const net = {}, lastUse = {};
+  for (const l of logs) if (l.log_type === "use" || l.log_type === "revert") {
+    net[l.log_date] = (net[l.log_date] || 0) + Number(l.amount || 0);
+    if (l.log_type === "use" && lastUse[l.log_date] == null && !l.cancelled_at) lastUse[l.log_date] = l.id;
+  }
+  for (const l of logs) {
+    l.remain_now = remain;
+    const { dT, dU } = leaveDelta(l);
+    remain -= dT - dU;
+    l.can_fix = !l.cancelled_at && ((l.log_type === "grant" && Number(l.amount || 0) > 0) || l.log_type === "adjust"
+      || (l.log_type === "use" && net[l.log_date] > 0 && lastUse[l.log_date] === l.id && !isFutureMonthLeave(l.log_date)));
+  }
   return c.json(logs);
 });
 staff.get("/info-log/:id", async (c) => {

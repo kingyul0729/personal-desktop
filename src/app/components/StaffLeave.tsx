@@ -1,5 +1,4 @@
-import { ChevronLeft, ChevronRight, Trash2 } from 'lucide-react';
-import { askConfirm } from './AlertDialog';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import type React from 'react';
 import { useCallback, useEffect, useState } from 'react';
 import { LoadingBox, SavingMark } from './Feedback';
@@ -7,13 +6,13 @@ import { OldDataBanner } from './Inventory';
 import { StaffUnavailable } from './StaffSchedule';
 import { toneOf, vividOf } from './staffTone';
 import { staffGet, staffPost, StaffApiError } from '../staffApi';
-import { type StaffMember, WEEKDAYS, dateIn, daysInMonth, isRedDay, leaveSeq, monthLabel, shiftMonth, todayLocal, weekdayOf } from '../staffRules';
+import { type MonthData, type StaffMember, WEEKDAYS, dateIn, daysInMonth, isRedDay, leaveSeq, monthLabel, optionsFor, payloadFor, shiftMonth, statePatch, todayLocal, weekdayOf } from '../staffRules';
 
 // 직원연차 — 직원마다 자기 달력에 연차 날짜(순번 n/총)를 표시하고, 위에 지급연차 / 사용연차 / 잔여연차(누적, 월별 아님)를 보인다(2026-11-08 사용자 지정).
 // 연차 사용/되돌림은 직원스케줄 달력에서 '연차'를 고르면 서버가 처리한다(예전 앱과 같음).
 const LEAVE_REASONS = ['포상 연차 지급', '재계약 연차 재세팅', '연차 촉진 초기화', '행정 오류 수정', '신입 연차 당겨쓰기', '직접 입력'];
-const LOG_TYPE: Record<string, string> = { use: '연차 사용', revert: '사용 되돌림', adjust: '수동 수정', grant: '월 지급연차', convert: '정직원 전환' };
-type LeaveLog = { id: number; log_type: string; log_date?: string | null; reason?: string | null; after_remain?: number | null; editor?: string | null; created_at?: string };
+const LOG_TYPE: Record<string, string> = { use: '연차 사용', revert: '사용 되돌림', adjust: '수동 수정', grant: '월 지급연차', convert: '정직원 전환', fix: '정정', pending: '미리 등록' };
+type LeaveLog = { id: number; log_type: string; log_date?: string | null; amount?: number | null; reason?: string | null; memo?: string | null; before_total?: number | null; after_total?: number | null; before_used?: number | null; after_used?: number | null; after_remain?: number | null; editor?: string | null; created_at?: string; cancelled_at?: string | null; cancel_reason?: string | null; ref_id?: number | null; remain_now?: number; can_fix?: boolean };
 
 export default function StaffLeave() {
   const [month, setMonth] = useState(() => todayLocal().slice(0, 7));
@@ -84,30 +83,122 @@ export default function StaffLeave() {
   </div>;
 }
 
+// 연차 이력 · 수정·취소(2026-11-20 사용자 지정): 기록은 지우지 않고 그 줄 아래에서 바로 고친다(창 하나).
+// 지급 = 지급일·지급일수 / 사용 = 사용일(사용일수는 1일 고정, 2026-11-20 사용자 2-가) / 수동 수정 = 지급·사용연차 수치 — 각각 수정·취소.
+// 취소된 기록·정정 줄은 다시 고칠 수 없음. 저장 전에 변경 전후 지급·사용·잔여를 보여 주고, 잔여는 서버가 다시 계산(뒤 줄 잔여도 remain_now로 같이 바뀜).
+// 연차 사용 수정·취소는 직원스케줄과 같은 길(POST /attendance)로 그날 근태를 먼저 바꾼 뒤(사용자 1-나: 바꿀 근태를 고름) 기록에 표시.
+type FixMode = { id: number; kind: 'edit' | 'cancel' };
+const KIND_CHIP: Record<string, [string, string]> = { grant: ['지급', 'g'], use: ['사용', 'u'], revert: ['되돌림', 'c'], adjust: ['수동 수정', 'a'], fix: ['정정', 'f'], convert: ['전환', 'a'], pending: ['미리 등록', 'c'] };
+const mdDay = (d?: string | null) => (d ? `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}` : '');
+const dayOf = (l: LeaveLog) => l.log_date || (l.created_at || '').slice(0, 10);
+function logTitle(l: LeaveLog) {
+  if (l.log_type === 'grant') return `${mdDay(dayOf(l))} · ${l.amount ?? 0}일`;
+  if (l.log_type === 'use' || l.log_type === 'revert' || l.log_type === 'pending') return `${mdDay(l.log_date)}(${WEEKDAYS[weekdayOf(l.log_date || todayLocal())]}) · 1일`;
+  if (l.log_type === 'adjust') return [l.before_total !== l.after_total ? `지급연차 ${l.before_total} → ${l.after_total}` : '', l.before_used !== l.after_used ? `사용연차 ${l.before_used} → ${l.after_used}` : ''].filter(Boolean).join(' · ') || '수치 변화 없음';
+  if (l.log_type === 'fix') return l.memo || '정정';
+  if (l.log_type === 'convert') return `지급연차 ${l.before_total} → ${l.after_total}`;
+  return LOG_TYPE[l.log_type] || l.log_type;
+}
+
 function LeaveDetail({ staff, onClose, onSaved }: { staff: StaffMember; onClose: () => void; onSaved: () => Promise<void> }) {
   const [logs, setLogs] = useState<LeaveLog[] | null>(null);
   const [editing, setEditing] = useState(false);
-  const [error, setError] = useState('');
-  const load = useCallback(() => staffGet(`/leave-log/${staff.id}`).then(setLogs, () => setLogs([])), [staff.id]);
+  const [mode, setMode] = useState<FixMode | null>(null);
+  const [nums, setNums] = useState({ total: staff.total_leave ?? 0, used: staff.used_leave ?? 0 });
+  const load = useCallback(async () => {
+    try { setLogs(await staffGet(`/leave-log/${staff.id}`)); } catch { setLogs([]); }
+    try { const l = await staffGet('/list') as StaffMember[]; const me = (l || []).find(x => x.id === staff.id); if (me) setNums({ total: me.total_leave ?? 0, used: me.used_leave ?? 0 }); } catch { /* 숫자는 다음에 */ }
+  }, [staff.id]);
   useEffect(() => { void load(); }, [load]);
-  // 수동 수정 기록 지우기(2026-11-19): 그 수정이 바꾼 지급·사용연차도 수정 전으로 되돌림
-  const del = async (l: LeaveLog) => {
-    if (!await askConfirm({ kind: 'delete' })) return;
-    try { setError(''); await staffPost(`/leave-log-delete/${l.id}`, {}); await load(); await onSaved(); } catch (e) { setError(e instanceof Error ? e.message : '지우지 못했어요'); }
-  };
   if (editing) return <LeaveAdjust staff={staff} onClose={() => setEditing(false)} onSaved={onSaved} />;
+  // 자동 '사용 되돌림' 중 정정으로 생긴 것(ref_id)은 정정 줄 하나로 보이게 숨김
+  const shown = (logs || []).filter(l => !(l.log_type === 'revert' && l.ref_id));
+  const done = async () => { setMode(null); await load(); await onSaved(); };
   return <div className="sf-modal" role="dialog" aria-modal="true" aria-label={`${staff.name} 연차 이력`}>
     <div className="sf-modal-back" onClick={onClose} />
-    <div className="sf-modal-panel">
+    <div className="sf-modal-panel lv-hist">
       <div className="sf-modal-head"><strong>{staff.name} · 연차 이력</strong><button type="button" aria-label="닫기" onClick={onClose}>×</button></div>
-      {logs == null ? <LoadingBox /> : !logs.length ? <p className="sf-hint">연차 이력이 없습니다</p>
-        : <ul className="sf-list sf-log">{logs.map(l => <li key={l.id}><b>{LOG_TYPE[l.log_type] || l.log_type}</b>
-          <span>{[l.log_date, l.reason, `잔여연차 ${l.after_remain ?? '-'}`].filter(Boolean).join(' · ')}</span>
-          <small>{(l.created_at || '').slice(0, 16).replace('T', ' ')}{l.editor ? ` · ${l.editor}` : ''}</small>
-          {l.log_type === 'adjust' && <button type="button" className="lv-log-del" aria-label="삭제" onClick={() => void del(l)}><Trash2 size={15} strokeWidth={1.8} /></button>}</li>)}</ul>}
-      {error && <p className="sf-hint is-warn">{error}</p>}
+      <dl className="lv-hist-sum"><div><dt>지급연차</dt><dd>{nums.total}</dd></div><div><dt>사용연차</dt><dd>{nums.used}</dd></div><div><dt>잔여연차</dt><dd className="is-r">{nums.total - nums.used}</dd></div></dl>
+      {logs == null ? <LoadingBox /> : !shown.length ? <p className="sf-hint">기록 없음</p>
+        : <ul className="lv-hist-list">{shown.map(l => { const [chip, tone] = l.cancelled_at ? ['취소됨', 'c'] : KIND_CHIP[l.log_type] || [l.log_type, 'c'];
+          const open = mode?.id === l.id;
+          const after = shown.slice(0, shown.indexOf(l)).length;
+          return <li key={l.id} className={`${l.cancelled_at ? 'is-cx' : ''}${l.log_type === 'fix' ? ' is-fix' : ''}`}>
+            <div className="lv-hist-row">
+              <div className="lv-hist-main"><b><span className={`lv-chip is-${tone}`}>{chip}</span><span className="lv-hist-title">{l.cancelled_at ? `${LOG_TYPE[l.log_type] || ''} ${logTitle(l)}` : logTitle(l)}</span></b>
+                <small>{l.cancelled_at ? `사유: ${l.cancel_reason || '—'}`
+                  : l.log_type === 'fix' ? [`지급 ${l.before_total} → ${l.after_total}`, `사용 ${l.before_used} → ${l.after_used}`, `잔여 ${(l.before_total ?? 0) - (l.before_used ?? 0)} → ${l.after_remain ?? '—'}`, l.reason ? `사유: ${l.reason}` : ''].filter(Boolean).join(' · ')
+                  : [l.reason, l.remain_now != null ? `잔여 ${l.remain_now}` : ''].filter(Boolean).join(' · ')}</small></div>
+              {l.can_fix && <div className="lv-hist-acts">
+                <button type="button" className={`sf-btn${open && mode?.kind === 'edit' ? ' is-on' : ''}`} onClick={() => setMode(open && mode?.kind === 'edit' ? null : { id: l.id, kind: 'edit' })}>수정</button>
+                <button type="button" className={`sf-btn${open && mode?.kind === 'cancel' ? ' is-on' : ''}`} onClick={() => setMode(open && mode?.kind === 'cancel' ? null : { id: l.id, kind: 'cancel' })}>취소</button></div>}
+            </div>
+            {open && <LeaveFix key={`${l.id}${mode!.kind}`} staff={staff} log={l} kind={mode!.kind} nums={nums} after={after} onClose={() => setMode(null)} onDone={done} />}
+          </li>; })}</ul>}
       <div className="sf-modal-foot"><button type="button" className="sf-btn" onClick={onClose}>닫기</button><button type="button" className="sf-btn is-primary" onClick={() => setEditing(true)}>연차 수정</button></div>
     </div>
+  </div>;
+}
+
+function LeaveFix({ staff, log, kind, nums, after, onClose, onDone }: { staff: StaffMember; log: LeaveLog; kind: 'edit' | 'cancel'; nums: { total: number; used: number }; after: number; onClose: () => void; onDone: () => Promise<void> }) {
+  const T = nums.total, U = nums.used;
+  const [reason, setReason] = useState('');
+  const [date, setDate] = useState(log.log_type === 'grant' ? dayOf(log) : log.log_date || todayLocal());
+  const [amount, setAmount] = useState(String(log.amount ?? 1));
+  const [at, setAt] = useState(String(log.after_total ?? T)), [au, setAu] = useState(String(log.after_used ?? U));
+  const states = optionsFor(staff).filter(s => s !== '연차');
+  const [state, setState] = useState(states.includes('정상근무') ? '정상근무' : states[0]);
+  const [busy, setBusy] = useState(false), [error, setError] = useState('');
+  // 변경 후 숫자(서버와 같은 계산: 지금 값에 차이만)
+  let nT = T, nU = U;
+  const dT = (log.after_total ?? 0) - (log.before_total ?? 0), dU = (log.after_used ?? 0) - (log.before_used ?? 0);
+  if (log.log_type === 'grant') nT = kind === 'cancel' ? T - (log.amount ?? 0) : T + ((Number(amount) || 0) - (log.amount ?? 0));
+  if (log.log_type === 'adjust') { if (kind === 'cancel') { nT = T - dT; nU = U - dU; } else { nT = T + ((Number(at) - (log.before_total ?? 0)) - dT); nU = U + ((Number(au) - (log.before_used ?? 0)) - dU); } }
+  if (log.log_type === 'use' && kind === 'cancel') nU = U - 1;
+  const bad = nT < 0 || nU < 0 || (nT - nU < 0 && nT - nU < T - U);
+  const recOf = async (d: string) => (((await staffGet('/month', { staff_id: staff.id, month: d.slice(0, 7) })) as MonthData).attendance || []).find(r => r.work_date === d) || null;
+  const save = async () => {
+    if (!reason.trim()) return setError('사유를 적어 주세요');
+    setBusy(true); setError('');
+    try {
+      if (log.log_type === 'use') {
+        const from = log.log_date!;
+        if (kind === 'edit') {
+          if (date === from) throw new Error('바뀐 것이 없어요');
+          if (isRedDay(date)) throw new Error('빨간 날에는 연차를 넣지 않아요');
+          if (date.slice(0, 7) > todayLocal().slice(0, 7)) throw new Error('다음 달 연차는 직원스케줄에서 넣어 주세요');
+          const dst = await recOf(date);
+          if (dst?.attendance === '연차') throw new Error('그날은 이미 연차예요');
+          await staffPost('/attendance', payloadFor(staff, date, dst, statePatch('연차', staff, date, dst)));
+        }
+        const src = await recOf(from);
+        await staffPost('/attendance', payloadFor(staff, from, src, statePatch(state, staff, from, src)));
+        await staffPost(`/leave-fix/${log.id}`, { action: kind === 'edit' ? 'use-move' : 'use-cancel', reason: reason.trim(), date });
+      } else {
+        await staffPost(`/leave-fix/${log.id}`, { action: kind, reason: reason.trim(), date, amount: Number(amount), total: Number(at), used: Number(au) });
+      }
+      await onDone();
+    } catch (e) { setError(e instanceof Error ? e.message : '저장하지 못했어요'); setBusy(false); }
+  };
+  const isUse = log.log_type === 'use';
+  return <div className="lv-fix">
+    {kind === 'edit' && log.log_type === 'grant' && <div className="lv-fix-2"><label className="sf-input"><span>지급일</span><input type="date" value={date} onChange={e => setDate(e.target.value)} /></label>
+      <label className="sf-input"><span>지급일수</span><input type="number" min={1} step={1} inputMode="numeric" value={amount} onChange={e => setAmount(e.target.value)} /></label></div>}
+    {kind === 'edit' && log.log_type === 'adjust' && <div className="lv-fix-2"><label className="sf-input"><span>지급연차</span><input type="number" min={0} step={1} inputMode="numeric" value={at} onChange={e => setAt(e.target.value)} /></label>
+      <label className="sf-input"><span>사용연차</span><input type="number" min={0} step={1} inputMode="numeric" value={au} onChange={e => setAu(e.target.value)} /></label></div>}
+    {isUse && <div className="lv-fix-2">
+      {kind === 'edit' && <label className="sf-input"><span>사용일</span><input type="date" value={date} onChange={e => setDate(e.target.value)} /></label>}
+      <label className="sf-input"><span>{mdDay(log.log_date)} 근태</span><select value={state} onChange={e => setState(e.target.value)}>{states.map(s => <option key={s}>{s}</option>)}</select></label></div>}
+    <label className="sf-input"><span>{kind === 'cancel' ? '취소 사유' : '수정 사유'}</span><input value={reason} onChange={e => setReason(e.target.value)} placeholder="사유" /></label>
+    <table className="lv-fix-tbl"><thead><tr><th /><th>지급연차</th><th>사용연차</th><th>잔여연차</th></tr></thead>
+      <tbody><tr><td>{kind === 'cancel' ? '취소 전' : '수정 전'}</td><td>{T}</td><td>{U}</td><td>{T - U}</td></tr>
+        <tr><td>{kind === 'cancel' ? '취소 후' : '수정 후'}</td><td className={nT !== T ? 'is-ch' : ''}>{nT}</td><td className={nU !== U ? 'is-ch' : ''}>{nU}</td><td className={nT - nU !== T - U ? 'is-ch' : ''}>{nT - nU}</td></tr></tbody></table>
+    {isUse && <p className="lv-fix-note">스케줄 <b>{mdDay(log.log_date)} 연차 → {state}</b>{kind === 'edit' && date !== log.log_date ? <> · <b>{mdDay(date)} 연차</b></> : null}</p>}
+    {after > 0 && (nT !== T || nU !== U) && <p className="lv-fix-note">이후 기록 <b>{after}건</b> 잔여연차 다시 계산</p>}
+    {bad && <p className="sf-hint is-warn">잔여연차가 0보다 적어져요</p>}
+    {error && <p className="sf-hint is-warn">{error}</p>}
+    <div className="lv-fix-foot"><button type="button" className="sf-btn" onClick={onClose}>닫기</button>
+      <button type="button" className={`sf-btn ${kind === 'cancel' ? 'is-danger' : 'is-primary'}`} disabled={busy || bad} onClick={() => void save()}>{busy && <SavingMark />}{kind === 'cancel' ? '취소하기' : '저장'}</button></div>
   </div>;
 }
 
