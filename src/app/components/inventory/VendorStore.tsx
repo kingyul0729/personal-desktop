@@ -13,6 +13,9 @@ type BalRow = { id: number; vendor_id: number; date: string; kind: 'add' | 'use'
 type BalOrder = { id: number; ordered_at: string; option_label: string | null; amount: number; qty: number; bonus_qty: number; prepaid: number; item_name: string; stock_unit: string; vendor_id: number };
 type BalState = { vendors: { id: number; name: string; active: number; balance: number; n: number }[]; rows: BalRow[]; orders: BalOrder[]; reasons: string[] };
 
+// 날짜: 올해가 아니면 연도까지(2026-11-19 사용자 '작년 중복 결제인데 10/30이라 올해로 보임') — 예 2025.10.30
+const thisYear = String(new Date().getFullYear());
+const day = (d: string | null | undefined) => (!d ? '' : d.slice(0, 4) === thisYear ? md(d) : `${d.slice(0, 4)}.${Number(d.slice(5, 7))}.${Number(d.slice(8, 10))}`);
 const won = (n: number) => `${Math.round(n).toLocaleString('ko-KR')}`;
 const Num = ({ v, u, read }: { v: string; u: string; read?: number }) => <><b className="vb-n">{v}<small>{u}</small></b>{read != null && <span className="vb-read">{read >= 10000 ? readWon(read) : '—'}</span>}</>;
 
@@ -64,9 +67,9 @@ function BalanceTab({ notify }: { notify: (m: string) => void }) {
       </div>
       <div className="vb-hist"><h4>내역<span className="vb-leg"><span><i className="vb-dot is-add" />잔액 등록</span><span><i className="vb-dot is-use" />잔액 차감</span><span><i className="vb-dot is-refund" />환급 입금</span></span></h4>
         {!rows.length ? <p className="sf-hint">기록 없음</p> : <ul className="vb-rows">{rows.map(r => <li key={r.id}>
-          <span className="vb-date">{md(r.date)}</span><i className={`vb-dot is-${r.kind}`} />
+          <span className="vb-date">{day(r.date)}</span><i className={`vb-dot is-${r.kind}`} />
           <span className="vb-what"><b>{r.kind === 'add' ? `잔액 등록${r.reason ? ` · ${r.reason}` : ''}` : r.kind === 'use' ? '잔액 차감' : '환급 입금'}</b>
-            <small>{r.kind === 'use' ? `${r.ordered_at ? md(r.ordered_at) : ''} ${r.item_name || ''} 주문${r.order_amount ? ` · 주문 금액 ${won(r.order_amount)}원` : ''}` : r.memo || ' '}</small></span>
+            <small>{r.kind === 'use' ? `${r.ordered_at ? day(r.ordered_at) : ''} ${r.item_name || ''} 주문${r.order_amount ? ` · 주문 금액 ${won(r.order_amount)}원` : ''}` : r.memo || ' '}</small></span>
           <span className={`vb-amt is-${r.kind}`}>{r.kind === 'add' ? '+' : '−'}{won(r.amount)}원</span>
           <span className="vb-left">남음 {won(r.left)}원</span>
           <span className="vb-ic">{r.kind !== 'use' && <button type="button" aria-label="수정" onClick={() => setForm({ kind: r.kind as 'add' | 'refund', row: r })}><Pencil size={15} strokeWidth={1.8} /></button>}
@@ -99,7 +102,7 @@ function BalForm({ st, vendor, kind, row, onClose, onDone }: { st: BalState; ven
   return <Modal title={title} onClose={onClose}>
     {kind === 'use' ? <>
       <label className="sf-input"><span>주문</span><select value={f.order} onChange={e => setF(x => ({ ...x, order: e.target.value }))}>
-        <option value="">주문 선택</option>{orders.map(o => <option key={o.id} value={o.id}>{md(o.ordered_at)} {o.item_name} · {o.option_label || `${fmtQty(o.qty)} ${o.stock_unit}`} · {won(o.amount)}원</option>)}</select></label>
+        <option value="">주문 선택</option>{orders.map(o => <option key={o.id} value={o.id}>{day(o.ordered_at)} {o.item_name} · {o.option_label || `${fmtQty(o.qty)} ${o.stock_unit}`} · {won(o.amount)}원</option>)}</select></label>
       {!orders.length && <p className="sf-hint">기록 없음</p>}
       {ord && <dl className="vb-calc"><div><dt>주문 금액</dt><dd>{won(ord.amount)}원</dd></div><div><dt>잔액 차감</dt><dd>−{won(use)}원</dd></div>
         <div className="is-total"><dt>실제 결제</dt><dd>{won(ord.amount - use)}원</dd></div><div><dt>차감 후 남은 금액</dt><dd>{won(vendor.balance - use)}원</dd></div></dl>}
