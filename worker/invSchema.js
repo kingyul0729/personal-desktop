@@ -262,6 +262,24 @@ export async function ensureInvSchema(db) {
       await db.prepare(`INSERT OR REPLACE INTO inv_meta (key, value) VALUES ('fixes', ?)`).bind(`${fixes} vbal1`.trim()).run();
       fixes = `${fixes} vbal1`.trim();
     }
+    if (!fixes.includes('jwbal1') && await db.prepare(`SELECT 1 FROM inv_meta WHERE key = 'import'`).first() && await claimFix(db, 'jwbal1')) {
+      // 2026-11-19 사용자 '해줘': 중외 업체 잔액 — 2025-10-30 중복 결제로 남은 돈(업체 확인: 이달 주문 뒤 144,001원).
+      // 앱 가격 그대로(사용자 '현재 가격대로'): 11/12 GA20% 1개 40,000원 주문이 있으면 등록 184,001원 + 그 주문에 40,000원 차감, 없으면 등록 144,001원만. 중외 잔액 기록이 이미 있으면 손대지 않음.
+      try {
+        const v = await db.prepare(`SELECT id FROM inv_vendors WHERE id = 3 AND name = '중외'`).first();
+        const has = v && await db.prepare(`SELECT 1 FROM inv_vendor_bal WHERE vendor_id = 3`).first();
+        if (v && !has) {
+          const ords = (await db.prepare(`SELECT o.id FROM inv_orders o JOIN inv_items i ON i.id = o.item_id WHERE i.vendor_id = 3 AND i.name = 'GA20%' AND o.ordered_at = '2026-11-12' AND o.amount = 40000 AND o.status <> 'cancelled'`).all()).results || [];
+          const now = Date.now(), memo = '2025-10-30 같은 금액 두 번 결제 · 업체 확인 남은 돈 144,001원';
+          const stmts = [db.prepare(`INSERT INTO inv_vendor_bal (vendor_id, date, kind, amount, reason, memo, created_by, created_at) VALUES (3, '2025-10-30', 'add', ?, '중복 결제', ?, 'system', ?)`)
+            .bind(ords.length === 1 ? 184001 : 144001, ords.length === 1 ? `${memo} + 11/12 주문 40,000원` : memo, now)];
+          if (ords.length === 1) stmts.push(db.prepare(`INSERT INTO inv_vendor_bal (vendor_id, date, kind, amount, reason, order_id, created_by, created_at) VALUES (3, '2026-11-12', 'use', 40000, '주문', ?, 'system', ?)`).bind(ords[0].id, now));
+          await db.batch(stmts);
+        }
+        await db.prepare(`INSERT OR REPLACE INTO inv_meta (key, value) VALUES ('fixes', ?)`).bind(`${fixes} jwbal1`.trim()).run();
+        fixes = `${fixes} jwbal1`.trim();
+      } catch (e) { console.error('jwbal1', e); }
+    }
     if (!fixes.includes('dupfix1') && await claimFix(db, 'dupfix1')) {
       // 2026-11-12 사용자 '이중으로 겹치는데': 처음 요청이 동시에 두 번 들어와 splitfix1이 두 번 돌아 10/22 피부미소 입고 4줄이 두 벌(8줄) 생김.
       // 품목마다 처음 한 줄만 남기고 뒤 줄은 지운 기록으로(명세서 사진 연결은 그대로), 그 줄이 늘린 병원재고만 되돌림 — 그 뒤 센 날 수량은 그대로(keepCountStmts).

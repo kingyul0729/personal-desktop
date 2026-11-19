@@ -74,3 +74,21 @@ test('업체 잔액: 등록 → 주문 차감(모자라면 나머지만 결제) 
   const yr = (await call(e, `/report-year?year=${month.slice(0, 4)}`)).data;
   assert.equal(yr.vendor_bal[0].after, 0);
 });
+
+test('jwbal1: 실제 사이트(예전 자료 넣은 곳)만 중외 잔액 184,001 등록 + 11/12 GA20% 40,000 차감 → 남은 144,001', async () => {
+  const { resetInvSchemaCache } = await import('../worker/invSchema.js');
+  const e = env();
+  const st = (await call(e, '/state')).data;
+  assert.equal(st.vendors.find(v => v.id === 3).balance, 0); // 예전 자료가 없으면 안 함
+  const ga = st.items.find(i => i.name === 'GA20%');
+  await call(e, '/orders', 'POST', { item_id: ga.id, option_id: ga.options[0].id, count: 1, date: '2026-11-12' });
+  e.inv.prepare(`INSERT INTO inv_meta (key, value) VALUES ('import', 'x')`).run();
+  resetInvSchemaCache();
+  const vb = (await call(e, '/vendor-bal')).data;
+  assert.equal(vb.vendors.find(v => v.id === 3).balance, 144001);
+  assert.deepEqual(vb.rows.map(r => [r.kind, r.amount, r.left]), [['use', 40000, 144001], ['add', 184001, 184001]]);
+  resetInvSchemaCache(); await call(e, '/state'); // 두 번 돌아도 그대로
+  assert.equal((await call(e, '/vendor-bal')).data.rows.length, 2);
+  const rep = (await call(e, '/report?month=2026-11')).data;
+  assert.equal(rep.payments.find(p => p.vendor_id === 3).status, '잔액 차감');
+});
