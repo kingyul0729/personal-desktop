@@ -2923,3 +2923,60 @@ button.iv-pinv { cursor: zoom-in; }
 .sf-log li { grid-template-columns: 100px 1fr auto auto; align-items: center; column-gap: 8px; }
 .lv-log-del { width: 32px; height: 32px; display: grid; place-items: center; border: 0; background: none; color: #9aa1a9; border-radius: 6px; cursor: pointer; }
 .lv-log-del:hover { background: #f0f3f7; color: #c2504a; }
+/* ───────── 품목별 재고(2026-11-19 사용자: 재고주문 + 재고입출고 한 화면) — 재고 현황 → 받을 주문 → 변동 내역, 버튼은 창으로 ───────── */
+.sf-wrap .iv-split-detail.is-hub { display: flex; flex-direction: column; align-items: stretch; gap: 20px; }
+.sf-wrap .iv-hub-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.sf-wrap .iv-hub-btns { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.sf-wrap .iv-hub-btns .sf-btn { height: 40px; padding: 0 16px; }
+.sf-wrap .iv-hub-stats { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.sf-wrap .iv-hub-stats > div:nth-child(odd) { border-left: 0; }
+.sf-wrap .iv-hub-stats > div + div { border-left: 1px solid #d8dfe7; }
+.sf-wrap .iv-hub-date .iv-num { font-size: inherit; }
+.sf-wrap .iv-hub-sec { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.sf-wrap .iv-hub-sec > h4 { margin: 0; font-size: 15px; font-weight: 700; color: var(--ui-ink, #2d3136); }
+.sf-wrap .iv-hub-wait { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.sf-wrap .iv-hub-wait li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; background: #fff; border: 1px solid #c9d6e3; border-radius: 12px; }
+.sf-wrap .iv-hub-wait li > div:first-child { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.sf-wrap .iv-hub-wait b { font-size: 14px; }
+.sf-wrap .iv-hub-wait small { font-size: 12.5px; color: #7d838b; }
+.sf-wrap .iv-hub-wbtns { display: flex; gap: 8px; flex: none; }
+.sf-wrap .iv-hub-log .sf-bar { flex-wrap: wrap; gap: 8px 16px; margin: 0; }
+.sf-wrap .iv-ifilter button small { margin-left: 5px; font-size: 12px; color: #8d9197; }
+.sf-wrap .iv-ifilter button[aria-pressed="true"] small { color: inherit; }
+.sf-wrap .iv-hub-log .iv-txgrid { --tx-cols: 52px minmax(200px, 1fr) 36px 92px 72px 92px 104px 76px; }
+.sf-wrap .iv-hub-log .iv-legend { display: none; }
+.sf-wrap .iv-difftbl td.iv-diffv b { color: #3f7a58; }
+.sf-wrap .iv-difftbl td.iv-diffv.is-minus b { color: #c2504a; }
+.sf-wrap .iv-difftbl td small { color: #8d9197; }
+.sf-wrap .iv-split-detail .sf-modal-panel { width: min(600px, calc(100vw - 32px)); gap: 14px; padding: 20px 22px; }
+.sf-wrap .iv-hub-tabs { margin: 0; }
+.sf-wrap .sf-modal-panel :is(.iv-d-sec, .iv-sec).is-bare { padding: 0; border: 0; background: none; box-shadow: none; }
+.sf-wrap .sf-modal-panel .iv-recv.is-bare .iv-recv-head { justify-content: flex-start; }
+.sf-wrap .sf-modal-panel .iv-sec.is-bare .iv-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: end; }
+.sf-wrap .sf-modal-panel .iv-sec.is-bare .iv-row > .sf-btn { grid-column: 2; justify-self: end; }
+.sf-wrap .sf-modal-panel .iv-hub-opts .iv-d-opts { margin: 0; }
+@container sfw (max-width: 760px) {
+  .sf-wrap .iv-hub-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 14px; }
+  .sf-wrap .iv-hub-stats > div:nth-child(3) { border-left: 0; }
+  .sf-wrap .iv-hub-log .iv-txgrid { --tx-cols: 38px minmax(150px, 1fr) 30px 70px 56px 76px 100px 72px; }
+}
+/* 품목별 재고 변동 내역: 내용 폭이 좁으면(아이패드 세로·휴대폰) 한 기록 = 두 줄 카드 — 옆으로 밀지 않고 명세서·수정·삭제까지 보이게 */
+.sf-wrap .iv-hub-log { container: hublog / inline-size; }
+@container hublog (max-width: 700px) {
+  .sf-wrap .iv-hub-log .iv-txwrap { overflow: visible; }
+  .sf-wrap .iv-hub-log .iv-txgrid { min-width: 0; }
+  .sf-wrap .iv-hub-log .iv-txrow.is-head { display: none; }
+  .sf-wrap .iv-hub-log .iv-txrow { grid-template-columns: 40px minmax(0, 1fr) auto auto; grid-template-areas: "d item qty stock" "dot vend inv btns"; align-items: center; row-gap: 6px; column-gap: 10px; padding: 10px 12px; min-height: 0; }
+  .sf-wrap .iv-hub-log .iv-txrow > :nth-child(1) { grid-area: d; }
+  .sf-wrap .iv-hub-log .iv-txrow > :nth-child(2) { grid-area: item; }
+  .sf-wrap .iv-hub-log .iv-txrow > :nth-child(3) { grid-area: dot; justify-content: flex-start; }
+  .sf-wrap .iv-hub-log .iv-txrow > :nth-child(4) { grid-area: qty; }
+  .sf-wrap .iv-hub-log .iv-txrow > :nth-child(5) { grid-area: stock; min-width: 64px; }
+  .sf-wrap .iv-hub-log .iv-txrow > :nth-child(6) { grid-area: vend; justify-content: flex-start; font-size: 12.5px; color: #8d9197; }
+  .sf-wrap .iv-hub-log .iv-txrow > :nth-child(7) { grid-area: inv; }
+  .sf-wrap .iv-hub-log .iv-txrow > :nth-child(8) { grid-area: btns; }
+  .sf-wrap .iv-hub-log .iv-txrow > :nth-child(5)::before { content: '재고'; font-size: 11.5px; color: #8d9197; margin-right: 4px; }
+  .sf-wrap .iv-hub-log .iv-txrow > :nth-child(6)::before { content: '업체 보관'; margin-right: 6px; }
+  .sf-wrap .iv-hub-log .iv-txrow .iv-unit-t { display: inline; }
+}
+.sf-wrap .iv-difftbl { width: 100%; }

@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useReducer, useState, type ReactNode } from 'react';
 import { ToneDot } from './components/ToneFolder';
-import { ArrowLeftRight, BookOpen, Calculator, CalendarCheck, CalendarDays, ListChecks, ChevronDown, ClipboardCheck, PanelLeftClose, PanelLeftOpen, FileBarChart, GraduationCap, ShoppingCart, Warehouse, FileText, FolderOpen, Settings, Trash2, X, type LucideIcon } from 'lucide-react';
+import { BookOpen, Calculator, CalendarCheck, CalendarDays, ListChecks, ChevronDown, ClipboardCheck, PanelLeftClose, PanelLeftOpen, FileBarChart, GraduationCap, Package, Warehouse, FileText, FolderOpen, Settings, Trash2, X, type LucideIcon } from 'lucide-react';
 import { StudyArchive, STUDY_CATEGORIES } from './components/StudyArchive';
 import { FileExplorer } from './components/FileExplorer';
 import { ControlPanel } from './components/ControlPanel';
@@ -13,7 +13,7 @@ import StaffSchedule from './components/StaffSchedule';
 import StaffLeave from './components/StaffLeave';
 import StaffBook from './components/StaffBook';
 import StaffTraining from './components/StaffTraining';
-import { StockCheck, StockMove, StockOrder, StockReport, VendorStore } from './components/Inventory';
+import { StockCheck, StockOrder, StockReport, VendorStore } from './components/Inventory';
 import { activeWindow, desktopReducer, initialDesktop, type WindowId } from './desktopState';
 import { DesktopProvider, useDesktop } from './useDesktop';
 import { DesktopNotice, LoadingBox } from './components/Feedback';
@@ -25,7 +25,7 @@ type MenuItem = { id: WindowId; label: string; icon: LucideIcon };
 // 2026-11-07 사용자 지정 구성: 상담 / 재고 / 직원 / 개인 (+ 맨 아래 설정). 묶음 이름(▶)을 누르면 접고 펼친다.
 export const SIDEBAR_GROUPS: { title: string; items: MenuItem[] }[] = [
   { title: '상담', items: [{ id: 'fileExplorer', label: '가격표', icon: FolderOpen }, { id: 'priceCalculator', label: '계산', icon: Calculator }] },
-  { title: '재고', items: [{ id: 'stockCheck', label: '재고체크', icon: ClipboardCheck }, { id: 'stockOrder', label: '재고주문', icon: ShoppingCart }, { id: 'stockMove', label: '재고입출고', icon: ArrowLeftRight }, { id: 'vendorStore', label: '업체 보관', icon: Warehouse }, { id: 'stockReport', label: '월말/연말보고서', icon: FileBarChart }] },
+  { title: '재고', items: [{ id: 'stockCheck', label: '재고체크', icon: ClipboardCheck }, { id: 'stockOrder', label: '품목별 재고', icon: Package }, { id: 'vendorStore', label: '업체 잔액', icon: Warehouse }, { id: 'stockReport', label: '월말/연말보고서', icon: FileBarChart }] },
   { title: '직원', items: [{ id: 'staffSchedule', label: '직원스케줄/성과표', icon: CalendarDays }, { id: 'staffLeave', label: '직원연차', icon: CalendarCheck }, { id: 'staffBook', label: '예약표', icon: ListChecks }, { id: 'staffTraining', label: '신입교육', icon: GraduationCap }] },
   { title: '개인', items: [{ id: 'terminal', label: '공부', icon: BookOpen }, { id: 'notepad', label: '메모', icon: FileText }] },
   { title: '설정', items: [{ id: 'trash', label: '휴지통', icon: Trash2 }, { id: 'controlPanel', label: '환경설정', icon: Settings }] },
@@ -158,7 +158,6 @@ export function AppShell({ desktop, dispatch }: { desktop: typeof initialDesktop
         {pane('staffTraining', <StaffTraining />)}
         {pane('stockCheck', <StockCheck />)}
         {pane('stockOrder', <StockOrder />)}
-        {pane('stockMove', <StockMove />)}
         {pane('vendorStore', <VendorStore />)}
         {pane('stockReport', <StockReport />)}
         {(Object.keys(PENDING) as WindowId[]).map(id => pane(id, <div className="pending-screen"><strong>{menuOf(id)!.label}</strong><p>{PENDING[id]}</p><small>준비 중이에요.</small></div>))}

@@ -19,14 +19,11 @@ const day = (d: string | null | undefined) => (!d ? '' : d.slice(0, 4) === thisY
 const won = (n: number) => `${Math.round(n).toLocaleString('ko-KR')}`;
 const Num = ({ v, u, read }: { v: string; u: string; read?: number }) => <><b className="vb-n">{v}<small>{u}</small></b>{read != null && <span className="vb-read">{read >= 10000 ? readWon(read) : '—'}</span>}</>;
 
+// 2026-11-19 사용자: 메뉴 이름 '업체 잔액', 보관 재고(수량) 탭은 품목별 재고와 겹쳐서 뺌(KeepTab 코드는 남김 — 품목별 재고의 '업체 보관' 걸러 보기가 같은 기록).
 export function VendorStore() {
-  const [tab, setTab] = useState<'bal' | 'keep'>('bal');
   const [toast, setToast] = useToast();
   return <Shell toast={toast}>
-    <div className="sf-bar"><div className="sf-pills" role="tablist" aria-label="업체 보관">
-      <button type="button" aria-pressed={tab === 'bal'} onClick={() => setTab('bal')}>잔액(원)</button>
-      <button type="button" aria-pressed={tab === 'keep'} onClick={() => setTab('keep')}>보관 재고(수량)</button></div></div>
-    {tab === 'bal' ? <BalanceTab notify={setToast} /> : <KeepTab />}
+    <BalanceTab notify={setToast} />
   </Shell>;
 }
 

@@ -2,7 +2,7 @@ import { Fragment, useCallback, useEffect, useState } from 'react';
 import { ChevronDown, ChevronLeft, ChevronRight, Pencil, Trash2 } from 'lucide-react';
 import { LoadingBox, SavingMark } from '../Feedback';
 import { askConfirm } from '../AlertDialog';
-import { type InvState, type InvTx, type KeepSource, KIND_LABEL, md, announceInventory, fmtQty, fmtWon, invGet, invSend, invUploadInvoice, invoiceSrc, shiftMonth, todayLocal, useInventory, subscribeInventory } from '../../inventoryApi';
+import { type InvItem, type InvState, type InvTx, type KeepSource, KIND_LABEL, md, announceInventory, fmtQty, fmtWon, invGet, invSend, invUploadInvoice, invoiceSrc, shiftMonth, todayLocal, useInventory, subscribeInventory } from '../../inventoryApi';
 import { InvThumb, ItemSelect, Modal, Problem, QtyInput, Seg, Shell, errText, useToast, withUnit } from './shared';
 
 export function StockMove() {
@@ -20,21 +20,22 @@ export function StockMove() {
 
 // 가져간 곳: 메모 앞에 붙여 저장해 입출고 내역의 '팀 · 사유' 줄에 보인다(계산에는 쓰지 않음).
 const OUT_TEAMS = ['피부팀', '간호팀', '고객', '직원구매', '기타'];
-export function OutForm({ state, notify }: { state: InvState; notify: (m: string) => void }) {
-  const [f, setF] = useState({ item: '', qty: '', memo: '', date: state.today, team: '피부팀' });
+// fixed(2026-11-19 품목별 재고): 고른 품목의 출고 창 — 품목 칸 없이, 저장은 그대로
+export function OutForm({ state, notify, fixed, onDone }: { state: InvState; notify: (m: string) => void; fixed?: InvItem; onDone?: () => void }) {
+  const [f, setF] = useState({ item: fixed ? String(fixed.id) : '', qty: '', memo: '', date: state.today, team: '피부팀' });
   const [busy, setBusy] = useState(false);
   const item = state.items.find(i => String(i.id) === f.item);
   const qty = Number(f.qty) || 0;
-  return <section className="iv-sec"><h3>출고 등록</h3>
+  return <section className={`iv-sec${fixed ? ' is-bare' : ''}`}>{!fixed && <h3>출고 등록</h3>}
     <div className="iv-row">
       <label className="sf-input"><span>날짜</span><input type="date" value={f.date} onChange={e => setF(x => ({ ...x, date: e.target.value }))} /></label>
-      <label className="sf-input"><span>품목</span><ItemSelect items={state.items} value={f.item} onChange={v => setF(x => ({ ...x, item: v }))} /></label>
+      {!fixed && <label className="sf-input"><span>품목</span><ItemSelect items={state.items} value={f.item} onChange={v => setF(x => ({ ...x, item: v }))} /></label>}
       <QtyInput item={item} label="수량" value={f.qty} onChange={v => setF(x => ({ ...x, qty: v }))} />
       <label className="sf-input"><span>가져간 곳</span><select value={f.team} onChange={e => setF(x => ({ ...x, team: e.target.value }))}>{OUT_TEAMS.map(t => <option key={t}>{t}</option>)}</select></label>
       <label className="sf-input"><span>메모</span><input value={f.memo} onChange={e => setF(x => ({ ...x, memo: e.target.value }))} /></label>
       <button type="button" className="sf-btn is-primary" disabled={!item || !(qty > 0) || busy} onClick={async () => {
         setBusy(true);
-        try { await invSend('POST', '/out', { item_id: item!.id, qty, memo: [f.team, f.memo.trim()].filter(Boolean).join(' · '), date: f.date }); notify('출고했어요.'); announceInventory(); setF(x => ({ ...x, item: '', qty: '', memo: '' })); }
+        try { await invSend('POST', '/out', { item_id: item!.id, qty, memo: [f.team, f.memo.trim()].filter(Boolean).join(' · '), date: f.date }); notify('출고했어요.'); announceInventory(); setF(x => ({ ...x, item: fixed ? x.item : '', qty: '', memo: '' })); onDone?.(); }
         catch (e) { notify(errText(e)); } finally { setBusy(false); }
       }}>{busy && <SavingMark />}출고</button>
     </div>
@@ -107,9 +108,29 @@ export const splitMemo = (memo?: string | null) => {
   return { team, reason: parts.join(' · ').replace('선결제 잔량', '업체 보관 잔량') };
 };
 export const KIND_TONE: Record<string, string> = { in: 'in', out: 'out', prepaid_buy: 'pp', prepaid_in: 'pp', adjust: 'adj' };
-export function TxLog({ notify }: { notify: (m: string) => void }) {
+// 품목별 재고(2026-11-19 사용자): item을 주면 그 품목만 — 걸러 보기 전체·입고·사용·출고·재고 차이·업체 보관, 재고 차이는 날짜별 표(사용 수량·장부 재고·실제 마감재고).
+// 기록·수정·삭제·명세서는 전체 내역과 같은 코드(보기만 다름).
+export type ItemFilter = 'all' | 'in' | 'use' | 'out' | 'diff' | 'keep';
+export const ITEM_FILTERS: [ItemFilter, string][] = [['all', '전체'], ['in', '입고'], ['use', '사용'], ['out', '출고'], ['diff', '재고 차이'], ['keep', '업체 보관']];
+export const txIs = (t: InvTx, f: ItemFilter) => f === 'all' ? true : f === 'in' ? t.kind === 'in' || (t.kind === 'prepaid_in' && t.hospital_delta >= 0)
+  : f === 'use' ? t.kind === 'out' && !!t.daily_date : f === 'out' ? t.kind === 'out' && !t.daily_date
+  : f === 'diff' ? t.kind === 'adjust' && t.hospital_delta !== 0 : t.vendor_delta !== 0;
+export const txTitle = (t: InvTx) => t.kind === 'out' ? (t.daily_date ? '일일재고 사용' : '출고') : t.kind === 'adjust' ? (t.hospital_delta === 0 && t.vendor_delta !== 0 ? '업체 보관 잔량 고치기' : t.daily_date ? '재고 차이' : '재고 맞추기')
+  : t.kind === 'prepaid_buy' ? '선결제' : t.kind === 'prepaid_in' ? '업체 보관에서 입고' : '입고';
+// 재고 차이 날짜별: 그날 사용(일일재고 사용 합) · 실제 마감재고(그날 마지막 기록 뒤 병원재고) · 장부 재고(= 실제 − 차이) · 차이(그날 재고 맞추기 합)
+export function diffDays(rows: InvTx[]) {
+  const days = [...new Set(rows.filter(t => txIs(t, 'diff')).map(t => t.date))];
+  return days.map(d => { const day = rows.filter(t => t.date === d); // rows는 날짜·기록 순 내림차순 → 첫 줄이 그날 마지막
+    const r3 = (v: number) => Math.round(v * 1000) / 1000;
+    const used = r3(day.filter(t => txIs(t, 'use')).reduce((a, t) => a - t.hospital_delta, 0));
+    const diff = r3(day.filter(t => txIs(t, 'diff')).reduce((a, t) => a + t.hospital_delta, 0));
+    const closing = day[0].stock_asof ?? day[0].hospital_after;
+    return { date: d, used, diff, closing, book: r3(closing - diff), daily: day.some(t => t.daily_date) }; });
+}
+export function TxLog({ notify, item }: { notify: (m: string) => void; item?: InvItem }) {
   const [month, setMonth] = useState(todayLocal().slice(0, 7));
   const [kind, setKind] = useState<'all' | 'in' | 'out'>('all');
+  const [filt, setFilt] = useState<ItemFilter>('all');
   const [rows, setRows] = useState<InvTx[] | null>(null);
   const del = async (t: InvTx) => {
     if (!await askConfirm({ title: '이 기록을 지울까요?', message: `${Number(t.date.slice(5, 7))}월 ${Number(t.date.slice(8))}일 ${t.item_name} ${KIND_LABEL[t.kind]} ${fmtQty(t.qty)} ${t.stock_unit} · 되돌림: ${effect(t) || '재고 변화 없음'}`, kind: 'delete' })) return;
@@ -122,9 +143,9 @@ export function TxLog({ notify }: { notify: (m: string) => void }) {
   const editable = (t: InvTx) => (t.kind === 'in' || t.kind === 'out' || t.kind === 'prepaid_in') && !t.daily_date && !t.cancelled_at;
   const stamp = (at: number, by?: string | null) => { const d = new Date(at); return `${d.getMonth() + 1}/${d.getDate()}${by ? ` ${String(by).split('@')[0]}` : ''}`; };
   const load = useCallback(async () => {
-    const k = kind === 'in' ? 'in,prepaid_buy,prepaid_in' : kind === 'out' ? 'out' : undefined;
-    try { setRows((await invGet('/tx', { from: `${month}-01`, to: `${month}-31`, kind: k })).rows); } catch (e) { notify(errText(e)); setRows([]); }
-  }, [month, kind, notify]);
+    const k = item ? undefined : kind === 'in' ? 'in,prepaid_buy,prepaid_in' : kind === 'out' ? 'out' : undefined;
+    try { setRows((await invGet('/tx', { from: `${month}-01`, to: `${month}-31`, kind: k, ...(item ? { item_id: String(item.id) } : {}) })).rows); } catch (e) { notify(errText(e)); setRows([]); }
+  }, [month, kind, notify, item?.id]);
   useEffect(() => { setRows(null); void load(); }, [load]);
   // 다른 화면(일일재고·주문·받기)에서 저장하면 내역도 새로 받음
   useEffect(() => subscribeInventory(() => { void load(); }), [load]);
@@ -136,7 +157,7 @@ export function TxLog({ notify }: { notify: (m: string) => void }) {
         const subNode = sub.split(/(업체 보관 [\d.]+)/).map((x, i) => (i % 2 ? <b key={i} className="iv-kv">{x}</b> : x));
         return <div key={t.id} className={`iv-txrow${t.cancelled_at ? ' is-cancelled' : ''}${child ? ' is-child' : ''}${keepIn(t) ? ` is-src-${srcKind(t)}` : ''}`} role="row">
         <span role="cell" className="c-date">{Number(t.date.slice(5, 7))}.{Number(t.date.slice(8))}</span>
-        <span role="cell" className="iv-tx-item"><span className="iv-tx-l1"><b>{t.item_name}</b>{t.vendor_name && <em>{t.vendor_name}</em>}</span><small>{sub ? subNode : ' '}</small></span>
+        <span role="cell" className="iv-tx-item"><span className="iv-tx-l1"><b>{item ? txTitle(t) : t.item_name}</b>{!item && t.vendor_name && <em>{t.vendor_name}</em>}</span><small>{sub ? subNode : ' '}</small></span>
         <span role="cell" className="mid"><i className={`iv-kdot is-${KIND_TONE[t.kind] || 'adj'}`} role="img" aria-label={KIND_LABEL[t.kind]} title={KIND_LABEL[t.kind]} /></span>
         <span role="cell" className="num">{t.cancelled_at ? <small className="iv-cancel-tag">취소 </small> : null}{t.cancelled_at ? <s>{fmtQty(t.qty)}</s> : <b className="iv-qty">{sign}{fmtQty(t.qty)}</b>}{t.bonus_qty ? <small> +{fmtQty(t.bonus_qty)}</small> : null}<small className="iv-unit-t"> {t.stock_unit}</small></span>
         <span role="cell" className="num">{fmtQty(t.stock_asof ?? t.hospital_after)}</span>
@@ -152,7 +173,9 @@ export function TxLog({ notify }: { notify: (m: string) => void }) {
   // 묶음 줄의 'N건'은 입고 건수, 품목 줄의 숫자는 입고 수량(단위 붙임). 수정·취소·명세서는 펼친 개별 건에서.
   type View = { kind: 'row'; t: InvTx } | { kind: 'group'; key: string; list: InvTx[] };
   const view: View[] = [];
-  if (rows) {
+  const shown = rows ? (item ? rows.filter(t => txIs(t, filt)) : rows) : null;
+  if (shown && item) for (const t of shown) view.push({ kind: 'row', t });
+  else if (rows) {
     const isRecv = (t: InvTx) => (t.kind === 'in' || t.kind === 'prepaid_in') && !t.daily_date;
     const groups = new Map<string, InvTx[]>();
     for (const t of rows) if (isRecv(t)) { const k = `${t.date}|${t.vendor_id ?? 0}`; groups.set(k, [...(groups.get(k) || []), t]); }
@@ -165,10 +188,15 @@ export function TxLog({ notify }: { notify: (m: string) => void }) {
   }
   return <>
     <div className="sf-bar"><div className="sf-month"><button type="button" aria-label="이전 달" onClick={() => setMonth(m => shiftMonth(m, -1))}><ChevronLeft size={18} strokeWidth={2} /></button><strong>{month.slice(0, 4)}년 {Number(month.slice(5))}월</strong><button type="button" aria-label="다음 달" onClick={() => setMonth(m => shiftMonth(m, 1))}><ChevronRight size={18} strokeWidth={2} /></button></div>
-      <Seg label="종류" value={kind} onChange={setKind} options={[['all', '전체'], ['in', <><i className="iv-dot is-in" aria-hidden="true" />입고</>], ['out', <><i className="iv-dot is-out" aria-hidden="true" />출고</>]]} /></div>
-    {rows == null ? <LoadingBox /> : !rows.length ? <p className="sf-hint">이 달 기록이 없어요.</p> : <div className="iv-txwrap"><div className="iv-txgrid" role="table" aria-label="입출고 내역">
+      {item ? <div className="sf-pills iv-ifilter" role="group" aria-label="걸러 보기">{ITEM_FILTERS.map(([k, label]) => { const n = k === 'diff' ? diffDays(rows || []).length : (rows || []).filter(t => txIs(t, k)).length;
+          return <button key={k} type="button" aria-pressed={filt === k} onClick={() => setFilt(k)}>{label}<small>{rows ? n : ''}</small></button>; })}</div>
+        : <Seg label="종류" value={kind} onChange={setKind} options={[['all', '전체'], ['in', <><i className="iv-dot is-in" aria-hidden="true" />입고</>], ['out', <><i className="iv-dot is-out" aria-hidden="true" />출고</>]]} />}</div>
+    {rows == null ? <LoadingBox /> : item && filt === 'diff' ? (() => { const ds = diffDays(rows); return !ds.length ? <p className="sf-hint">기록 없음</p> : <table className="sf-table iv-difftbl">
+      <thead><tr><th>날짜</th><th className="num">사용 수량</th><th className="num">장부 재고</th><th className="num">실제 마감재고</th><th className="num">재고 차이</th></tr></thead>
+      <tbody>{ds.map(d => <tr key={d.date}><td>{Number(d.date.slice(5, 7))}/{Number(d.date.slice(8))}{!d.daily && <small> · 재고 맞추기</small>}</td><td className="num">{d.daily ? withUnit(d.used, item.stock_unit) : '—'}</td><td className="num">{withUnit(d.book, item.stock_unit)}</td><td className="num"><b>{withUnit(d.closing, item.stock_unit)}</b></td><td className={`num iv-diffv${d.diff < 0 ? ' is-minus' : ''}`}><b>{d.diff > 0 ? '+' : d.diff < 0 ? '−' : ''}{withUnit(Math.abs(d.diff), item.stock_unit)}</b></td></tr>)}</tbody></table>; })()
+    : !shown?.length ? <p className="sf-hint">{item ? '기록 없음' : '이 달 기록이 없어요.'}</p> : <div className="iv-txwrap"><div className="iv-txgrid" role="table" aria-label="입출고 내역">
       <div className="iv-legend" aria-hidden="true"><span><i className="iv-kdot is-in" />입고</span><span><i className="iv-kdot is-out" />출고</span><span><i className="iv-kdot is-pp" />업체 보관에서 입고</span></div>
-      <div className="iv-txrow is-head" role="row"><span role="columnheader">날짜</span><span role="columnheader">품목</span><span role="columnheader" className="mid">구분</span><span role="columnheader" className="num">수량</span><span role="columnheader" className="num">병원재고</span><span role="columnheader" className="num">업체 보관</span><span role="columnheader" className="mid">명세서</span><span role="columnheader" aria-label="수정·삭제" /></div>
+      <div className="iv-txrow is-head" role="row"><span role="columnheader">날짜</span><span role="columnheader">{item ? '내용' : '품목'}</span><span role="columnheader" className="mid">구분</span><span role="columnheader" className="num">수량</span><span role="columnheader" className="num">병원재고</span><span role="columnheader" className="num">업체 보관</span><span role="columnheader" className="mid">명세서</span><span role="columnheader" aria-label="수정·삭제" /></div>
       {view.map(v => v.kind === 'row' ? rowOf(v.t) : <Fragment key={v.key}>
         {(() => { const g = v.list, isOpen = open.has(v.key);
           const photos = new Set(g.flatMap(photosOf)).size, missing = g.filter(t => invoiceState(t) === 'missing').length;

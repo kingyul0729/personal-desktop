@@ -38,7 +38,11 @@ async function itemsWithOptions(db) {
   const opts = await all(db, `SELECT * FROM inv_options WHERE active = 1 ORDER BY item_id, sort, id`);
   for (const it of items) it.options = opts.filter(o => o.item_id === it.id);
   const lastBuys = await all(db, `SELECT t.item_id, t.amount, t.qty, t.bonus_qty FROM inv_tx t WHERE t.deleted_at IS NULL AND t.kind = 'prepaid_buy' AND t.id = (SELECT max(id) FROM inv_tx x WHERE x.item_id = t.item_id AND x.kind = 'prepaid_buy' AND x.deleted_at IS NULL)`);
+  // 최근 주문(품목별 재고 화면 숫자 칸, 보기만): 취소한 주문 빼고 가장 늦은 주문일·수량
+  const lastOrders = await all(db, `SELECT o.item_id, o.ordered_at, o.qty + o.bonus_qty AS qty FROM inv_orders o WHERE o.status <> 'cancelled' AND o.id = (SELECT x.id FROM inv_orders x WHERE x.item_id = o.item_id AND x.status <> 'cancelled' ORDER BY x.ordered_at DESC, x.id DESC LIMIT 1)`);
   for (const it of items) {
+    const lo = lastOrders.find(x => x.item_id === it.id);
+    it.last_order = lo ? { date: lo.ordered_at, qty: lo.qty } : null;
     const b = it.prepaid ? lastBuys.find(x => x.item_id === it.id) : null;
     it.unit_cost = b ? unitCostOf(b) : null; // 실질 취득단가(증정 포함)
     it.paid_unit_cost = b && b.amount != null && b.qty > 0 && b.bonus_qty > 0 ? Math.round((b.amount / b.qty) * 100) / 100 : null; // 유상 구매단가(증정이 있을 때만 다름)
