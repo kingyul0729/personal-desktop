@@ -1,4 +1,5 @@
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Trash2 } from 'lucide-react';
+import { askConfirm } from './AlertDialog';
 import type React from 'react';
 import { useCallback, useEffect, useState } from 'react';
 import { LoadingBox, SavingMark } from './Feedback';
@@ -86,7 +87,14 @@ export default function StaffLeave() {
 function LeaveDetail({ staff, onClose, onSaved }: { staff: StaffMember; onClose: () => void; onSaved: () => Promise<void> }) {
   const [logs, setLogs] = useState<LeaveLog[] | null>(null);
   const [editing, setEditing] = useState(false);
-  useEffect(() => { staffGet(`/leave-log/${staff.id}`).then(setLogs, () => setLogs([])); }, [staff.id]);
+  const [error, setError] = useState('');
+  const load = useCallback(() => staffGet(`/leave-log/${staff.id}`).then(setLogs, () => setLogs([])), [staff.id]);
+  useEffect(() => { void load(); }, [load]);
+  // 수동 수정 기록 지우기(2026-11-19): 그 수정이 바꾼 지급·사용연차도 수정 전으로 되돌림
+  const del = async (l: LeaveLog) => {
+    if (!await askConfirm({ kind: 'delete' })) return;
+    try { setError(''); await staffPost(`/leave-log-delete/${l.id}`, {}); await load(); await onSaved(); } catch (e) { setError(e instanceof Error ? e.message : '지우지 못했어요'); }
+  };
   if (editing) return <LeaveAdjust staff={staff} onClose={() => setEditing(false)} onSaved={onSaved} />;
   return <div className="sf-modal" role="dialog" aria-modal="true" aria-label={`${staff.name} 연차 이력`}>
     <div className="sf-modal-back" onClick={onClose} />
@@ -95,7 +103,9 @@ function LeaveDetail({ staff, onClose, onSaved }: { staff: StaffMember; onClose:
       {logs == null ? <LoadingBox /> : !logs.length ? <p className="sf-hint">연차 이력이 없습니다</p>
         : <ul className="sf-list sf-log">{logs.map(l => <li key={l.id}><b>{LOG_TYPE[l.log_type] || l.log_type}</b>
           <span>{[l.log_date, l.reason, `잔여연차 ${l.after_remain ?? '-'}`].filter(Boolean).join(' · ')}</span>
-          <small>{(l.created_at || '').slice(0, 16).replace('T', ' ')}{l.editor ? ` · ${l.editor}` : ''}</small></li>)}</ul>}
+          <small>{(l.created_at || '').slice(0, 16).replace('T', ' ')}{l.editor ? ` · ${l.editor}` : ''}</small>
+          {l.log_type === 'adjust' && <button type="button" className="lv-log-del" aria-label="삭제" onClick={() => void del(l)}><Trash2 size={15} strokeWidth={1.8} /></button>}</li>)}</ul>}
+      {error && <p className="sf-hint is-warn">{error}</p>}
       <div className="sf-modal-foot"><button type="button" className="sf-btn" onClick={onClose}>닫기</button><button type="button" className="sf-btn is-primary" onClick={() => setEditing(true)}>연차 수정</button></div>
     </div>
   </div>;

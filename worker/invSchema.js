@@ -262,6 +262,23 @@ export async function ensureInvSchema(db) {
       await db.prepare(`INSERT OR REPLACE INTO inv_meta (key, value) VALUES ('fixes', ?)`).bind(`${fixes} vbal1`.trim()).run();
       fixes = `${fixes} vbal1`.trim();
     }
+    if (!fixes.includes('leavefix1') && await claimFix(db, 'leavefix1')) {
+      // 2026-11-19 사용자 '잘못 누름, 삭제해줘': 김유리 연차 이력의 11/19 '수동 수정 · 포상 연차 지급' 한 줄을 지움.
+      // 그 수정이 지급·사용연차를 바꿨으면 지금 값이 그 결과 그대로일 때만 수정 전으로 되돌림(화면 '삭제'와 같은 규칙).
+      try {
+        const logs = (await db.prepare(`SELECT l.* FROM staff_leave_log l JOIN staff s ON s.id = l.staff_id WHERE s.name = '김유리' AND l.log_type = 'adjust' AND l.reason = '포상 연차 지급' AND l.created_at LIKE '2026-11-19%'`).all()).results || [];
+        if (logs.length === 1) {
+          const log = logs[0], cur = await db.prepare('SELECT total_leave, used_leave FROM staff WHERE id = ?').bind(log.staff_id).first();
+          const changed = log.before_total !== log.after_total || log.before_used !== log.after_used;
+          if (!changed || (cur && cur.total_leave === log.after_total && cur.used_leave === log.after_used)) {
+            await db.batch([...(changed ? [db.prepare('UPDATE staff SET total_leave = ?, used_leave = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').bind(log.before_total, log.before_used, log.staff_id)] : []),
+              db.prepare('DELETE FROM staff_leave_log WHERE id = ?').bind(log.id)]);
+          }
+        }
+        await db.prepare(`INSERT OR REPLACE INTO inv_meta (key, value) VALUES ('fixes', ?)`).bind(`${fixes} leavefix1`.trim()).run();
+        fixes = `${fixes} leavefix1`.trim();
+      } catch (e) { console.error('leavefix1', e); }
+    }
     if (!fixes.includes('jwbal1') && await db.prepare(`SELECT 1 FROM inv_meta WHERE key = 'import'`).first() && await claimFix(db, 'jwbal1')) {
       // 2026-11-19 사용자 '해줘': 중외 업체 잔액 — 2025-10-30 중복 결제로 남은 돈(업체 확인: 이달 주문 뒤 144,001원).
       // 앱 가격 그대로(사용자 '현재 가격대로'): 11/12 GA20% 1개 40,000원 주문이 있으면 등록 184,001원 + 그 주문에 40,000원 차감, 없으면 등록 144,001원만. 중외 잔액 기록이 이미 있으면 손대지 않음.

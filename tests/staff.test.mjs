@@ -287,3 +287,22 @@ test('booking sheet: import, mark, cancel, same-day rows and a separate summary 
   await call(e, '/api/staff/book/delete', { method: 'POST', body: { id: d2.data.row.id } });
   assert.equal((await call(e, '/api/staff/book?date=2026-11-10')).data.rows.length, 4);
 });
+
+test('연차 이력: 수동 수정 기록 삭제 — 바꾼 연차는 수정 전으로, 그 뒤 또 바뀌었으면 막음', async () => {
+  const e = env();
+  const list = (await call(e, '/api/staff/list')).data;
+  const s = (list.staff || list).find(x => x.id === 2);
+  await call(e, '/api/staff/leave-adjust/2', { method: 'POST', body: { total_leave: s.total_leave + 1, used_leave: s.used_leave, reason: '포상 연차 지급' } });
+  let logs = (await call(e, '/api/staff/leave-log/2')).data;
+  const adj = logs.find(l => l.log_type === 'adjust');
+  assert.equal((await call(e, `/api/staff/leave-log-delete/${adj.id}`, { method: 'POST', body: {} })).status, 200);
+  const after = ((await call(e, '/api/staff/list')).data.staff || (await call(e, '/api/staff/list')).data).find(x => x.id === 2);
+  assert.equal(after.total_leave, s.total_leave);
+  logs = (await call(e, '/api/staff/leave-log/2')).data;
+  assert.equal(logs.filter(l => l.log_type === 'adjust').length, 0);
+  // 두 번 수정한 뒤 앞의 것을 지우면 막음
+  await call(e, '/api/staff/leave-adjust/2', { method: 'POST', body: { total_leave: s.total_leave + 1, used_leave: s.used_leave, reason: '포상 연차 지급' } });
+  await call(e, '/api/staff/leave-adjust/2', { method: 'POST', body: { total_leave: s.total_leave + 2, used_leave: s.used_leave, reason: '직접 입력' } });
+  const first = (await call(e, '/api/staff/leave-log/2')).data.filter(l => l.log_type === 'adjust').pop();
+  assert.equal((await call(e, `/api/staff/leave-log-delete/${first.id}`, { method: 'POST', body: {} })).status, 409);
+});

@@ -591,6 +591,21 @@ staff.post("/leave-grant/:id", async (c) => {
     VALUES (?,?,?,?,?,?,?,?)`).bind(id, "grant", 1, cur.total_leave, newTotal, remain, "\uC6D4 \uC5F0\uCC28 \uBC1C\uC0DD \uC9C0\uAE09 \uC2B9\uC778", b.editor || "\uAD00\uB9AC\uC790").run();
   return c.json({ ok: true, total_leave: newTotal, remain_leave: remain });
 });
+// 수동 수정 기록 지우기(2026-11-19 사용자 '잘못 누름, 삭제하는 방법 없나'): '수동 수정'(adjust) 기록만. 그 수정으로 지급·사용연차가 바뀌었으면 수정 전 값으로 되돌리고 기록을 지운다.
+// 그 뒤에 연차가 또 바뀌었으면(지금 값 ≠ 그 수정의 결과) 되돌리면 꼬이므로 막음. 숫자를 안 바꾼 수정은 기록만 지움.
+staff.post("/leave-log-delete/:log_id", async (c) => {
+  const log = await c.env.DB.prepare(`SELECT * FROM staff_leave_log WHERE id=?`).bind(Number(c.req.param("log_id"))).first();
+  if (!log) return c.json({ error: "\uAE30\uB85D\uC744 \uCC3E\uC744 \uC218 \uC5C6\uC5B4\uC694" }, 404);
+  if (log.log_type !== "adjust") return c.json({ error: "\uC218\uB3D9 \uC218\uC815 \uAE30\uB85D\uB9CC \uC9C0\uC6B8 \uC218 \uC788\uC5B4\uC694" }, 400);
+  const cur = await c.env.DB.prepare(`SELECT * FROM staff WHERE id=?`).bind(log.staff_id).first();
+  const changed = log.before_total !== log.after_total || log.before_used !== log.after_used;
+  if (changed) {
+    if (!cur || cur.total_leave !== log.after_total || cur.used_leave !== log.after_used) return c.json({ error: "\uADF8 \uB4A4\uC5D0 \uC5F0\uCC28\uAC00 \uB610 \uBC14\uB00C\uC5B4\uC11C \uC9C0\uC6B8 \uC218 \uC5C6\uC5B4\uC694. \uC5F0\uCC28 \uC218\uC815\uC73C\uB85C \uB9DE\uCDB0 \uC8FC\uC138\uC694." }, 409);
+    await c.env.DB.prepare(`UPDATE staff SET total_leave=?, used_leave=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`).bind(log.before_total, log.before_used, log.staff_id).run();
+  }
+  await c.env.DB.prepare(`DELETE FROM staff_leave_log WHERE id=?`).bind(log.id).run();
+  return c.json({ ok: true, reverted: changed });
+});
 staff.get("/leave-log/:id", async (c) => {
   const id = Number(c.req.param("id"));
   const logs = (await c.env.DB.prepare(

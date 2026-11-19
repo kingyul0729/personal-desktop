@@ -2918,3 +2918,8 @@ button.iv-pinv { cursor: zoom-in; }
   .sf-wrap .vb-rows.is-keep li { grid-template-columns: 44px 12px minmax(0, 1fr) auto; }
   .iv-tiles.is-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+/* 연차 이력: 수동 수정 기록 지우기 버튼(2026-11-19) */
+.sf-log li { grid-template-columns: 100px 1fr auto auto; align-items: center; column-gap: 8px; }
+.lv-log-del { width: 32px; height: 32px; display: grid; place-items: center; border: 0; background: none; color: #9aa1a9; border-radius: 6px; cursor: pointer; }
+.lv-log-del:hover { background: #f0f3f7; color: #c2504a; }
