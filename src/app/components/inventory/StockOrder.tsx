@@ -87,7 +87,7 @@ export function OrderBoard({ state, q, notify }: { state: InvState; q: string; n
         </> : <p className="iv-split-empty">왼쪽에서 품목을 고르세요</p>}
       </section>
     </div>
-    {pick && <OrderDialog item={pick.item} opt={pick.opt} today={state.today} onClose={() => setPick(null)} onDone={msg => { notify(msg); setPick(null); announceInventory(); }} />}
+    {pick && <OrderDialog item={pick.item} opt={pick.opt} today={state.today} balance={state.vendors.find(v => v.id === pick.item.vendor_id)?.balance || 0} onClose={() => setPick(null)} onDone={msg => { notify(msg); setPick(null); announceInventory(); }} />}
   </>;
 }
 
@@ -204,6 +204,7 @@ export function ReceiveHere({ item, orders, today, notify, vendor = null }: { it
 // 주문 후 업체 보관 잔량은 예상값. 실제 업체 보관 잔량 차감은 같은 화면 ② 받기의 입고확정 때만.
 export function PrepaidOrder({ item, orders, today, notify, vendor = null }: { item: InvItem; orders: InvOrder[]; today: string; notify: (m: string) => void; vendor?: InvVendor | null }) {
   const [qty, setQty] = useState(''), [optId, setOptId] = useState<number | null>(null), [date, setDate] = useState(today), [busy, setBusy] = useState(false);
+  const [useBal, setUseBal] = useState(false); const balance = vendor?.balance || 0;
   const opts = item.options.filter(o => o.prepaid && optOpen(o, date));
   const reserved = orders.filter(o => o.item_id === item.id && o.prepaid).reduce((a, o) => a + o.qty, 0);
   const keep = Math.round(((item.vendor_stock || 0) - reserved) * 1000) / 1000;
@@ -219,7 +220,7 @@ export function PrepaidOrder({ item, orders, today, notify, vendor = null }: { i
     const w = orders.filter(o => o.item_id === item.id);
     if (w.length && !await askConfirm({ title: '이미 주문한 게 있어요', ok: '주문', cancel: '취소' })) return;
     setBusy(true);
-    try { await invSend('POST', '/prepaid-order', { item_id: item.id, qty: n, option_id: short > 0 ? opt?.id : undefined, date }); notify('주문했어요.'); setQty(''); setOptId(null); announceInventory(); }
+    try { await invSend('POST', '/prepaid-order', { item_id: item.id, qty: n, option_id: short > 0 ? opt?.id : undefined, date, use_balance: useBal && balance > 0 && !!opt }); notify('주문했어요.'); setQty(''); setOptId(null); announceInventory(); }
     catch (e) { notify(errText(e)); } finally { setBusy(false); }
   };
   return <div className="iv-d-sec iv-pp">
@@ -240,19 +241,31 @@ export function PrepaidOrder({ item, orders, today, notify, vendor = null }: { i
       <div><dt>주문 후 업체 보관 잔량</dt><dd className={short > 0 && !opt ? 'is-dim' : ''}>{short > 0 && !opt ? '—' : `${fmtQty(after)} ${u}`}</dd></div>
     </dl>
     {tooSmall && <p className="sf-hint is-warn">이 주문 구성으로는 {fmtQty(newQty - short)} {u} 모자라요.</p>}
+    {opt && balance > 0 && (opt.amount || 0) > 0 && <BalanceUse balance={balance} total={opt.amount || 0} on={useBal} setOn={setUseBal} />}
     {opt && <PayInfo vendor={vendor} amount={opt.amount} />}
     <div className="iv-pp-foot"><button type="button" className="sf-btn is-primary" disabled={!ready} onClick={() => void submit()}>{busy && <SavingMark />}주문</button></div>
   </div>;
 }
 
-export function OrderDialog({ item, opt, today, onClose, onDone }: { item: InvItem; opt: InvOption; today: string; onClose: () => void; onDone: (m: string) => void }) {
+// 업체 잔액에서 차감(2026-11-19 사용자): 체크하면 주문 금액과 남은 잔액 중 작은 만큼 빼고, 모자라면 나머지만 실제 결제.
+function BalanceUse({ balance, total, on, setOn }: { balance: number; total: number; on: boolean; setOn: (v: boolean) => void }) {
+  const use = Math.min(balance, total);
+  return <div className="iv-baluse">
+    <label className="iv-baluse-check"><input type="checkbox" checked={on} onChange={e => setOn(e.target.checked)} />업체 잔액에서 차감 <small>남은 금액 {fmtWon(balance)}</small></label>
+    {on && <dl><div><dt>주문 금액</dt><dd>{fmtWon(total)}</dd></div><div><dt>잔액 차감</dt><dd>−{fmtWon(use)}</dd></div>
+      <div className="is-total"><dt>실제 결제</dt><dd>{fmtWon(total - use)}</dd></div><div><dt>주문 후 잔액</dt><dd>{fmtWon(balance - use)}</dd></div></dl>}
+  </div>;
+}
+
+export function OrderDialog({ item, opt, today, onClose, onDone, balance = 0 }: { item: InvItem; opt: InvOption; today: string; onClose: () => void; onDone: (m: string) => void; balance?: number }) {
   const [count, setCount] = useState('1'), [date, setDate] = useState(today), [memo, setMemo] = useState(''), [busy, setBusy] = useState(false), [error, setError] = useState('');
+  const [useBal, setUseBal] = useState(false); // 업체 잔액에서 차감(2026-11-19, 잔액이 있는 업체만 보임)
   const [ship, setShip] = useState('');
   const n = Number(count) || 0;
   const totalQty = (opt.qty + (opt.bonus_qty || 0)) * n, shipQty = Number(ship) || 0;
   const submit = async () => {
     setBusy(true); setError('');
-    try { await invSend('POST', '/orders', { item_id: item.id, option_id: opt.id, count: n, date, memo, ship_qty: opt.prepaid ? shipQty : undefined }); onDone(opt.prepaid ? (shipQty > 0 ? `선결제를 기록했어요. 입고 예정 ${fmtQty(shipQty)} ${item.stock_unit}` : '선결제를 기록했어요.') : '주문했어요.'); }
+    try { await invSend('POST', '/orders', { item_id: item.id, option_id: opt.id, count: n, date, memo, ship_qty: opt.prepaid ? shipQty : undefined, use_balance: useBal && balance > 0 }); onDone(opt.prepaid ? (shipQty > 0 ? `선결제를 기록했어요. 입고 예정 ${fmtQty(shipQty)} ${item.stock_unit}` : '선결제를 기록했어요.') : '주문했어요.'); }
     catch (e) { setError(errText(e)); setBusy(false); }
   };
   const total = opt.amount == null ? null : opt.amount * n;
@@ -263,7 +276,8 @@ export function OrderDialog({ item, opt, today, onClose, onDone }: { item: InvIt
     {!!opt.prepaid && shipQty > 0 && <div className="iv-calc"><span>병원 입고 예정 <b>{withUnit(shipQty, item.stock_unit)}</b></span><span>업체 보관 <b className={shipQty > totalQty ? 'is-warn' : ''}>{withUnit(Math.round((totalQty - shipQty) * 1000) / 1000, item.stock_unit)}</b></span></div>}
     <label className="sf-input"><span>{opt.prepaid ? '결제일' : '주문일'}</span><input type="date" value={date} onChange={e => setDate(e.target.value)} /></label>
     <label className="sf-input"><span>메모</span><input type="text" value={memo} onChange={e => setMemo(e.target.value)} placeholder="선택" /></label>
-    <div className="iv-total"><span>{opt.prepaid ? '선결제 금액' : '결제금액'}</span><b>{fmtWon(total)}</b>{total != null && total >= 10000 && <small>{readWon(total)}</small>}</div>
+    {balance > 0 && total != null && total > 0 && <BalanceUse balance={balance} total={total} on={useBal} setOn={setUseBal} />}
+    {!(useBal && balance > 0) && <div className="iv-total"><span>{opt.prepaid ? '선결제 금액' : '결제금액'}</span><b>{fmtWon(total)}</b>{total != null && total >= 10000 && <small>{readWon(total)}</small>}</div>}
     {error && <p className="sf-hint is-warn">{error}</p>}
     <div className="sf-modal-foot"><button type="button" className="sf-btn" onClick={onClose}>닫기</button><button type="button" className="sf-btn is-primary" disabled={busy || n < 1 || shipQty < 0 || shipQty > totalQty} onClick={() => void submit()}>{busy && <SavingMark />}{opt.prepaid ? '선결제 기록' : '주문'}</button></div>
   </Modal>;

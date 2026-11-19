@@ -18,6 +18,7 @@ import { isRedDay } from './redDays.js';
 import { dailyPatientsAuto } from './staff.js';
 import { ensureInvSchema, INV_TABLES } from './invSchema.js';
 import { moveTxDate, keepCountStmts, ordered } from './invTxDate.js';
+import { handleBalance, planUse, useStmt, undoUseStmt, usedInPeriod, balTable } from './invBalance.js';
 import { oldFixLeft } from './invOldFix.js';
 
 const json = (body, status = 200) => Response.json(body, { status, headers: { 'cache-control': 'no-store' } });
@@ -71,7 +72,7 @@ const timingOf = v => (v && (v.pay_timing === 'order' || v.pay_timing === 'month
 // 옵션 기간(행사): 비우면 늘. 그 날짜가 기간 안이면 주문 가능
 const optOpen = (o, date) => (!o.start_date || o.start_date <= date) && (!o.end_date || date <= o.end_date);
 const OUT_OF_PERIOD = '행사 기간이 아닌 옵션이에요.';
-async function vendorList(db) { return all(db, 'SELECT * FROM inv_vendors ORDER BY active DESC, sort, id'); }
+async function vendorList(db) { return all(db, `SELECT v.*, round(coalesce((SELECT sum(CASE b.kind WHEN 'add' THEN b.amount ELSE -b.amount END) FROM inv_vendor_bal b WHERE b.vendor_id = v.id AND b.deleted_at IS NULL), 0)) AS balance FROM inv_vendors v ORDER BY v.active DESC, v.sort, v.id`); } // balance = 업체 잔액(원)
 // 업체 입력값 정리(새 업체·업체 정보 수정 공통). 계좌는 공개 저장소라 코드에 넣지 않고 앱에서만 받는다.
 function vendorFields(body) {
   const t = k => (body[k] == null || String(body[k]).trim() === '' ? null : String(body[k]).trim().slice(0, 100));
@@ -279,6 +280,9 @@ async function inventoryRoute(request, env, url, user, db, path, m) {
       return json({ today: kstToday(), imported: imported?.value || null, vendors, items, orders });
     }
 
+    // ── 업체 잔액(invBalance.js) ──
+    if (path === '/vendor-bal' || path.startsWith('/vendor-bal/')) { const r = await handleBalance(db, path, m, body, user); if (r) return r; }
+
     // ── 품목 ──
     if (m === 'POST' && path === '/items') {
       const name = String(body.name || '').trim();
@@ -394,6 +398,8 @@ async function inventoryRoute(request, env, url, user, db, path, m) {
             .bind(item.id, opt.id, opt.label, date, opt.qty, opt.bonus_qty || 0, opt.amount, body.memo || null, user, Date.now()),
           ...txStatements(db, item, { date, kind: 'prepaid_buy', qty: opt.qty, bonus_qty: opt.bonus_qty || 0, amount: opt.amount, vendor_delta: total, memo: body.memo || opt.label, by: user }),
           db.prepare(`UPDATE inv_tx SET order_id = (SELECT max(id) FROM inv_orders) WHERE id = (SELECT max(id) FROM inv_tx)`));
+        const use = body.use_balance ? await planUse(db, item.vendor_id, opt.amount) : 0;
+        if (use > 0) stmts.push(useStmt(db, item.vendor_id, use, date, user));
       }
       stmts.push(db.prepare(`INSERT INTO inv_orders (item_id, option_id, option_label, ordered_at, qty, bonus_qty, amount, prepaid, status, memo, created_by, created_at)
         VALUES (?,?,?,?,?,0,0,1,'ordered', CASE WHEN ? THEN 'from:' || (SELECT max(id) FROM inv_orders) ELSE 'keep' END, ?, ?)`)
@@ -421,14 +427,18 @@ async function inventoryRoute(request, env, url, user, db, path, m) {
           .bind(item.id, opt.id, opt.label, date, qty, bonus, amount, body.memo || null, user, Date.now()),
         ...txStatements(db, item, { date, kind: 'prepaid_buy', qty, bonus_qty: bonus, amount, vendor_delta: qty + bonus, memo: body.memo || opt.label, by: user, invoice: 0 })];
         stmts.push(db.prepare(`UPDATE inv_tx SET order_id = (SELECT max(id) FROM inv_orders) WHERE id = (SELECT max(id) FROM inv_tx)`));
+        const use = body.use_balance ? await planUse(db, item.vendor_id, amount) : 0;
+        if (use > 0) stmts.push(useStmt(db, item.vendor_id, use, date, user));
         if (ship > 0) stmts.push(db.prepare(`INSERT INTO inv_orders (item_id, option_id, option_label, ordered_at, qty, bonus_qty, amount, prepaid, status, memo, created_by, created_at) VALUES (?,?,?,?,?,0,0,1,'ordered','from:' || (SELECT max(id) FROM inv_orders),?,?)`)
           .bind(item.id, opt.id, '입고 예정', date, round(ship), user, Date.now()));
         await db.batch(stmts); // 한 batch(한 트랜잭션)라 max(id)가 이 요청 것
         return json({ ok: true, prepaid: true, ship });
       }
-      await db.prepare(`INSERT INTO inv_orders (item_id, option_id, option_label, ordered_at, qty, bonus_qty, amount, prepaid, status, memo, created_by, created_at) VALUES (?,?,?,?,?,?,?,0,'ordered',?,?,?)`)
-        .bind(item.id, opt.id, opt.label, date, qty, bonus, amount, body.memo || null, user, Date.now()).run();
-      return json({ ok: true });
+      // 업체 잔액에서 차감(2026-11-19): 주문 금액과 남은 잔액 중 작은 만큼. 모자라면 나머지만 실제 결제.
+      const use = body.use_balance ? await planUse(db, item.vendor_id, amount) : 0;
+      await db.batch([db.prepare(`INSERT INTO inv_orders (item_id, option_id, option_label, ordered_at, qty, bonus_qty, amount, prepaid, status, memo, created_by, created_at) VALUES (?,?,?,?,?,?,?,0,'ordered',?,?,?)`)
+        .bind(item.id, opt.id, opt.label, date, qty, bonus, amount, body.memo || null, user, Date.now()), ...(use > 0 ? [useStmt(db, item.vendor_id, use, date, user)] : [])]);
+      return json({ ok: true, used: use });
     }
     if (m === 'POST' && /^\/orders\/\d+\/cancel$/.test(path)) {
       // 일부라도 받은 주문은 '취소' 대신 받은 만큼으로 마감(나머지가 안 오는 경우)
@@ -437,6 +447,7 @@ async function inventoryRoute(request, env, url, user, db, path, m) {
       const r = await db.prepare(`UPDATE inv_orders SET status = ?, received_at = CASE WHEN ? = 'closed' THEN ? ELSE received_at END WHERE id = ? AND status = 'ordered'`)
         .bind(got?.n ? 'closed' : 'cancelled', got?.n ? 'closed' : 'cancelled', kstToday(), oid).run(); // 손으로 마감한 주문은 'closed' — 도착 기록을 지워도 다시 열리지 않음
       if (!r.meta?.changes) return bad('취소할 주문을 찾을 수 없어요.', 404);
+      if (!got?.n) await undoUseStmt(db, oid, user).run(); // 취소한 주문에 걸린 잔액 차감은 되돌림(마감은 그대로)
       return json({ ok: true });
     }
 
@@ -561,6 +572,7 @@ async function inventoryRoute(request, env, url, user, db, path, m) {
       if (tx.order_id && tx.kind === 'prepaid_buy') {
         stmts.push(db.prepare(`UPDATE inv_orders SET status = 'cancelled' WHERE id = ?`).bind(tx.order_id));
         stmts.push(db.prepare(`UPDATE inv_orders SET status = 'cancelled' WHERE memo = ? AND status = 'ordered'`).bind(`from:${tx.order_id}`)); // 받기 전 반입 예정도 함께 취소
+        stmts.push(undoUseStmt(db, tx.order_id, user)); // 이 결제에 쓴 업체 잔액도 되돌림
       }
       // 지운 기록 뒤에 이미 센 마감재고가 있으면 그 수량이 그대로 남게(일일재고 기록 자체를 지울 때는 빼고)
       const keep = tx.daily_date ? [] : await keepCountStmts(db, tx.item_id, tx.date, -tx.hospital_delta, user);
@@ -811,9 +823,10 @@ async function inventoryRoute(request, env, url, user, db, path, m) {
     }
     if (m === 'GET' && path === '/report-year') {
       const year = /^\d{4}$/.test(url.searchParams.get('year') || '') ? url.searchParams.get('year') : kstToday().slice(0, 4);
+      if (url.searchParams.get('tables')) return json({ year, vendor_bal: await balTable(db, `${year}-01-01`, `${year}-12-31`), keep: await keepTable(db, `${year}-01-01`, `${year}-12-31`) }); // 연말 보고 화면은 표 두 개만
       const months = [];
       for (let i = 1; i <= 12; i++) months.push(await monthReport(db, `${year}-${String(i).padStart(2, '0')}`, true));
-      return json({ year, months });
+      return json({ year, months, vendor_bal: await balTable(db, `${year}-01-01`, `${year}-12-31`), keep: await keepTable(db, `${year}-01-01`, `${year}-12-31`) });
     }
     return bad('요청한 기능을 찾을 수 없어요.', 404);
   } catch (e) {
@@ -863,6 +876,17 @@ async function keepSources(db, itemIds) {
   return out;
 }
 
+// 업체 보관 재고(수량, 2026-11-19 사용자): 기간 안 총 구매 수량(선결제 구매 + 업체 보관을 남긴 일반 입고의 전체 수량) · 병원 입고(업체 보관에서 입고 + 그 일반 입고의 병원 몫) · 기간 말 업체 보관 남은 수량.
+async function keepTable(db, from, to) {
+  const rng = `t.date BETWEEN '${from}' AND '${to}'`;
+  const rows = await all(db, `SELECT i.id, i.name, i.stock_unit, i.prepaid,
+      coalesce(sum(CASE WHEN ${rng} AND t.kind = 'prepaid_buy' THEN t.vendor_delta WHEN ${rng} AND t.kind = 'in' AND t.vendor_delta > 0 THEN t.qty + t.bonus_qty + t.vendor_delta ELSE 0 END), 0) AS bought,
+      coalesce(sum(CASE WHEN ${rng} AND t.kind = 'prepaid_in' THEN -t.vendor_delta WHEN ${rng} AND t.kind = 'in' AND t.vendor_delta > 0 THEN t.qty + t.bonus_qty ELSE 0 END), 0) AS to_hospital,
+      round(i.vendor_stock - coalesce((SELECT sum(t2.vendor_delta) FROM inv_tx t2 WHERE t2.item_id = i.id AND t2.deleted_at IS NULL AND t2.date > '${to}'), 0), 3) AS left_qty
+    FROM inv_items i LEFT JOIN inv_tx t ON t.item_id = i.id AND t.deleted_at IS NULL AND t.cancelled_at IS NULL
+    WHERE i.active = 1 GROUP BY i.id ORDER BY i.prepaid DESC, i.sort, i.id`);
+  return rows.map(r => ({ ...r, bought: round(r.bought), to_hospital: round(r.to_hospital), left_qty: round(r.left_qty) })).filter(r => r.bought || r.to_hospital || r.left_qty);
+}
 const PAID_AT_ORDER = `(v.pay_timing = 'order' OR (coalesce(v.pay_timing, '') NOT IN ('order', 'month') AND (v.payment_method LIKE '%카드%' OR v.payment_method LIKE '%홈페이지%')))`;
 async function monthReport(db, month, brief = false) {
   const from = `${month}-01`, to = `${month}-31`;
@@ -875,6 +899,10 @@ async function monthReport(db, month, brief = false) {
       WHERE t.deleted_at IS NULL AND t.kind = 'in' AND t.amount > 0 AND t.date BETWEEN ? AND ? AND NOT (o.id IS NOT NULL AND o.prepaid = 0 AND ${PAID_AT_ORDER})`, from, to),
   ];
   const generalPaid = pays.reduce((a, r) => a + (r.amount || 0), 0);
+  // 업체 잔액 차감(2026-11-19): 구매 금액이 잡히는 달에 같이 빼서 '실제 결제 금액'으로(같은 돈을 두 번 세지 않게)
+  const usedBy = await usedInPeriod(db, from, to);
+  const balUsed = [...usedBy.values()].reduce((a, n) => a + n, 0);
+  const refund = await one(db, `SELECT coalesce(sum(amount), 0) AS n FROM inv_vendor_bal WHERE kind = 'refund' AND deleted_at IS NULL AND date BETWEEN ? AND ?`, from, to);
   const spend = await one(db, `SELECT
       coalesce(sum(CASE WHEN kind = 'prepaid_buy' THEN amount END), 0) AS prepaid,
       sum(CASE WHEN kind IN ('in','prepaid_in') AND cancelled_at IS NULL THEN 1 ELSE 0 END) AS in_count,
@@ -887,7 +915,8 @@ async function monthReport(db, month, brief = false) {
   // 영업일 = 피부관리 인원이 있는 날. 인원을 안 적은 달(성과 미입력)은 일일재고를 적은 날로(사용량이 있는데 '기록 없음'으로 보이지 않게)
   const openDays = days.open_days || days.record_days || 0;
   const out = {
-    month, spend_total: generalPaid + (spend.prepaid || 0), spend_general: generalPaid, spend_prepaid: spend.prepaid || 0,
+    month, spend_total: generalPaid + (spend.prepaid || 0) - balUsed, spend_buy: generalPaid + (spend.prepaid || 0), bal_used: balUsed, bal_refund: Math.round(refund?.n || 0),
+    spend_general: generalPaid, spend_prepaid: spend.prepaid || 0,
     in_count: spend.in_count || 0, no_invoice: spend.no_invoice || 0, no_amount: spend.no_amount || 0, patients: days.patients || 0, open_days: openDays,
     usage: usage.map(u => ({ ...u, used: round(u.used), per_day: openDays ? Math.round((u.used / openDays) * 10) / 10 : null })),
   };
@@ -904,14 +933,14 @@ async function monthReport(db, month, brief = false) {
   const lastDay = new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0)).toISOString().slice(0, 10);
   const WHEN = { order: '주문 시 결제', month: '월말 결제' };
   const rowsOf = v => {
-    const b = byVendor.get(v.id ?? 0), timing = timingOf(v), amount = b?.amount || 0;
+    const b = byVendor.get(v.id ?? 0), timing = timingOf(v), used = usedBy.get(v.id) || 0, amount = (b?.amount || 0) - used; // 결제금액 = 실제 결제(잔액 차감 뺌)
     const mine = ins.filter(r => (r.vendor_id ?? 0) === (v.id ?? 0)), vin = mine.filter(r => r.kind !== 'prepaid_buy');
     const bank = /계좌|이체|입금/.test(v.payment_method || '');
     return { vendor_id: v.id ?? 0, name: v.name, company: v.company || null, payment_method: v.payment_method, timing, when: WHEN[timing] || '결제 시점 미정', amount,
       pay_dates: !amount ? [] : timing === 'month' ? [lastDay] : [...b.dates].sort(),
       in_dates: [...new Set(vin.map(r => r.date))].sort(), in_items: new Set(vin.map(r => r.item_id)).size,
       // 원장님 보고용 표기(2026-11-12 사용자): 주문 시 결제 = 결제 완료, 월말 결제 = '이달 말까지 결제 예정'(날짜가 지나도 보고서 표기는 그대로)
-      status: !amount ? '결제 없음' : timing === 'order' ? '결제 완료' : timing === 'month' ? '결제 예정' : '—',
+      status: !amount ? (used ? '잔액 차감' : '결제 없음') : timing === 'order' ? '결제 완료' : timing === 'month' ? '결제 예정' : '—', bal_used: used,
       lines: mine.map(r => ({ date: r.date, item: r.item_name, qty: r.kind === 'prepaid_buy' ? r.vendor_delta : round(r.qty + (r.kind === 'in' ? r.bonus_qty || 0 : 0)), unit: r.stock_unit,
         // 명세서(2026-11-12 사용자 '5번에 명세서 이미지 표기'): 사진이 있으면 등록(눌러서 봄), 예전 앱 받음도 등록, 돈이 나간 줄인데 없으면 미등록, 0원 줄은 —
         invoice_ids: r.invoice_ids || null, invoice: r.invoice_ids || r.invoice ? 'done' : r.amount > 0 ? 'missing' : 'none',
@@ -921,6 +950,8 @@ async function monthReport(db, month, brief = false) {
   out.payments = [...allV.filter(v => v.active || byVendor.has(v.id)).map(rowsOf), ...(byVendor.has(0) ? [rowsOf({ id: 0, name: '업체 미지정', payment_method: null })] : [])];
   out.pay_done = out.payments.filter(p => p.status === '결제 완료').reduce((a, p) => a + p.amount, 0);
   out.pay_due = out.payments.filter(p => p.status === '결제 예정').reduce((a, p) => a + p.amount, 0);
+  out.vendor_bal = await balTable(db, from, to);
+  out.keep = await keepTable(db, from, to);
   out.inbound = await all(db, `SELECT t.date, t.kind, t.qty, t.bonus_qty, t.amount, t.invoice, t.memo, t.cancelled_at, t.cancel_reason, v.bank, v.account, v.holder, i.name AS item_name, i.stock_unit, v.name AS vendor_name, v.payment_method
     FROM inv_tx t JOIN inv_items i ON i.id = t.item_id LEFT JOIN inv_vendors v ON v.id = i.vendor_id
     WHERE t.deleted_at IS NULL AND t.kind IN ('in','prepaid_buy','prepaid_in') AND t.date BETWEEN ? AND ? ORDER BY t.date, t.id`, from, to);
