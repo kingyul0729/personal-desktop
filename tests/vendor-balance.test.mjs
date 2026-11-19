@@ -75,20 +75,25 @@ test('업체 잔액: 등록 → 주문 차감(모자라면 나머지만 결제) 
   assert.equal(yr.vendor_bal[0].after, 0);
 });
 
-test('jwbal1: 실제 사이트(예전 자료 넣은 곳)만 중외 잔액 184,001 등록 + 11/12 GA20% 40,000 차감 → 남은 144,001', async () => {
+test('jwbal2: 실제 사이트만 — 2025-10-30 중복 결제 347,994 등록 + 5월 중화제 3개(54,543원, 병원재고 그대로)를 잔액으로 차감, jwbal1 줄은 지움', async () => {
   const { resetInvSchemaCache } = await import('../worker/invSchema.js');
   const e = env();
   const st = (await call(e, '/state')).data;
   assert.equal(st.vendors.find(v => v.id === 3).balance, 0); // 예전 자료가 없으면 안 함
-  const ga = st.items.find(i => i.name === 'GA20%');
+  const ga = st.items.find(i => i.name === 'GA20%'), jh = st.items.find(i => i.name === '중화제');
   await call(e, '/orders', 'POST', { item_id: ga.id, option_id: ga.options[0].id, count: 1, date: '2026-11-12' });
   e.inv.prepare(`INSERT INTO inv_meta (key, value) VALUES ('import', 'x')`).run();
   resetInvSchemaCache();
   const vb = (await call(e, '/vendor-bal')).data;
-  assert.equal(vb.vendors.find(v => v.id === 3).balance, 144001);
-  assert.deepEqual(vb.rows.map(r => [r.kind, r.amount, r.left]), [['use', 40000, 144001], ['add', 184001, 184001]]);
+  assert.equal(vb.vendors.find(v => v.id === 3).balance, 347994 - 54543);
+  assert.deepEqual(vb.rows.map(r => [r.date, r.kind, r.amount]), [['2026-05-06', 'use', 54543], ['2025-10-30', 'add', 347994]]);
+  const s2 = (await call(e, '/state')).data;
+  assert.equal(s2.items.find(i => i.id === jh.id).hospital_stock, jh.hospital_stock); // 재고 그대로
+  assert.equal(s2.orders.some(o => o.ordered_at === '2026-05-06'), false); // 받기 전 목록에 안 뜸
+  const may = (await call(e, '/report?month=2026-05')).data;
+  const p = may.payments.find(x => x.vendor_id === 3);
+  assert.equal(p.status, '잔액 차감'); assert.equal(p.amount, 0); assert.equal(may.spend_total, 0);
+  assert.deepEqual(p.lines.map(l => [l.item, l.qty, l.invoice]), [['중화제', 3, 'missing']]); // 명세서는 사용자가 올림
   resetInvSchemaCache(); await call(e, '/state'); // 두 번 돌아도 그대로
   assert.equal((await call(e, '/vendor-bal')).data.rows.length, 2);
-  const rep = (await call(e, '/report?month=2026-11')).data;
-  assert.equal(rep.payments.find(p => p.vendor_id === 3).status, '잔액 차감');
 });

@@ -262,6 +262,32 @@ export async function ensureInvSchema(db) {
       await db.prepare(`INSERT OR REPLACE INTO inv_meta (key, value) VALUES ('fixes', ?)`).bind(`${fixes} vbal1`.trim()).run();
       fixes = `${fixes} vbal1`.trim();
     }
+    if (!fixes.includes('jwbal2') && await db.prepare(`SELECT 1 FROM inv_meta WHERE key = 'import'`).first() && await claimFix(db, 'jwbal2')) {
+      // 2026-11-19 사용자(jwbal1 대신): 중외 잔액은 '2025-10-30 중복 결제 347,994원'만 등록하고, 5월 구매(중화제 3개)를 기록해 그 잔액으로 차감.
+      // 5월 것은 다 써서 병원재고는 늘리지 않음(입고 기록 증감 0). 11월 구매·명세서는 사용자가 직접 넣음. GA20%는 사지 않아 jwbal1의 11/12 GA20% 차감은 지움.
+      try {
+        const now = Date.now();
+        await db.prepare(`UPDATE inv_vendor_bal SET deleted_at = ?, deleted_by = 'system' WHERE vendor_id = 3 AND created_by = 'system' AND deleted_at IS NULL`).bind(now).run();
+        const v = await db.prepare(`SELECT id FROM inv_vendors WHERE id = 3 AND name = '중외'`).first();
+        const it = v && await db.prepare(`SELECT * FROM inv_items WHERE vendor_id = 3 AND name = '중화제'`).first();
+        const has = v && await db.prepare(`SELECT 1 FROM inv_vendor_bal WHERE vendor_id = 3 AND deleted_at IS NULL`).first();
+        if (v && !has) {
+          const stmts = [db.prepare(`INSERT INTO inv_vendor_bal (vendor_id, date, kind, amount, reason, memo, created_by, created_at) VALUES (3, '2025-10-30', 'add', 347994, '중복 결제', '2025-09-01 매출 347,994원을 10/1·10/30 두 번 결제(거래처별 거래원장)', 'system', ?)`).bind(now)];
+          const may = it && await db.prepare(`SELECT 1 FROM inv_orders WHERE item_id = ? AND ordered_at = '2026-05-06'`).bind(it.id).first();
+          if (it && !may) {
+            const memo = '5월 구매 · 다 사용해서 병원재고 추가 안 함';
+            stmts.push(
+              db.prepare(`INSERT INTO inv_orders (item_id, option_id, option_label, ordered_at, qty, bonus_qty, amount, prepaid, status, received_at, memo, created_by, created_at) VALUES (?, NULL, '3개', '2026-05-06', 3, 0, 54543, 0, 'received', '2026-05-06', ?, 'system', ?)`).bind(it.id, memo, now),
+              db.prepare(`INSERT INTO inv_tx (date, kind, item_id, qty, bonus_qty, amount, hospital_delta, vendor_delta, hospital_after, vendor_after, order_id, daily_date, invoice, memo, created_by, created_at)
+                VALUES ('2026-05-06', 'in', ?, 3, 0, 54543, 0, 0, ?, ?, (SELECT max(id) FROM inv_orders), NULL, 0, ?, 'system', ?)`).bind(it.id, it.hospital_stock || 0, it.vendor_stock || 0, memo, now),
+              db.prepare(`INSERT INTO inv_vendor_bal (vendor_id, date, kind, amount, reason, order_id, created_by, created_at) VALUES (3, '2026-05-06', 'use', 54543, '주문', (SELECT max(id) FROM inv_orders), 'system', ?)`).bind(now));
+          }
+          await db.batch(stmts);
+        }
+        await db.prepare(`INSERT OR REPLACE INTO inv_meta (key, value) VALUES ('fixes', ?)`).bind(`${fixes} jwbal2`.trim()).run();
+        fixes = `${fixes} jwbal2`.trim();
+      } catch (e) { console.error('jwbal2', e); }
+    }
     if (!fixes.includes('leavefix1') && await claimFix(db, 'leavefix1')) {
       // 2026-11-19 사용자 '잘못 누름, 삭제해줘': 김유리 연차 이력의 11/19 '수동 수정 · 포상 연차 지급' 한 줄을 지움.
       // 그 수정이 지급·사용연차를 바꿨으면 지금 값이 그 결과 그대로일 때만 수정 전으로 되돌림(화면 '삭제'와 같은 규칙).
