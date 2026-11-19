@@ -122,7 +122,7 @@ function LeaveDetail({ staff, onClose, onSaved }: { staff: StaffMember; onClose:
       {logs == null ? <LoadingBox /> : !shown.length ? <p className="sf-hint">기록 없음</p>
         : <ul className="lv-hist-list">{shown.map(l => { const [chip, tone] = l.cancelled_at ? ['취소됨', 'c'] : KIND_CHIP[l.log_type] || [l.log_type, 'c'];
           const open = mode?.id === l.id;
-          const after = shown.slice(0, shown.indexOf(l)).length;
+          const after = shown.slice(0, shown.indexOf(l)).filter(x => !x.cancelled_at && x.log_type !== 'fix').length; // 잔여가 다시 계산되는 뒤 기록(정정·취소 줄은 그때 숫자 그대로)
           return <li key={l.id} className={`${l.cancelled_at ? 'is-cx' : ''}${l.log_type === 'fix' ? ' is-fix' : ''}`}>
             <div className="lv-hist-row">
               <div className="lv-hist-main"><b><span className={`lv-chip is-${tone}`}>{chip}</span><span className="lv-hist-title">{l.cancelled_at ? `${LOG_TYPE[l.log_type] || ''} ${logTitle(l)}` : logTitle(l)}</span></b>
