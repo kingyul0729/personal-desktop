@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { LoadingBox } from '../Feedback';
 import { readWon } from '../../koreanAmount';
 import { fmtQty, invGet, shiftMonth, subscribeInventory, todayLocal } from '../../inventoryApi';
-import { InvThumb, Seg, errText, withUnit } from './shared';
+import { InvThumb, Seg, errText } from './shared';
 import { invoiceSrc } from '../../inventoryApi';
 import { staffGet } from '../../staffApi';
 import { BookSummary, bookHasAny, type BookSum } from '../StaffBook';
@@ -73,6 +73,7 @@ export function StockReport() {
   const [rep, setRep] = useState<{ a: MonthRep; b: MonthRep } | null>(null);
   const [yr, setYr] = useState<MonthRep[] | null>(null);
   const [team, setTeam] = useState<YearStaff[] | null>(null);
+  const [monthTeam, setMonthTeam] = useState<MonthStaff[]>([]); // 월말 직원 근무·연차(성과표와 같은 숫자)
   const [book, setBook] = useState<BookSum | null>(null); // 예약표 집계(보고 월 또는 연도)
   const [error, setError] = useState('');
   // 다른 화면에서 주문 취소·입고·잔액 기록을 바꾸면 보고서도 다시 받는다(2026-11-20 사용자 '취소 눌렀는데' — 열어 둔 보고서가 예전 숫자로 남던 것)
@@ -82,6 +83,7 @@ export function StockReport() {
     if (tab !== 'month') return; if (!tick) setRep(null);
     Promise.all([invGet('/report', { month }), invGet('/report', { month: cmp })]).then(([a, b]) => setRep({ a, b }), e => setError(errText(e)));
     setBook(null); staffGet('/book/summary', { period: month }).then(r => setBook(r.kinds), () => setBook(null));
+    staffGet('/performance', { month, include_retired: 0 }).then(r => setMonthTeam(Array.isArray(r) ? r : []), () => setMonthTeam([]));
   }, [tab, month, cmp, tick]);
   // 연말 보고(2026-11-12 사용자 '물품별 개수는 빼고 재고·직원관리 내용'): 달마다 월말 보고 자료를 받아 한 해로 모으고, 직원 자료(연차·성과)를 함께 받는다.
   useEffect(() => {
@@ -100,7 +102,7 @@ export function StockReport() {
         : <label className="sf-input"><span>연도</span><input type="number" value={year} onChange={e => setYear(e.target.value)} /></label>}
         <button type="button" className="sf-btn is-primary" onClick={() => window.print()}>PDF로 저장·인쇄</button></div></div>
     {error && <p className="sf-hint is-warn">{error}</p>}
-    {tab === 'month' ? (rep ? <MonthReport a={rep.a} b={rep.b} book={book} /> : <LoadingBox />) : (yr ? <YearReport year={year} months={yr} team={team || []} book={book} /> : <LoadingBox />)}
+    {tab === 'month' ? (rep ? <MonthReport a={rep.a} b={rep.b} book={book} team={monthTeam} /> : <LoadingBox />) : (yr ? <YearReport year={year} months={yr} team={team || []} book={book} /> : <LoadingBox />)}
   </div>;
 }
 
@@ -110,7 +112,10 @@ export const diff = (a: number, b: number, f: (v: number) => string) => { const 
 export function Block({ n, title, sub, children }: { n: number; title: string; sub?: string; children: React.ReactNode }) {
   return <section className="iv-block"><h3 className="iv-num"><i>{n}</i>{title}{sub && <small>{sub}</small>}</h3>{children}</section>;
 }
-export function MonthReport({ a, b, book }: { a: MonthRep; b: MonthRep; book?: BookSum | null }) {
+// 월말 직원 근무·연차(2026-11-20 사용자 '월말에 직원성과가 안 보임'): 직원 관리 › 성과 탭의 월 성과표 숫자 그대로, 합계 줄 없음.
+export type MonthStaff = { id: number; name: string; status?: string; work_days?: number | null; total_hours?: number | null; total_managed?: number | null; avg_managed?: number | null; total_designated?: number | null; leave_used?: number | null; remain_leave?: number | null };
+// 월말·연말 2026-11-20 사용자 '가로로 길게 말고 네모칸을 좌우 두 개로': 작은 표 둘은 좌우 두 칸(`iv-duo`), 칸 많은 표만 가로 전체.
+export function MonthReport({ a, b, book, team = [] }: { a: MonthRep; b: MonthRep; book?: BookSum | null; team?: MonthStaff[] }) {
   const ml = (m: string) => `${m.slice(0, 4)}년 ${Number(m.slice(5))}월`;
   const mm = (m: string) => `${Number(m.slice(5))}월`;
   const names = Array.from(new Set([...a.usage, ...b.usage].map(u => u.name)));
@@ -131,14 +136,19 @@ export function MonthReport({ a, b, book }: { a: MonthRep; b: MonthRep; book?: B
         <dd className="iv-tile-cmp"><i>{mm(b.month)} {prev}</i> <span>{d}</span></dd></div>)}</dl>
       {a.no_amount ? <p className="sf-hint">금액 미입력 입고 {a.no_amount}건</p> : null}
     </Block>
-    <Block n={++n} title="재고 확인" sub={`품목별 하루 평균 사용량 · 영업일 ${mm(b.month)} ${b.open_days}일 / ${mm(a.month)} ${a.open_days}일`}>
-      {!names.length ? <p className="sf-hint">기록 없음</p> : <table className="sf-table"><thead><tr><th>품목</th><th className="num">{mm(b.month)}</th><th className="num">{mm(a.month)}</th><th className="num">차이</th></tr></thead>
+    <div className={bookHasAny(book) ? 'iv-duo' : 'iv-solo'}>
+      <Block n={++n} title="재고 확인" sub="하루 평균 사용량">
+      {!names.length ? <p className="sf-hint">기록 없음</p> : <table className="sf-table"><thead><tr><th>품목</th><th className="num">{mm(b.month)}</th><th className="num">{mm(a.month)}</th></tr></thead>
         <tbody>{names.map(nm => { const x = a.usage.find(u => u.name === nm), y = b.usage.find(u => u.name === nm); const unit = (x || y)!.stock_unit; return <tr key={nm}><td>{nm} <small>{unit}/일</small></td>
-          <td className="num">{y?.per_day ?? <small>기록 없음</small>}</td><td className="num">{x?.per_day != null ? <b>{x.per_day}</b> : <small>기록 없음</small>}</td><td className="num">{x?.per_day != null && y?.per_day != null ? diff(x.per_day, y.per_day, v => String(Math.round(v * 10) / 10)) : '—'}</td></tr>; })}</tbody></table>}
+          <td className="num">{y?.per_day ?? <small>기록 없음</small>}</td><td className="num">{x?.per_day != null ? <b>{x.per_day}</b> : <small>기록 없음</small>}</td></tr>; })}</tbody></table>}
     </Block>
-    {a.prepaid && a.prepaid.length > 0 && <Block n={++n} title="업체 보관 잔량" sub={a.as_of ? `${mm(a.month)} 말` : '현재'}>
-      <table className="sf-table"><thead><tr><th>품목</th><th className="num">업체 보관 잔량</th><th className="num">병원재고</th></tr></thead>
-        <tbody>{a.prepaid.map(p => <tr key={p.id}><td>{p.name}</td><td className="num"><b>{withUnit(p.vendor_stock, p.stock_unit)}</b></td><td className="num">{withUnit(p.hospital_stock, p.stock_unit)}</td></tr>)}</tbody></table></Block>}
+      {bookHasAny(book) && <Block n={++n} title="예약표 집계"><BookSummary sum={book!} /></Block>}
+    </div>
+    {(() => { const rows = team.filter(x => !x.status || x.status === 'active'); const dash = (v: number | null | undefined, f: (v: number) => string) => (v ? f(v) : '—');
+      return <Block n={++n} title="직원 근무·연차" sub={`${mm(a.month)} · 잔여연차는 오늘 기준`}>
+        {!rows.length ? <p className="sf-hint">기록 없음</p> : <div className="iv-scroll"><table className="sf-table iv-year"><thead><tr><th>직원</th><th className="num">근무일수</th><th className="num">실근무시간</th><th className="num">관리 수</th><th className="num">시간당 관리 수</th><th className="num">지정 환자 수</th><th className="num">이달 사용연차</th><th className="num">잔여연차</th></tr></thead>
+          <tbody>{rows.map(x => <tr key={x.id}><td><b>{x.name}</b></td><td className="num">{dash(x.work_days, v => `${v}일`)}</td><td className="num">{dash(x.total_hours, v => `${v}시간`)}</td><td className="num">{dash(x.total_managed, v => `${v}명`)}</td><td className="num">{dash(x.avg_managed, v => `${v}명`)}</td><td className="num">{dash(x.total_designated, v => `${v}명`)}</td><td className="num">{dash(x.leave_used, v => `${v}일`)}</td><td className="num"><b>{x.remain_leave != null ? `${x.remain_leave}일` : '—'}</b></td></tr>)}</tbody></table></div>}
+      </Block>; })()}
     {a.payments && (() => { const list = traded(a.payments); return <Block n={++n} title="입고·결제 내역">
       <PayTable list={list} />
       <BankTable list={list} />
@@ -147,7 +157,6 @@ export function MonthReport({ a, b, book }: { a: MonthRep; b: MonthRep; book?: B
         return <div className="iv-scroll"><table className="iv-form-tbl"><thead><tr><th className="c">결제 완료</th><th className="c">결제 예정</th>{bal > 0 && <th className="c">{why}</th>}<th className="c">합 계</th></tr></thead>
           <tbody><tr><td className="num is-done">{won(a.pay_done || 0)}</td><td className="num is-due">{won(a.pay_due || 0)}</td>{bal > 0 && <td className="num">{won(bal)}</td>}<td className="num"><b>{won(list.reduce((x, p) => x + p.amount, 0))}</b></td></tr></tbody></table></div>; })()}
     </Block>; })()}
-    {bookHasAny(book) && <Block n={++n} title="예약표 집계"><BookSummary sum={book!} /></Block>}
     <p className="iv-foot">출력 {new Date().toLocaleString('ko-KR')}</p>
   </article>;
 }
@@ -169,11 +178,11 @@ export function yearStaff(list: StaffRow[], perf: PerfMonth[]): YearStaff[] {
 
 // 연말 보고(2026-11-12 사용자): 물품별 개수 칸 없이 ① 연간 확인 내용 ② 월별 합계 ③ 업체별 결제 ④ 업체 보관 잔량 ⑤ 직원 근무·연차.
 export function YearReport({ year, months, team = [], book }: { year: string; months: MonthRep[]; team?: YearStaff[]; book?: BookSum | null }) {
-  const sum = (k: 'spend_total' | 'spend_general' | 'spend_prepaid' | 'patients' | 'in_count' | 'no_invoice') => months.reduce((s, m) => s + (m[k] || 0), 0);
+  const sum = (k: 'spend_total' | 'spend_general' | 'spend_prepaid' | 'patients' | 'in_count') => months.reduce((s, m) => s + (m[k] || 0), 0);
   const dash = (v: number, f: (v: number) => string = String) => (v ? f(v) : '—');
   const tiles: [string, string, boolean][] = [
     ['연간 지출 합계', won(sum('spend_total')), true], ['일반 구매', won(sum('spend_general')), false], ['선결제 신규 구매', won(sum('spend_prepaid')), false],
-    ['총 피부관리 인원', `${sum('patients')}명`, false], ['입고 건수', `${sum('in_count')}건`, false], ['거래명세서 미등록', `${sum('no_invoice')}건`, false],
+    ['총 피부관리 인원', `${sum('patients')}명`, false], ['입고 건수', `${sum('in_count')}건`, false],
   ];
   // 업체별 결제: 달마다의 입고·결제 내역을 업체로 모은다
   const vendors = new Map<string, { name: string; method: string | null; months: Set<string>; amount: number; done: number; due: number; refund: number; bal: number; why: string }>();
@@ -183,28 +192,26 @@ export function YearReport({ year, months, team = [], book }: { year: string; mo
     vendors.set(p.name, v);
   }
   const vendorList = [...vendors.values()].sort((a, b) => b.amount - a.amount);
-  // 업체 보관 잔량: 자료가 있는 마지막 달의 것
-  const last = [...months].reverse().find(m => m.prepaid && m.prepaid.length > 0);
   const tsum = (k: 'work_days' | 'hours' | 'managed' | 'designated' | 'leave_used' | 'consult' | 'sat_off' | 'early_leave' | 'unpaid') => Math.round(team.reduce((t, x) => t + x[k], 0) * 10) / 10;
   let n = 0;
   return <article className="iv-paper">
     <h2>{year}년 피부팀 연말 보고</h2>
+    <div className={bookHasAny(book) ? 'iv-duo' : 'iv-solo'}>
     <Block n={++n} title={`${year}년 확인 내용`}>
       <dl className="iv-tiles">{tiles.map(([label, value, main]) => <div key={label} className={main ? 'is-main' : ''}>
         <dt>{label}</dt><dd><b>{value}</b>{main && sum('spend_total') >= 10000 && <small className="iv-read">{readWon(sum('spend_total'))}</small>}</dd></div>)}</dl>
     </Block>
-    <Block n={++n} title="월별 합계"><div className="iv-scroll"><table className="sf-table iv-year"><thead><tr><th>월</th><th className="num">지출 합계</th><th className="num">일반 구매</th><th className="num">선결제 신규 구매</th><th className="num">총 피부관리 인원</th><th className="num">입고 건수</th><th className="num">거래명세서 미등록</th></tr></thead>
+    {bookHasAny(book) && <Block n={++n} title="예약표 집계"><BookSummary sum={book!} /></Block>}
+    </div>
+    <Block n={++n} title="월별 합계"><div className="iv-scroll"><table className="sf-table iv-year"><thead><tr><th>월</th><th className="num">지출 합계</th><th className="num">일반 구매</th><th className="num">선결제 신규 구매</th><th className="num">총 피부관리 인원</th><th className="num">입고 건수</th></tr></thead>
       <tbody>{months.map(m => <tr key={m.month}><td>{Number(m.month.slice(5))}월</td><td className="num">{dash(m.spend_total, won)}</td><td className="num">{dash(m.spend_general, won)}</td><td className="num">{dash(m.spend_prepaid, won)}</td>
-        <td className="num">{dash(m.patients, v => `${v}명`)}</td><td className="num">{dash(m.in_count, v => `${v}건`)}</td><td className="num">{dash(m.no_invoice, v => `${v}건`)}</td></tr>)}
-        <tr className="iv-total-row"><td>합계</td><td className="num">{won(sum('spend_total'))}</td><td className="num">{won(sum('spend_general'))}</td><td className="num">{won(sum('spend_prepaid'))}</td><td className="num">{sum('patients')}명</td><td className="num">{sum('in_count')}건</td><td className="num">{sum('no_invoice')}건</td></tr></tbody></table></div></Block>
+        <td className="num">{dash(m.patients, v => `${v}명`)}</td><td className="num">{dash(m.in_count, v => `${v}건`)}</td></tr>)}
+        <tr className="iv-total-row"><td>합계</td><td className="num">{won(sum('spend_total'))}</td><td className="num">{won(sum('spend_general'))}</td><td className="num">{won(sum('spend_prepaid'))}</td><td className="num">{sum('patients')}명</td><td className="num">{sum('in_count')}건</td></tr></tbody></table></div></Block>
     <Block n={++n} title="업체별 결제" sub={vendorList.length ? `거래 업체 ${vendorList.length}곳` : undefined}>
       {!vendorList.length ? <p className="sf-hint">기록 없음</p> : <div className="iv-scroll"><table className="sf-table iv-year"><thead><tr><th>업체</th><th>결제 방법</th><th className="num">거래 개월 수</th><th className="num">결제 완료</th><th className="num">결제 예정</th><th className="num">결제금액</th></tr></thead>
         <tbody>{vendorList.map(v => <tr key={v.name}><td><b>{v.name}</b></td><td>{v.method || '—'}</td><td className="num">{v.months.size}개월</td><td className="num">{dash(v.done, won)}</td><td className="num">{dash(v.due, won)}</td><td className="num">{v.bal ? <span className="iv-balcalc"><small>구매 금액 {won(v.amount + v.bal)}</small><small>{v.why} −{won(v.bal)}</small><b>{won(v.amount)}</b></span> : <b>{won(v.amount)}</b>}{v.refund ? <small className="iv-pay-co">환급 입금 {won(v.refund)}</small> : null}</td></tr>)}
           <tr className="iv-total-row"><td>합계</td><td /><td /><td className="num">{won(vendorList.reduce((t, v) => t + v.done, 0))}</td><td className="num">{won(vendorList.reduce((t, v) => t + v.due, 0))}</td><td className="num">{won(vendorList.reduce((t, v) => t + v.amount, 0))}</td></tr></tbody></table></div>}
     </Block>
-    {last && <Block n={++n} title="업체 보관 잔량" sub={last.as_of ? `${Number(last.month.slice(5))}월 말` : '현재'}>
-      <table className="sf-table"><thead><tr><th>품목</th><th className="num">업체 보관 잔량</th><th className="num">병원재고</th></tr></thead>
-        <tbody>{last.prepaid!.map(p => <tr key={p.id}><td>{p.name}</td><td className="num"><b>{withUnit(p.vendor_stock, p.stock_unit)}</b></td><td className="num">{withUnit(p.hospital_stock, p.stock_unit)}</td></tr>)}</tbody></table></Block>}
     <Block n={++n} title="직원 근무·연차" sub={`${year}년 한 해 합계 · 잔여연차는 오늘 기준`}>
       {!team.length ? <p className="sf-hint">기록 없음</p> : <div className="iv-scroll"><table className="sf-table iv-year"><thead><tr><th>직원</th><th className="num">근무일수</th><th className="num">실근무시간</th><th className="num">관리 수</th><th className="num">지정 환자 수</th>
         <th className="num">토요일 휴무</th><th className="num">잔여연차</th></tr></thead>
@@ -213,7 +220,6 @@ export function YearReport({ year, months, team = [], book }: { year: string; mo
           <tr className="iv-total-row"><td>합계</td><td className="num">{tsum('work_days')}일</td><td className="num">{tsum('hours')}시간</td><td className="num">{tsum('managed')}명</td><td className="num">{tsum('designated')}명</td>
             <td className="num">{tsum('sat_off')}회</td><td /></tr></tbody></table></div>}
     </Block>
-    {bookHasAny(book) && <Block n={++n} title="예약표 집계"><BookSummary sum={book!} /></Block>}
     <p className="iv-foot">출력 {new Date().toLocaleString('ko-KR')}</p>
   </article>;
 }

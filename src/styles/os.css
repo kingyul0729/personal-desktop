@@ -3028,3 +3028,13 @@ button.iv-pinv { cursor: zoom-in; }
 
 /* 카드·홈페이지결제 = 늘 결제 완료(2026-11-20) */
 .iv-ptag.is-paid { background: #eaf4ee; color: #3f7a58; }
+
+/* 월말·연말 좌우 두 칸(2026-11-20 사용자 '가로로 길게 말고 네모칸을 좌우 두 개로'): 작은 표 둘은 나란히, 휴대폰 폭만 위아래 */
+.sf-wrap .iv-duo { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+.iv-solo { display: contents; }
+@container sfw (max-width: 520px) { .sf-wrap .iv-duo { grid-template-columns: minmax(0, 1fr); } }
+/* 좌우 두 칸 안의 숫자 타일은 늘 2칸 */
+.sf-wrap .iv-duo .iv-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.sf-wrap .iv-duo .iv-tiles > div:nth-child(n) { border-left: 1px solid var(--ui-line-soft); padding-left: 14px; }
+.sf-wrap .iv-duo .iv-tiles > div:nth-child(2n+1) { border-left: 0; padding-left: 0; }
+.sf-wrap .iv-duo .iv-tiles dd b { font-size: 18px; white-space: nowrap; }
