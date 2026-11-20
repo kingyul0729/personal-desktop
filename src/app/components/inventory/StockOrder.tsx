@@ -11,13 +11,13 @@ import { type Flag, FlagTag, Modal, PhotoPick, Problem, QtyInput, Seg, Shell, er
 export function StockOrder() {
   const { state, error, reload } = useInventory();
   const [toast, setToast] = useToast();
-  // 품목별 재고(2026-11-19 사용자): 예전 재고주문 + 재고입출고를 한 화면으로 — 품목별 / 전체 내역(예전 입출고 내역) / 품목 설정(예전 품목 탭)
+  // 품목별 재고(2026-11-19 사용자): 예전 재고주문 + 재고입출고를 한 화면으로 — 품목별 / 전체 입출고(예전 입출고 내역) / 물품 추가(예전 품목 탭) — 탭 이름은 2026-11-20 사용자 지정
   const [tab, setTab] = useState<'order' | 'log' | 'items'>('order');
   const q = ''; // 검색창은 2026-11-12 사용자 요청으로 뺌
   if (error) return <Problem error={error} />;
   if (!state) return <LoadingBox />;
   return <Shell toast={toast}>
-    <div className="sf-bar iv-obar"><Seg label="보기" value={tab} onChange={setTab} options={[['order', '품목별'], ['log', '전체 내역'], ['items', '품목 설정']]} />
+    <div className="sf-bar iv-obar"><Seg label="보기" value={tab} onChange={setTab} options={[['order', '품목별'], ['log', '전체 입출고'], ['items', '물품 추가']]} />
 </div>
     {tab === 'order' ? <OrderBoard state={state} q={q} notify={setToast} /> : tab === 'log' ? <TxLog notify={setToast} /> : <ItemEditor state={state} notify={setToast} onChange={reload} />}
   </Shell>;
