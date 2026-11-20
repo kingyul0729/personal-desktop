@@ -188,26 +188,14 @@ export function yearStaff(list: StaffRow[], perf: PerfMonth[]): YearStaff[] {
   });
 }
 
-// 총 피부관리 인원 선 그래프(2026-11-20 사용자 '총 피부관리 인원은 그래프로 보는 게 좋아, 위에 숫자로'): 달마다 점, 점마다 숫자(내려간 점은 아래에), 기록 없는 달은 점 없음
-export function PeopleLine({ months }: { months: MonthRep[] }) {
-  const W = 340, H = 230, L = 4, R = 4, T = 30, B = 26, cw = (W - L - R) / 12; // 반 칸에서도 글씨가 작아지지 않게 좁은 그림판
-  const vals = months.map(m => m.patients || 0), max = Math.max(1, ...vals) * 1.1;
-  const pts = vals.map((v, i) => ({ i, v, x: L + cw * i + cw / 2, y: H - B - (v / max) * (H - B - T) })).filter(p => p.v > 0);
-  if (!pts.length) return <p className="sf-hint">기록 없음</p>;
-  return <svg className="iv-line" viewBox={`0 0 ${W} ${H}`} role="img" aria-label={pts.map(p => `${p.i + 1}월 ${p.v}명`).join(', ')}>
-    <line x1={L} x2={W - R} y1={H - B} y2={H - B} stroke="#d9dde2" />
-    <polyline points={pts.map(p => `${p.x},${p.y}`).join(' ')} fill="none" stroke="#2f6db0" strokeWidth={2} strokeLinejoin="round" />
-    {pts.map((p, k) => { const prev = pts[k - 1]?.v ?? -1, next = pts[k + 1]?.v ?? -1; const low = (prev < 0 || p.v < prev) && (next < 0 || p.v < next) && pts.length > 1;
-      return <g key={p.i}><circle cx={p.x} cy={p.y} r={4} fill="#2f6db0" stroke="#fff" strokeWidth={2} />
-        <text x={p.x} y={low ? p.y + 18 : p.y - 10} textAnchor="middle" fontSize={11} fontWeight={700} fill="#2d3136">{p.v.toLocaleString('ko-KR')}명</text></g>; })}
-    {months.map((m, i) => <text key={m.month} x={L + cw * i + cw / 2} y={H - 8} textAnchor="middle" fontSize={10} fill="#7d838b">{Number(m.month.slice(5))}월</text>)}
-  </svg>;
-}
-
 // 연말 보고(2026-11-12 사용자): 물품별 개수 칸 없이 ① 연간 확인 내용 ② 월별 합계 ③ 업체별 결제 ④ 업체 보관 잔량 ⑤ 직원 근무·연차.
 export function YearReport({ year, months, team = [], book }: { year: string; months: MonthRep[]; team?: YearStaff[]; book?: BookSum | null }) {
   const sum = (k: 'spend_total' | 'spend_general' | 'spend_prepaid' | 'patients' | 'in_count') => months.reduce((s, m) => s + (m[k] || 0), 0);
   const dash = (v: number, f: (v: number) => string = String) => (v ? f(v) : '—');
+  const tiles: [string, string, boolean][] = [
+    ['연간 지출 합계', won(sum('spend_total')), true], ['일반 구매', won(sum('spend_general')), false], ['선결제 신규 구매', won(sum('spend_prepaid')), false],
+    ['총 피부관리 인원', `${sum('patients')}명`, false], ['입고 건수', `${sum('in_count')}건`, false],
+  ];
   // 업체별 결제: 달마다의 입고·결제 내역을 업체로 모은다
   const vendors = new Map<string, { name: string; method: string | null; months: Set<string>; amount: number; done: number; due: number; refund: number; bal: number; why: string; leader: boolean }>();
   for (const m of months) for (const p of traded(m.payments || [])) {
@@ -221,15 +209,17 @@ export function YearReport({ year, months, team = [], book }: { year: string; mo
   let n = 0;
   return <article className="iv-paper">
     <h2>{year}년 피부팀 연말 보고</h2>
-    {/* 2026-11-20 사용자: '확인 내용'은 월별 합계 표 합계 줄·총 피부관리 인원 그래프와 겹쳐서 뺌. 인원은 표 대신 숫자 붙은 선 그래프 */}
-    <Block n={++n} title="월별 합계"><div className="iv-scroll"><table className="sf-table iv-year"><thead><tr><th>월</th><th className="num">지출 합계</th><th className="num">일반 구매</th><th className="num">선결제 신규 구매</th><th className="num">입고 건수</th></tr></thead>
-      <tbody>{months.map(m => <tr key={m.month}><td>{Number(m.month.slice(5))}월</td><td className="num">{dash(m.spend_total, won)}</td><td className="num">{dash(m.spend_general, won)}</td><td className="num">{dash(m.spend_prepaid, won)}</td>
-        <td className="num">{dash(m.in_count, v => `${v}건`)}</td></tr>)}
-        <tr className="iv-total-row"><td>합계</td><td className="num">{won(sum('spend_total'))}</td><td className="num">{won(sum('spend_general'))}</td><td className="num">{won(sum('spend_prepaid'))}</td><td className="num">{sum('in_count')}건</td></tr></tbody></table></div></Block>
     <div className={bookHasAny(book) ? 'iv-duo' : 'iv-solo'}>
-      <Block n={++n} title="총 피부관리 인원" sub={`합계 ${sum('patients').toLocaleString('ko-KR')}명`}><PeopleLine months={months} /></Block>
-      {bookHasAny(book) && <Block n={++n} title="예약표 집계"><BookSummary sum={book!} /></Block>}
+    <Block n={++n} title={`${year}년 확인 내용`}>
+      <dl className="iv-tiles">{tiles.map(([label, value, main]) => <div key={label} className={main ? 'is-main' : ''}>
+        <dt>{label}</dt><dd><b>{value}</b>{main && sum('spend_total') >= 10000 && <small className="iv-read">{readWon(sum('spend_total'))}</small>}</dd></div>)}</dl>
+    </Block>
+    {bookHasAny(book) && <Block n={++n} title="예약표 집계"><BookSummary sum={book!} /></Block>}
     </div>
+    <Block n={++n} title="월별 합계"><div className="iv-scroll"><table className="sf-table iv-year"><thead><tr><th>월</th><th className="num">지출 합계</th><th className="num">일반 구매</th><th className="num">선결제 신규 구매</th><th className="num">총 피부관리 인원</th><th className="num">입고 건수</th></tr></thead>
+      <tbody>{months.map(m => <tr key={m.month}><td>{Number(m.month.slice(5))}월</td><td className="num">{dash(m.spend_total, won)}</td><td className="num">{dash(m.spend_general, won)}</td><td className="num">{dash(m.spend_prepaid, won)}</td>
+        <td className="num">{dash(m.patients, v => `${v}명`)}</td><td className="num">{dash(m.in_count, v => `${v}건`)}</td></tr>)}
+        <tr className="iv-total-row"><td>합계</td><td className="num">{won(sum('spend_total'))}</td><td className="num">{won(sum('spend_general'))}</td><td className="num">{won(sum('spend_prepaid'))}</td><td className="num">{sum('patients')}명</td><td className="num">{sum('in_count')}건</td></tr></tbody></table></div></Block>
     <Block n={++n} title="업체별 결제" sub={vendorList.length ? `거래 업체 ${vendorList.length}곳` : undefined}>
       {!vendorList.length ? <p className="sf-hint">기록 없음</p> : <div className="iv-scroll"><table className="sf-table iv-year"><thead><tr><th>업체</th><th>결제 방법</th><th className="num">거래 개월 수</th><th className="num">결제 완료</th><th className="num">결제 예정</th><th className="num">결제금액</th></tr></thead>
         <tbody>{vendorList.map(v => <tr key={v.name}><td><b>{v.name}</b>{v.leader && <span className="iv-pstate is-leader iv-inline-tag">팀장 결제</span>}</td><td>{v.method || '—'}</td><td className="num">{v.months.size}개월</td><td className="num">{dash(v.done, won)}</td><td className="num">{dash(v.due, won)}</td><td className={`num${v.leader ? ' iv-leader-amt' : ''}`}>{v.bal ? <span className="iv-balcalc"><small>구매 금액 {won(v.amount + v.bal)}</small><small>{v.why} −{won(v.bal)}</small><b>{won(v.amount)}</b></span> : <b>{won(v.amount)}</b>}{v.refund ? <small className="iv-pay-co">환급 입금 {won(v.refund)}</small> : null}</td></tr>)}
