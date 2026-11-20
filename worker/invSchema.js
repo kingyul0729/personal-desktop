@@ -400,6 +400,36 @@ export async function ensureInvSchema(db) {
         fixes = `${fixes} jwnov3`.trim();
       } catch (e) { console.error('jwnov3', e); }
     }
+    if (!fixes.includes('oldafter1') && await db.prepare(`SELECT 1 FROM inv_meta WHERE key = 'import'`).first() && await claimFix(db, 'oldafter1')) {
+      // 2026-11-20 사용자 '달마다 재고 맞춰줘'(예전 앱 출고 내역 사진 48일, '출고 후 병원 재고' 칸): 일일재고가 아닌 품목 중 예전 앱 숫자와 달마다 다르게 보이던 4개.
+      // 예전 앱에 기록 없이 줄어든 만큼(사진의 앞뒤 '출고 후 병원 재고' 차이)을 그 사이 날짜에 '재고 맞추기'로, 처음 재고는 첫 기록 전날 '기초 재고'로 넣어 각 줄의 병원재고가 사진과 같게.
+      // 늘리고 줄이는 합이 0이라 지금 병원재고는 그대로. 위드베라 9/8은 입고 뒤 출고 순서로(같은 기록을 입고 뒤로 옮김, 재고 그대로).
+      // 그 품목의 11/5까지 기록이 예전 앱 자료 그대로일 때만(날짜·종류·증감), 아니면 그 품목은 손대지 않음.
+      try {
+        const now = Date.now(), M1 = '예전 앱 재고에 맞춤 · 기초 재고', M2 = '예전 앱 재고에 맞춤 · 기록 없는 차이';
+        const PLAN = [
+          { id: 1027, expect: [['2026-06-12', 'out', -1], ['2026-07-21', 'out', -1], ['2026-08-26', 'out', -1], ['2026-11-03', 'out', -2]], add: [['2026-06-11', 1, M1], ['2026-07-21', -1, M2]] },
+          { id: 2008, expect: [['2026-06-16', 'out', -1], ['2026-08-10', 'out', -1], ['2026-08-26', 'out', -1], ['2026-10-07', 'in', 10], ['2026-11-02', 'out', -3]], add: [['2026-06-15', 4, M1], ['2026-06-16', -3, M2], ['2026-10-07', -1, M2]] },
+          { id: 1002, expect: [['2026-06-02', 'in', 6], ['2026-07-31', 'out', -1], ['2026-10-15', 'out', -1]], add: [['2026-06-02', 1, M1], ['2026-07-31', -1, M2]] },
+          { id: 4008, expect: [['2026-09-08', 'out', -3], ['2026-09-08', 'in', 10], ['2026-11-03', 'out', -2]], reorder: true },
+        ];
+        for (const p of PLAN) {
+          const rows = (await db.prepare(`SELECT * FROM inv_tx WHERE item_id = ? AND deleted_at IS NULL AND date <= '2026-11-05' ORDER BY date, id`).bind(p.id).all()).results || [];
+          const same = rows.length === p.expect.length && rows.every((r, k) => r.date === p.expect[k][0] && r.kind === p.expect[k][1] && Math.round(Number(r.hospital_delta) * 1000) === p.expect[k][2] * 1000);
+          if (!same) continue;
+          const stmts = (p.add || []).map(([d, q, m]) => db.prepare(`INSERT INTO inv_tx (date, kind, item_id, qty, hospital_delta, vendor_delta, memo, source, created_by, created_at) VALUES (?, 'adjust', ?, ?, ?, 0, ?, 'oldafter1', 'system', ?)`).bind(d, p.id, Math.abs(q), q, m, now));
+          if (p.reorder) {
+            const o = rows[0];
+            stmts.push(db.prepare(`UPDATE inv_tx SET deleted_at = ?, deleted_by = 'system' WHERE id = ?`).bind(now, o.id),
+              db.prepare(`INSERT INTO inv_tx (date, kind, item_id, qty, bonus_qty, amount, hospital_delta, vendor_delta, hospital_after, vendor_after, order_id, daily_date, invoice, memo, source, created_by, created_at)
+                SELECT date, kind, item_id, qty, bonus_qty, amount, hospital_delta, vendor_delta, hospital_after, vendor_after, order_id, daily_date, invoice, memo, source, created_by, created_at FROM inv_tx WHERE id = ?`).bind(o.id));
+          }
+          if (stmts.length) await db.batch(stmts);
+        }
+        await db.prepare(`INSERT OR REPLACE INTO inv_meta (key, value) VALUES ('fixes', ?)`).bind(`${fixes} oldafter1`.trim()).run();
+        fixes = `${fixes} oldafter1`.trim();
+      } catch (e) { console.error('oldafter1', e); }
+    }
     if (!fixes.includes('leavelog1')) {
       // 2026-11-20 사용자: 연차 기록 수정·취소 — 기록은 지우지 않고 취소 표시(취소일·사유)와 정정 줄 연결(ref_id)만 더함. 있는 기록·숫자는 그대로.
       for (const col of ['cancelled_at TEXT', 'cancel_reason TEXT', 'ref_id INTEGER']) {

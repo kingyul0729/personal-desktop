@@ -155,3 +155,25 @@ test('jwnov3: 사용자가 직접 넣은 11월 GA30% 3(11/6)·중화제 3(11/9) 
   resetInvSchemaCache(); await call(e, '/state');
   assert.equal((await call(e, '/vendor-bal')).data.vendors.find(v => v.id === 3).balance, 0);
 });
+
+test('oldafter1: 예전 앱 출고 후 병원 재고와 달마다 같게(기초 재고 + 기록 없는 차이, 지금 병원재고 그대로), 위드베라 9/8 입고 뒤 출고', async () => {
+  const { resetInvSchemaCache } = await import('../worker/invSchema.js');
+  const e = env();
+  await call(e, '/state');
+  const put = (id, now, rows) => { e.inv.prepare(`UPDATE inv_items SET hospital_stock = ? WHERE id = ?`).run(now, id);
+    for (const [d, k, q] of rows) e.inv.prepare(`INSERT INTO inv_tx (date, kind, item_id, qty, hospital_delta, vendor_delta) VALUES (?,?,?,?,?,0)`).run(d, k, id, Math.abs(q), q); };
+  put(1027, 0, [['2026-06-12', 'out', -1], ['2026-07-21', 'out', -1], ['2026-08-26', 'out', -1], ['2026-11-03', 'out', -2]]);
+  put(2008, 10, [['2026-06-16', 'out', -1], ['2026-08-10', 'out', -1], ['2026-08-26', 'out', -1], ['2026-10-07', 'in', 10], ['2026-11-02', 'out', -3]]);
+  put(1002, 2, [['2026-06-02', 'in', 6], ['2026-07-31', 'out', -1], ['2026-10-15', 'out', -1]]);
+  put(4008, 5, [['2026-09-08', 'out', -3], ['2026-09-08', 'in', 10], ['2026-11-03', 'out', -2]]);
+  e.inv.prepare(`INSERT INTO inv_meta (key, value) VALUES ('import', 'x')`).run();
+  resetInvSchemaCache(); await call(e, '/state');
+  const after = (id) => e.inv.prepare(`SELECT t.date, t.kind, round(i.hospital_stock - coalesce((SELECT sum(t2.hospital_delta) FROM inv_tx t2 WHERE t2.item_id = t.item_id AND t2.deleted_at IS NULL AND (t2.date > t.date OR (t2.date = t.date AND t2.id > t.id))), 0), 3) AS s
+    FROM inv_tx t JOIN inv_items i ON i.id = t.item_id WHERE t.item_id = ? AND t.deleted_at IS NULL AND t.kind <> 'adjust' ORDER BY t.date, t.id`).all(id).map(r => r.s);
+  assert.deepEqual(after(1027), [5, 4, 2, 0]);
+  assert.deepEqual(after(2008), [9, 5, 4, 14, 10]);
+  assert.deepEqual(after(1002), [4, 4, 2]); // 6/2 입고 뒤 4(+1 기초는 같은 날 뒤), 7/31 4, 10/15 2
+  assert.deepEqual(after(4008), [10, 7, 5]); // 9/8 입고 → 출고 순서
+  const st = (await call(e, '/state')).data.items;
+  assert.deepEqual([1027, 2008, 1002, 4008].map(id => st.find(i => i.id === id).hospital_stock), [0, 10, 2, 5]); // 지금 병원재고 그대로
+});
