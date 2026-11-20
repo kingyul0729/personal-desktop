@@ -24,7 +24,7 @@ type MenuItem = { id: WindowId; label: string; icon: LucideIcon };
 export const SIDEBAR_GROUPS: { title: string; items: MenuItem[] }[] = [
   { title: '상담', items: [{ id: 'fileExplorer', label: '가격표', icon: FolderOpen }, { id: 'priceCalculator', label: '계산', icon: Calculator }] },
   { title: '재고', items: [{ id: 'stockCheck', label: '재고체크', icon: ClipboardCheck }, { id: 'stockOrder', label: '품목별 재고', icon: Package }, { id: 'vendorStore', label: '업체 잔액', icon: Warehouse }, { id: 'stockReport', label: '월말/연말보고서', icon: FileBarChart }] },
-  { title: '직원', items: [{ id: 'staffSchedule', label: '스케줄·연차·성과·예약표', icon: CalendarDays }, { id: 'staffTraining', label: '신입교육', icon: GraduationCap }] },
+  { title: '직원', items: [{ id: 'staffSchedule', label: '직원 관리', icon: CalendarDays }, { id: 'staffTraining', label: '신입교육', icon: GraduationCap }] },
   { title: '개인', items: [{ id: 'terminal', label: '공부', icon: BookOpen }, { id: 'notepad', label: '메모', icon: FileText }] },
   { title: '설정', items: [{ id: 'trash', label: '휴지통', icon: Trash2 }, { id: 'controlPanel', label: '환경설정', icon: Settings }] },
 ];
