@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { LoadingBox } from '../Feedback';
 import { readWon } from '../../koreanAmount';
-import { fmtQty, invGet, shiftMonth, todayLocal } from '../../inventoryApi';
+import { fmtQty, invGet, shiftMonth, subscribeInventory, todayLocal } from '../../inventoryApi';
 import { InvThumb, Seg, errText, withUnit } from './shared';
 import { invoiceSrc } from '../../inventoryApi';
 import { staffGet } from '../../staffApi';
@@ -65,20 +65,23 @@ export function StockReport() {
   const [team, setTeam] = useState<YearStaff[] | null>(null);
   const [book, setBook] = useState<BookSum | null>(null); // 예약표 집계(보고 월 또는 연도)
   const [error, setError] = useState('');
+  // 다른 화면에서 주문 취소·입고·잔액 기록을 바꾸면 보고서도 다시 받는다(2026-11-20 사용자 '취소 눌렀는데' — 열어 둔 보고서가 예전 숫자로 남던 것)
+  const [tick, setTick] = useState(0);
+  useEffect(() => subscribeInventory(() => setTick(t => t + 1)), []);
   useEffect(() => {
-    if (tab !== 'month') return; setRep(null);
+    if (tab !== 'month') return; if (!tick) setRep(null);
     Promise.all([invGet('/report', { month }), invGet('/report', { month: cmp })]).then(([a, b]) => setRep({ a, b }), e => setError(errText(e)));
     setBook(null); staffGet('/book/summary', { period: month }).then(r => setBook(r.kinds), () => setBook(null));
-  }, [tab, month, cmp]);
+  }, [tab, month, cmp, tick]);
   // 연말 보고(2026-11-12 사용자 '물품별 개수는 빼고 재고·직원관리 내용'): 달마다 월말 보고 자료를 받아 한 해로 모으고, 직원 자료(연차·성과)를 함께 받는다.
   useEffect(() => {
-    if (tab !== 'year' || !/^\d{4}$/.test(year)) return; setYr(null); setTeam(null);
+    if (tab !== 'year' || !/^\d{4}$/.test(year)) return; if (!tick) { setYr(null); setTeam(null); }
     const ms = Array.from({ length: 12 }, (_, i) => `${year}-${String(i + 1).padStart(2, '0')}`);
     Promise.all(ms.map(m => invGet('/report', { month: m }))).then(setYr, e => setError(errText(e)));
     setBook(null); staffGet('/book/summary', { period: year }).then(r => setBook(r.kinds), () => setBook(null));
     Promise.all([staffGet('/list'), ...ms.map(m => staffGet('/performance', { month: m, include_retired: 0 }))])
       .then(([list, ...perf]) => setTeam(yearStaff(list, perf)), () => setTeam([]));
-  }, [tab, year]);
+  }, [tab, year, tick]);
   return <div className="sf-wrap iv-wrap iv-report">
     <div className="sf-bar iv-noprint"><Seg label="보고서" value={tab} onChange={setTab} options={[['month', '월말 보고'], ['year', '연말 보고']]} />
       <div className="iv-inline">{tab === 'month' ? <>
