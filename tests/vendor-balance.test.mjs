@@ -149,7 +149,7 @@ test('jwnov3: 사용자가 직접 넣은 11월 GA30% 3(11/6)·중화제 3(11/9) 
   for (const it of [ga, jh]) assert.equal(after.find(i => i.id === it.id).hospital_stock, before.find(i => i.id === it.id).hospital_stock); // 병원재고 그대로
   const rep = (await call(e, '/report?month=2026-11')).data;
   const jw = rep.payments.find(x => x.vendor_id === 3);
-  assert.equal(jw.amount, 0); assert.equal(jw.status, '잔액 차감');
+  assert.equal(jw.amount, 0); assert.equal(jw.status, '잔액 차감'); assert.equal(jw.bal_used, 130906); assert.equal(jw.bal_reason, '중복 결제');
   assert.deepEqual(jw.lines.map(l => [l.date, l.item, l.qty]).sort(), [['2026-11-06', 'GA30%', 2], ['2026-11-06', '중화제', 2]]);
   assert.deepEqual(jw.refunds, [{ date: '2026-11-19', amount: 144001 }]);
   resetInvSchemaCache(); await call(e, '/state');

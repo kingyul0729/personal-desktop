@@ -3020,3 +3020,8 @@ button.iv-pinv { cursor: zoom-in; }
 /* 스케줄·연차·성과 한 화면(2026-11-20): 맨 위 알약 탭 줄 */
 .sf-wrap .sf-hubtabs { margin: 0 0 16px; }
 .sf-wrap[hidden] { display: none !important; }
+
+/* 업체 잔액으로 낸 결제(2026-11-20): 구매 금액 · 중복 결제 잔액 차감 · 결제금액 세 줄, 오른쪽 정렬 */
+.iv-balcalc { display: inline-flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+.iv-balcalc small { font-size: 12px; color: #8d9197; white-space: nowrap; }
+.iv-balcalc small + small { color: #44617c; }

@@ -935,6 +935,7 @@ async function monthReport(db, month, brief = false) {
   for (const r of [...pays, ...prepaidPays]) { const k = r.vendor_id ?? 0; const b = byVendor.get(k) || { amount: 0, dates: new Set() }; b.amount += r.amount || 0; b.dates.add(r.pay_date); byVendor.set(k, b); }
   const allV = await all(db, 'SELECT id, name, company, payment_method, pay_timing, bank, account, holder, active FROM inv_vendors ORDER BY sort, id');
   // 업체 잔액 환급 입금(2026-11-20 사용자 '월말·연말 5번에 넣어줘'): 그 달 환급 입금을 업체 줄에 같이(결제금액·합계는 그대로)
+  const balWhy = new Map((await all(db, `SELECT vendor_id, group_concat(DISTINCT reason) AS r FROM inv_vendor_bal WHERE kind = 'add' AND deleted_at IS NULL GROUP BY vendor_id`)).map(r => [r.vendor_id, r.r]));
   const refundRows = await all(db, `SELECT vendor_id, date, amount FROM inv_vendor_bal WHERE kind = 'refund' AND deleted_at IS NULL AND date BETWEEN ? AND ? ORDER BY date, id`, from, to);
   const lastDay = new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0)).toISOString().slice(0, 10);
   const WHEN = { order: '주문 시 결제', month: '월말 결제' };
@@ -946,6 +947,7 @@ async function monthReport(db, month, brief = false) {
       pay_dates: !amount ? [] : timing === 'month' ? [lastDay] : [...b.dates].sort(),
       in_dates: [...new Set(vin.map(r => r.date))].sort(), in_items: new Set(vin.map(r => r.item_id)).size,
       // 원장님 보고용 표기(2026-11-12 사용자): 주문 시 결제 = 결제 완료, 월말 결제 = '이달 말까지 결제 예정'(날짜가 지나도 보고서 표기는 그대로)
+      bal_reason: used ? (balWhy.get(v.id) || null) : null,
       refunds: refundRows.filter(r => r.vendor_id === v.id).map(r => ({ date: r.date, amount: Math.round(r.amount) })),
       status: !amount ? (used ? '잔액 차감' : '결제 없음') : timing === 'order' ? '결제 완료' : timing === 'month' ? '결제 예정' : '—', bal_used: used,
       lines: mine.map(r => ({ date: r.date, item: r.item_name, qty: r.kind === 'prepaid_buy' ? r.vendor_delta : round(r.qty + (r.kind === 'in' ? r.bonus_qty || 0 : 0)), unit: r.stock_unit,
