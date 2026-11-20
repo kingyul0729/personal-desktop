@@ -128,3 +128,30 @@ test('jwvat1: 주문 금액 그대로 뺀 차감을 부가세 포함(× 1.1)으�
   const rep = (await call(e, `/report?month=${d.slice(0, 7)}`)).data;
   assert.equal(rep.bal_used, 47272); assert.equal(rep.spend_total, 0); // 보고서는 앱 가격 기준: 다 잔액으로 냄
 });
+
+test('jwnov3: 사용자가 직접 넣은 11월 GA30% 3(11/6)·중화제 3(11/9) → 2개·11/6 + 이전 재고 +1, 부가세 포함 차감, 환급 → 0원', async () => {
+  const { resetInvSchemaCache } = await import('../worker/invSchema.js');
+  const e = env();
+  const st = (await call(e, '/state')).data;
+  const ga = st.items.find(i => i.name === 'GA30%'), jh = st.items.find(i => i.name === '중화제');
+  for (const [it, d] of [[ga, '2026-11-06'], [jh, '2026-11-09']]) {
+    await call(e, '/orders', 'POST', { item_id: it.id, option_id: it.options[0].id, count: 3, date: d });
+    const o = (await call(e, '/state')).data.orders.find(x => x.item_id === it.id);
+    assert.equal((await call(e, '/receive', 'POST', { order_id: o.id, actual_qty: 3, date: d })).status, 200);
+  }
+  const before = (await call(e, '/state')).data.items;
+  e.inv.prepare(`INSERT INTO inv_meta (key, value) VALUES ('import', 'x')`).run();
+  resetInvSchemaCache();
+  const vb = (await call(e, '/vendor-bal')).data;
+  assert.equal(vb.vendors.find(v => v.id === 3).balance, 0);
+  assert.deepEqual(vb.rows.filter(r => r.kind === 'use').map(r => r.amount).sort(), [103998, 39998, 59997].sort());
+  const after = (await call(e, '/state')).data.items;
+  for (const it of [ga, jh]) assert.equal(after.find(i => i.id === it.id).hospital_stock, before.find(i => i.id === it.id).hospital_stock); // 병원재고 그대로
+  const rep = (await call(e, '/report?month=2026-11')).data;
+  const jw = rep.payments.find(x => x.vendor_id === 3);
+  assert.equal(jw.amount, 0); assert.equal(jw.status, '잔액 차감');
+  assert.deepEqual(jw.lines.map(l => [l.date, l.item, l.qty]).sort(), [['2026-11-06', 'GA30%', 2], ['2026-11-06', '중화제', 2]]);
+  assert.deepEqual(jw.refunds, [{ date: '2026-11-19', amount: 144001 }]);
+  resetInvSchemaCache(); await call(e, '/state');
+  assert.equal((await call(e, '/vendor-bal')).data.vendors.find(v => v.id === 3).balance, 0);
+});

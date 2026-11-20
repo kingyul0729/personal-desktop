@@ -364,6 +364,42 @@ export async function ensureInvSchema(db) {
         fixes = `${fixes} jwrefund1`.trim();
       } catch (e) { console.error('jwrefund1', e); }
     }
+    if (!fixes.includes('jwnov3') && fixes.includes('jwrefund1') && await db.prepare(`SELECT 1 FROM inv_meta WHERE key = 'import'`).first() && await claimFix(db, 'jwnov3')) {
+      // 2026-11-20 사용자: 11월 중외 구매는 사용자가 직접 넣은 GA30% 3개(11/6)·중화제 3개(11/9) — '3개는 전에 있던 1개씩과 온 2개를 더한 것일 수 있어'.
+      // 업체 계산(중화제 2 + GA30% 2)대로: 두 주문·입고를 2개·11/6으로(금액도 2개 값), 병원재고는 그대로 두려고 같은 날 '이전 재고' +1(재고 맞추기),
+      // 그 주문을 업체 잔액에서 부가세 포함 차감(39,998 · 103,998) → 남은 144,001, 11/19 환급 입금 144,001 → 0원.
+      // 두 주문이 그 모양(11월·3개·받음·차감 없음·입고 한 줄 3개) 그대로일 때만. 다른 기록은 손대지 않음.
+      try {
+        const D = '2026-11-06', now = Date.now();
+        const os = (await db.prepare(`SELECT o.*, i.name AS item_name FROM inv_orders o JOIN inv_items i ON i.id = o.item_id WHERE i.vendor_id = 3 AND i.name IN ('중화제', 'GA30%')
+          AND o.ordered_at BETWEEN '2026-11-01' AND '2026-11-30' AND o.status <> 'cancelled' ORDER BY o.id`).all()).results || [];
+        const plan = [];
+        for (const o of os) {
+          const txs = (await db.prepare(`SELECT * FROM inv_tx WHERE order_id = ? AND deleted_at IS NULL AND kind = 'in'`).bind(o.id).all()).results || [];
+          const used = await db.prepare(`SELECT 1 FROM inv_vendor_bal WHERE order_id = ? AND kind = 'use' AND deleted_at IS NULL`).bind(o.id).first();
+          if (Number(o.qty) === 3 && o.status === 'received' && !used && txs.length === 1 && !txs[0].cancelled_at && Number(txs[0].qty) === 3 && Number(txs[0].hospital_delta) === 3) plan.push({ o, t: txs[0] });
+        }
+        const names = new Set(plan.map(p => p.o.item_name));
+        if (os.length === 2 && plan.length === 2 && names.size === 2) {
+          const stmts = [];
+          for (const { o, t } of plan) {
+            const amt = Math.round((Number(o.amount) || 0) / 3 * 2);
+            stmts.push(
+              db.prepare(`UPDATE inv_orders SET qty = 2, amount = ?, ordered_at = ?, received_at = ? WHERE id = ?`).bind(amt, D, D, o.id),
+              db.prepare(`UPDATE inv_tx SET qty = 2, hospital_delta = 2, amount = CASE WHEN coalesce(amount, 0) > 0 THEN ? ELSE amount END, date = ?, updated_at = ?, updated_by = 'system' WHERE id = ?`).bind(amt, D, now, t.id),
+              db.prepare(`INSERT INTO inv_tx (item_id, kind, date, qty, hospital_delta, vendor_delta, memo, created_by, created_at) VALUES (?, 'adjust', ?, 1, 1, 0, '이전 재고 · 입고 때 같이 셈', 'system', ?)`).bind(o.item_id, D, now),
+              db.prepare(`INSERT INTO inv_vendor_bal (vendor_id, date, kind, amount, reason, order_id, created_by, created_at) VALUES (3, ?, 'use', ?, '주문', ?, 'system', ?)`).bind(D, Math.round(amt * 1.1), o.id, now));
+          }
+          await db.batch(stmts);
+          const bal = await db.prepare(`SELECT coalesce(sum(CASE kind WHEN 'add' THEN amount ELSE -amount END), 0) AS b FROM inv_vendor_bal WHERE vendor_id = 3 AND deleted_at IS NULL`).first();
+          const has = await db.prepare(`SELECT 1 FROM inv_vendor_bal WHERE vendor_id = 3 AND kind = 'refund' AND deleted_at IS NULL`).first();
+          if (Math.round(bal?.b || 0) === 144001 && !has)
+            await db.prepare(`INSERT INTO inv_vendor_bal (vendor_id, date, kind, amount, memo, created_by, created_at) VALUES (3, '2026-11-19', 'refund', 144001, '중복 결제 남은 금액 환급', 'system', ?)`).bind(now).run();
+        }
+        await db.prepare(`INSERT OR REPLACE INTO inv_meta (key, value) VALUES ('fixes', ?)`).bind(`${fixes} jwnov3`.trim()).run();
+        fixes = `${fixes} jwnov3`.trim();
+      } catch (e) { console.error('jwnov3', e); }
+    }
     if (!fixes.includes('leavelog1')) {
       // 2026-11-20 사용자: 연차 기록 수정·취소 — 기록은 지우지 않고 취소 표시(취소일·사유)와 정정 줄 연결(ref_id)만 더함. 있는 기록·숫자는 그대로.
       for (const col of ['cancelled_at TEXT', 'cancel_reason TEXT', 'ref_id INTEGER']) {
