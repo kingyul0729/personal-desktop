@@ -353,6 +353,17 @@ export async function ensureInvSchema(db) {
         fixes = `${fixes} jwnov2`.trim();
       } catch (e) { console.error('jwnov2', e); }
     }
+    if (!fixes.includes('jwrefund1') && fixes.includes('jwnov2') && await db.prepare(`SELECT 1 FROM inv_meta WHERE key = 'import'`).first() && await claimFix(db, 'jwrefund1')) {
+      // 2026-11-20 사용자 '넣어줘': 중외가 11/19 남은 잔액 144,001원을 환급 입금 → 남은 금액 0원. 남은 금액이 144,001원이고 환급 기록이 없을 때만.
+      try {
+        const bal = await db.prepare(`SELECT coalesce(sum(CASE kind WHEN 'add' THEN amount ELSE -amount END), 0) AS b FROM inv_vendor_bal WHERE vendor_id = 3 AND deleted_at IS NULL`).first();
+        const has = await db.prepare(`SELECT 1 FROM inv_vendor_bal WHERE vendor_id = 3 AND kind = 'refund' AND deleted_at IS NULL`).first();
+        if (Math.round(bal?.b || 0) === 144001 && !has)
+          await db.prepare(`INSERT INTO inv_vendor_bal (vendor_id, date, kind, amount, memo, created_by, created_at) VALUES (3, '2026-11-19', 'refund', 144001, '중복 결제 남은 금액 환급', 'system', ?)`).bind(Date.now()).run();
+        await db.prepare(`INSERT OR REPLACE INTO inv_meta (key, value) VALUES ('fixes', ?)`).bind(`${fixes} jwrefund1`.trim()).run();
+        fixes = `${fixes} jwrefund1`.trim();
+      } catch (e) { console.error('jwrefund1', e); }
+    }
     if (!fixes.includes('leavelog1')) {
       // 2026-11-20 사용자: 연차 기록 수정·취소 — 기록은 지우지 않고 취소 표시(취소일·사유)와 정정 줄 연결(ref_id)만 더함. 있는 기록·숫자는 그대로.
       for (const col of ['cancelled_at TEXT', 'cancel_reason TEXT', 'ref_id INTEGER']) {

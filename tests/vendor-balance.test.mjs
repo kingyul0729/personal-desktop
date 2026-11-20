@@ -85,7 +85,7 @@ test('jwbal2: 실제 사이트만 — 2025-10-30 중복 결제 347,994 등록 + 
   e.inv.prepare(`INSERT INTO inv_meta (key, value) VALUES ('import', 'x')`).run();
   resetInvSchemaCache();
   const vb = (await call(e, '/vendor-bal')).data;
-  assert.equal(vb.vendors.find(v => v.id === 3).balance, 144001); // 5월 54,543 × 1.1 + 11월(jwnov1) 39,998 + 103,998
+  assert.equal(vb.vendors.find(v => v.id === 3).balance, 0); // 5월 54,543 × 1.1 + 11월(jwnov1) 39,998 + 103,998 → 144,001, 11/19 환급(jwrefund1) → 0
   assert.deepEqual(vb.rows.filter(r => r.date < '2026-11-01').map(r => [r.date, r.kind, r.amount]), [['2026-05-06', 'use', 59997], ['2025-10-30', 'add', 347994]]);
   const s2 = (await call(e, '/state')).data;
   assert.equal(s2.orders.some(o => o.ordered_at === '2026-05-06'), false);
@@ -101,8 +101,13 @@ test('jwbal2: 실제 사이트만 — 2025-10-30 중복 결제 347,994 등록 + 
   assert.equal(p.status, '잔액 차감'); assert.equal(p.amount, 0); assert.equal(may.spend_total, 0);
   assert.deepEqual(p.lines.map(l => [l.item, l.qty, l.invoice]), [['중화제', 3, 'missing']]); // 명세서는 사용자가 올림
   assert.deepEqual(vb.rows.filter(r => r.kind === 'use').map(r => r.amount).sort(), [103998, 39998, 59997].sort());
+  assert.deepEqual(vb.rows.filter(r => r.kind === 'refund').map(r => [r.date, r.amount]), [['2026-11-19', 144001]]);
+  const novRep = (await call(e, '/report?month=2026-11')).data;
+  const jwN = novRep.payments.find(x => x.vendor_id === 3);
+  assert.deepEqual(jwN.refunds, [{ date: '2026-11-19', amount: 144001 }]);
+  assert.equal(jwN.amount, 40000); assert.equal(jwN.bal_used, 130906); // 11/12 GA20% 주문(테스트에서 넣음)만 실제 결제
   resetInvSchemaCache(); await call(e, '/state');
-  assert.equal((await call(e, '/vendor-bal')).data.rows.length, 4);
+  assert.equal((await call(e, '/vendor-bal')).data.rows.length, 5);
 });
 
 test('jwvat1: 주문 금액 그대로 뺀 차감을 부가세 포함(× 1.1)으로 — 남은 금액이 0보다 적어지지 않게', async () => {
