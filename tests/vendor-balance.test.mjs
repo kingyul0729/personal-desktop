@@ -88,9 +88,14 @@ test('jwbal2: 실제 사이트만 — 2025-10-30 중복 결제 347,994 등록 + 
   assert.equal(vb.vendors.find(v => v.id === 3).balance, 144001); // 5월 54,543 × 1.1 + 11월(jwnov1) 39,998 + 103,998
   assert.deepEqual(vb.rows.filter(r => r.date < '2026-11-01').map(r => [r.date, r.kind, r.amount]), [['2026-05-06', 'use', 59997], ['2025-10-30', 'add', 347994]]);
   const s2 = (await call(e, '/state')).data;
-  assert.equal(s2.items.find(i => i.id === jh.id).hospital_stock, jh.hospital_stock); // 재고 그대로
   assert.equal(s2.orders.some(o => o.ordered_at === '2026-05-06'), false);
-  assert.equal(s2.orders.filter(o => o.ordered_at === '2026-11-20' && o.qty === 2).length, 2); // 11월 받을 주문 // 받기 전 목록에 안 뜸
+  // jwnov2: 11/6 주문·11/6 같은 날 입고(각 2개) — 받을 주문에 안 남고 병원재고 +2
+  assert.equal(s2.orders.some(o => o.memo === '11월 구매 · 업체 잔액 차감'), false);
+  assert.equal(s2.items.find(i => i.id === jh.id).hospital_stock, jh.hospital_stock + 2);
+  const nov = (await call(e, '/tx?month=2026-11')).data;
+  const novRows = (nov.rows || nov).filter(t => t.kind === 'in' && t.date === '2026-11-06');
+  assert.equal(novRows.length, 2); assert.deepEqual(novRows.map(t => t.qty), [2, 2]);
+  assert.ok(vb.rows.filter(r => r.kind === 'use' && r.date === '2026-11-06').length === 2); // 받기 전 목록에 안 뜸
   const may = (await call(e, '/report?month=2026-05')).data;
   const p = may.payments.find(x => x.vendor_id === 3);
   assert.equal(p.status, '잔액 차감'); assert.equal(p.amount, 0); assert.equal(may.spend_total, 0);

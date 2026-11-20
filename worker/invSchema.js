@@ -318,14 +318,40 @@ export async function ensureInvSchema(db) {
           for (const it of its) {
             const opt = await db.prepare(`SELECT id FROM inv_options WHERE item_id = ? ORDER BY id LIMIT 1`).bind(it.id).first();
             const amount = Math.round(Number(it.price) * 2);
-            stmts.push(db.prepare(`INSERT INTO inv_orders (item_id, option_id, option_label, ordered_at, qty, bonus_qty, amount, prepaid, status, memo, created_by, created_at) VALUES (?,?,'2개','2026-11-20',2,0,?,0,'ordered',?,'system',?)`).bind(it.id, opt?.id ?? null, amount, memo, now),
-              db.prepare(`INSERT INTO inv_vendor_bal (vendor_id, date, kind, amount, reason, order_id, created_by, created_at) VALUES (3, '2026-11-20', 'use', ?, '주문', (SELECT max(id) FROM inv_orders), 'system', ?)`).bind(Math.round(amount * 1.1), now));
+            stmts.push(db.prepare(`INSERT INTO inv_orders (item_id, option_id, option_label, ordered_at, qty, bonus_qty, amount, prepaid, status, memo, created_by, created_at) VALUES (?,?,'2개','2026-11-06',2,0,?,0,'ordered',?,'system',?)`).bind(it.id, opt?.id ?? null, amount, memo, now),
+              db.prepare(`INSERT INTO inv_vendor_bal (vendor_id, date, kind, amount, reason, order_id, created_by, created_at) VALUES (3, '2026-11-06', 'use', ?, '주문', (SELECT max(id) FROM inv_orders), 'system', ?)`).bind(Math.round(amount * 1.1), now));
           }
           await db.batch(stmts);
         }
         await db.prepare(`INSERT OR REPLACE INTO inv_meta (key, value) VALUES ('fixes', ?)`).bind(`${fixes} jwnov1`.trim()).run();
         fixes = `${fixes} jwnov1`.trim();
       } catch (e) { console.error('jwnov1', e); }
+    }
+    if (!fixes.includes('jwnov2') && fixes.includes('jwnov1') && await claimFix(db, 'jwnov2')) {
+      // 2026-11-20 사용자 '6일이야, 중화제·GA30% 같은 날 왔어': jwnov1 주문(11월 구매 · 업체 잔액 차감)의 주문일·차감일을 11/6으로, 받기 전이면 11/6 입고(각 2개, 병원재고 +2)로.
+      // 이미 받았으면 그 입고 날짜만 11/6으로(moveTxDate). 다른 주문·기록은 손대지 않음.
+      try {
+        const D = '2026-11-06', now = Date.now();
+        const os = (await db.prepare(`SELECT o.* FROM inv_orders o JOIN inv_items i ON i.id = o.item_id WHERE i.vendor_id = 3 AND i.name IN ('중화제', 'GA30%')
+          AND o.created_by = 'system' AND o.memo = '11월 구매 · 업체 잔액 차감' AND o.status <> 'cancelled'`).all()).results || [];
+        for (const o of os) {
+          await db.batch([db.prepare(`UPDATE inv_orders SET ordered_at = ? WHERE id = ?`).bind(D, o.id),
+            db.prepare(`UPDATE inv_vendor_bal SET date = ? WHERE order_id = ? AND kind = 'use' AND deleted_at IS NULL`).bind(D, o.id)]);
+          const txs = (await db.prepare(`SELECT * FROM inv_tx WHERE order_id = ? AND kind = 'in' AND deleted_at IS NULL ORDER BY id`).bind(o.id).all()).results || [];
+          if (txs.length) { for (const t of txs) await moveTxDate(db, t, D, 'system'); continue; }
+          if (o.status !== 'ordered') continue;
+          const it = await db.prepare(`SELECT * FROM inv_items WHERE id = ?`).bind(o.item_id).first();
+          const q = Number(o.qty) || 0, keep = await keepCountStmts(db, it.id, D, q, 'system');
+          await db.batch([
+            db.prepare(`UPDATE inv_items SET hospital_stock = round(hospital_stock + ?, 3), updated_at = ? WHERE id = ?`).bind(q, now, it.id),
+            db.prepare(`INSERT INTO inv_tx (date, kind, item_id, qty, bonus_qty, amount, hospital_delta, vendor_delta, hospital_after, vendor_after, order_id, daily_date, invoice, memo, created_by, created_at)
+              VALUES (?, 'in', ?, ?, 0, ?, ?, 0, ?, ?, ?, NULL, 0, ?, 'system', ?)`).bind(D, it.id, q, o.amount, q, Math.round(((it.hospital_stock || 0) + q) * 1000) / 1000, it.vendor_stock || 0, o.id, `주문 ${q} · 도착 ${q}`, now),
+            db.prepare(`UPDATE inv_orders SET status = 'received', received_at = ? WHERE id = ?`).bind(D, o.id),
+            ...keep]);
+        }
+        await db.prepare(`INSERT OR REPLACE INTO inv_meta (key, value) VALUES ('fixes', ?)`).bind(`${fixes} jwnov2`.trim()).run();
+        fixes = `${fixes} jwnov2`.trim();
+      } catch (e) { console.error('jwnov2', e); }
     }
     if (!fixes.includes('leavelog1')) {
       // 2026-11-20 사용자: 연차 기록 수정·취소 — 기록은 지우지 않고 취소 표시(취소일·사유)와 정정 줄 연결(ref_id)만 더함. 있는 기록·숫자는 그대로.
