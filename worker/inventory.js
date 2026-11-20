@@ -931,7 +931,7 @@ async function monthReport(db, month, brief = false) {
     FROM inv_tx WHERE deleted_at IS NULL AND date BETWEEN ? AND ?`, from, to);
   const days = await one(db, `SELECT coalesce(sum(patients), 0) AS patients, sum(CASE WHEN patients > 0 THEN 1 ELSE 0 END) AS open_days, count(*) AS record_days FROM inv_daily WHERE date BETWEEN ? AND ?`, from, to);
   const usage = await all(db, `SELECT i.id, i.name, i.stock_unit, sum(t.qty) AS used FROM inv_tx t JOIN inv_items i ON i.id = t.item_id
-    WHERE t.deleted_at IS NULL AND t.kind = 'out' AND t.date BETWEEN ? AND ? GROUP BY i.id ORDER BY i.sort, i.id`, from, to);
+    WHERE t.deleted_at IS NULL AND t.kind = 'out' AND i.daily_mode IS NOT NULL AND t.date BETWEEN ? AND ? GROUP BY i.id ORDER BY i.sort, i.id`, from, to); // 재고 확인 = 일일재고 품목만(2026-11-20 사용자)
   // 영업일 = 피부관리 인원이 있는 날. 인원을 안 적은 달(성과 미입력)은 일일재고를 적은 날로(사용량이 있는데 '기록 없음'으로 보이지 않게)
   const openDays = days.open_days || days.record_days || 0;
   const out = {

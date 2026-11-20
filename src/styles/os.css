@@ -3044,3 +3044,7 @@ button.iv-pinv { cursor: zoom-in; }
 .iv-inline-tag { margin: 0 0 0 6px; vertical-align: 1px; }
 .iv-leader-amt, .iv-leader-amt b { color: #9aa0a6 !important; font-weight: 600; }
 .iv-ptag.is-leader { background: #eef0f3; color: #5d636b; }
+/* 월말·연말 보고 줄바꿈(2026-11-20 사용자 '가로세로 바꿀 때 단어가 이상하게 끊어져'): 한글은 낱말 단위로만 줄을 바꾸고, 표 머리·숫자·태그는 한 줄 */
+.iv-report, .iv-report * { word-break: keep-all; overflow-wrap: break-word; }
+.iv-report th, .iv-report td.num, .iv-report .iv-pstate, .iv-report .iv-tiles dt, .iv-report .iv-tiles dd b, .iv-report .iv-num { white-space: nowrap; }
+.iv-report .iv-num small { white-space: normal; }
