@@ -142,13 +142,12 @@ export function BookTable({ title, rows, people, staff, onUpdate, onRemove, onAd
 // 예약 / 당일예약 / 신환을 한 줄씩 따로 — 고객 수(취소 뺀 줄 수)·관리 종류별 건수·취소 수.
 export type BookSum = Record<BookKind, { staff_id: number | null; name: string; count: number; cancelled: number; care: Record<string, number> }[]>;
 export function BookSummary({ sum }: { sum: BookSum }) {
-  const dash = (v: number) => (v ? String(v) : '—');
-  const rows = (Object.keys(BOOK_KIND_LABEL) as BookKind[]).map(kind => { const list = sum[kind] || []; const t = (f: (x: BookSum[BookKind][number]) => number) => list.reduce((a, x) => a + f(x), 0);
-    return { kind, count: t(x => x.count), cancelled: t(x => x.cancelled), care: Object.fromEntries(BOOK_CARE.map(k => [k, t(x => x.care[k] || 0)])) as Record<string, number> }; });
-  // 예약취소(줄 그은 예약)는 구분의 한 줄로 따로 센다 — 고객 수에만, 관리 칸은 비움(2026-11-13 사용자 '취소도 구분에 넣어줘, 월말·연말 계산만')
-  const cancelled = rows.reduce((a, r) => a + r.cancelled, 0);
-  return <div className="iv-scroll"><table className="sf-table iv-year"><thead><tr><th>구분</th><th className="num">고객 수</th>{BOOK_CARE.map(k => <th key={k} className="num">{k}</th>)}</tr></thead>
-    <tbody>{rows.map(r => <tr key={r.kind}><td><b>{BOOK_KIND_LABEL[r.kind]}</b></td><td className="num">{dash(r.count)}</td>{BOOK_CARE.map(k => <td key={k} className="num">{dash(r.care[k])}</td>)}</tr>)}
-      <tr><td><b>예약취소</b></td><td className="num">{dash(cancelled)}</td>{BOOK_CARE.map(k => <td key={k} className="num">—</td>)}</tr></tbody></table></div>;
+  const dash = (v: number) => (v ? `${v}명` : '—');
+  // 월말·연말 예약표 집계는 신환 · 예약취소 고객 수만(2026-11-20 사용자 '팩까지 안 보여줘도 돼, 신환하고 취소만') — 관리 칸·예약·당일예약 줄 없음
+  const all = (Object.keys(BOOK_KIND_LABEL) as BookKind[]).flatMap(k => sum[k] || []);
+  const newcomer = (sum.day_care || []).reduce((a, x) => a + x.count, 0);
+  const cancelled = all.reduce((a, x) => a + x.cancelled, 0);
+  return <div className="iv-scroll"><table className="sf-table iv-year"><thead><tr><th>구분</th><th className="num">고객 수</th></tr></thead>
+    <tbody><tr><td><b>신환</b></td><td className="num">{dash(newcomer)}</td></tr><tr><td><b>예약취소</b></td><td className="num">{dash(cancelled)}</td></tr></tbody></table></div>;
 }
 export const bookHasAny = (sum?: BookSum | null) => !!sum && (Object.keys(BOOK_KIND_LABEL) as BookKind[]).some(k => (sum[k] || []).length > 0);
