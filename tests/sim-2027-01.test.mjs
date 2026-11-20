@@ -240,7 +240,7 @@ test('2027-01 가상 운영', async t => {
     const pp = rep.prepaid.find(x => x.name === P);
     assert.deepEqual([pp.hospital_stock, pp.vendor_stock], [ledger[P][0], ledger[P][1]]);
     const u = n => rep.usage.find(x => x.name === n)?.used || 0;
-    assert.equal(u(G), used[G]);
+    assert.equal(u(G), 0); // 재고 확인은 일일재고 품목만(2026-11-20 사용자) — 일반 품목 출고는 안 보임
     assert.equal(u(P), used[P]); // 사용량(재고 차이 −2·+5는 사용량이 아님)
     assert.equal(u(S), used[S]); // 마감재고 품목: 센 수량 차이가 사용량
     // 결제 내역: 업체별 합계 = 지출 합계, 계좌이체 업체는 예금주·은행·계좌번호 칸, 결제 시점 구분
