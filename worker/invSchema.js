@@ -430,6 +430,19 @@ export async function ensureInvSchema(db) {
         fixes = `${fixes} oldafter1`.trim();
       } catch (e) { console.error('oldafter1', e); }
     }
+    if (!fixes.includes('paymethod1') && await claimFix(db, 'paymethod1')) {
+      // 2026-11-20 사용자 '이제부터 중외 온라인으로 바뀌니깐 이번달까지만 계좌입금으로 표기': 업체 결제 방법 이력 칸(예전 방법·시점, 새 방법 시작 달)을 더하고
+      // 중외(id 3)가 계좌입금이면 11월까지는 계좌입금·결제 시 배송, 2026-12부터 홈페이지결제(온라인, 늘 결제 완료). 은행·계좌 정보는 그대로 둠.
+      try {
+        for (const col of ['prev_payment_method TEXT', 'prev_pay_timing TEXT', 'method_from TEXT']) {
+          try { await db.prepare(`ALTER TABLE inv_vendors ADD COLUMN ${col}`).run(); } catch (e) { if (!/duplicate column/i.test(String(e?.message || e))) throw e; }
+        }
+        await db.prepare(`UPDATE inv_vendors SET prev_payment_method = payment_method, prev_pay_timing = coalesce(pay_timing, 'order'), payment_method = '홈페이지결제', pay_timing = 'order', method_from = '2026-12'
+          WHERE id = 3 AND payment_method LIKE '%계좌입금%' AND method_from IS NULL`).run();
+        await db.prepare(`INSERT OR REPLACE INTO inv_meta (key, value) VALUES ('fixes', ?)`).bind(`${fixes} paymethod1`.trim()).run();
+        fixes = `${fixes} paymethod1`.trim();
+      } catch (e) { console.error('paymethod1', e); }
+    }
     if (!fixes.includes('leavelog1')) {
       // 2026-11-20 사용자: 연차 기록 수정·취소 — 기록은 지우지 않고 취소 표시(취소일·사유)와 정정 줄 연결(ref_id)만 더함. 있는 기록·숫자는 그대로.
       for (const col of ['cancelled_at TEXT', 'cancel_reason TEXT', 'ref_id INTEGER']) {

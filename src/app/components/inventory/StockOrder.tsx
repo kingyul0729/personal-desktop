@@ -362,7 +362,8 @@ function VendorFields({ f, setF, title }: { f: VendorF; setF: (u: (x: VendorF) =
       <label className="sf-input"><span>회사명</span><input value={f.company} onChange={set('company')} placeholder="예: (주)에스메디글로벌" /></label>
     </div>
     <div className="iv-pickrow"><span>결제 방법 <i className="iv-req">*</i></span><div className="sf-pills" role="group" aria-label="결제 방법">{PAY_METHODS.map(m => <button key={m} type="button" role="checkbox" aria-checked={picked.includes(m)} onClick={() => toggle(m)}>{m}</button>)}</div></div>
-    <div className="iv-pickrow"><span>결제 시점 <i className="iv-req">*</i></span><div className="sf-pills" role="radiogroup" aria-label="결제 시점">{(['order', 'month'] as const).map(t => <button key={t} type="button" role="radio" disabled={autoOrder(f.payment_method) && t === 'month'} aria-checked={(autoOrder(f.payment_method) ? 'order' : f.pay_timing) === t} onClick={() => setF(x => ({ ...x, pay_timing: t }))}>{TIMING_LABEL[t]}</button>)}</div></div>
+    {autoOrder(f.payment_method) ? <div className="iv-pickrow"><span>결제 시점</span><span className="iv-ptag is-paid">결제 완료</span></div>
+      : <div className="iv-pickrow"><span>결제 시점 <i className="iv-req">*</i></span><div className="sf-pills" role="radiogroup" aria-label="결제 시점">{(['order', 'month'] as const).map(t => <button key={t} type="button" role="radio" aria-checked={f.pay_timing === t} onClick={() => setF(x => ({ ...x, pay_timing: t }))}>{TIMING_LABEL[t]}</button>)}</div></div>}
     {picked.includes('계좌입금') && <div className="iv-fgrid">
       <label className="sf-input"><span>은행</span><input value={f.bank} onChange={set('bank')} placeholder="은행 이름" /></label>
       <label className="sf-input"><span>계좌번호</span><input value={f.account} onChange={set('account')} inputMode="numeric" placeholder="000-00-000000" /></label>
@@ -441,7 +442,7 @@ function VendorLine({ vendor, open, setOpen, state, notify, onSaved }: { vendor:
   return <>
     <div className="iv-vline"><span>결제</span>
       <span className="iv-ptag is-method">{vendor.payment_method || '결제 방법 —'}</span>
-      <span className={`iv-ptag${t ? '' : ' is-none'}`}>{t ? TIMING_LABEL[t] : '결제 시점 미정'}</span>
+      {autoOrder(vendor.payment_method || '') ? <span className="iv-ptag is-paid">결제 완료</span> : <span className={`iv-ptag${t ? '' : ' is-none'}`}>{t ? TIMING_LABEL[t] : '결제 시점 미정'}</span>}
       {vendor.active === 0 && <span className="iv-ptag is-stop">거래 중단</span>}
       <button type="button" className={`sf-btn iv-vbtn${open ? ' is-on' : ''}`} onClick={() => { setOpen(!open); setF(vendorF(vendor)); }}>업체 정보</button></div>
     {open && <div className="iv-vedit">

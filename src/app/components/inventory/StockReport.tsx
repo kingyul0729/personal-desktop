@@ -23,7 +23,10 @@ const mdd = (d: string) => `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}`;
 const traded = (list: Pay[]) => list.filter(p => p.amount > 0 || (p.lines?.length ?? 0) > 0 || (p.refunds?.length ?? 0) > 0);
 const refundSum = (p: Pay) => (p.refunds || []).reduce((t, r) => t + r.amount, 0);
 function PayStatus({ p }: { p: Pay }) {
-  return <>{p.payment_method || '—'}<br />{p.status === '잔액 차감' ? <span className="iv-pstate is-bal">업체 잔액 결제</span> : p.status === '결제 완료' || p.status === '결제 예정' ? <span className={`iv-pstate ${p.status === '결제 완료' ? 'is-done' : 'is-due'}`}>{p.status}</span> : <small className="iv-muted">{p.status || '—'}</small>}</>;
+  // 2026-11-20 사용자: 계좌입금·방문결제는 '· 결제 시 배송/월말 결제'를 붙이고, 업체 잔액으로 낸 것도 결제는 끝났으니 '결제 완료'
+  const st = p.status === '잔액 차감' ? '결제 완료' : p.status;
+  const how = p.payment_method && !/카드|홈페이지/.test(p.payment_method) && p.timing ? ` · ${p.timing === 'order' ? '결제 시 배송' : '월말 결제'}` : '';
+  return <>{p.payment_method ? `${p.payment_method}${how}` : '—'}<br />{st === '결제 완료' || st === '결제 예정' ? <span className={`iv-pstate ${st === '결제 완료' ? 'is-done' : 'is-due'}`}>{st}</span> : <small className="iv-muted">{st || '—'}</small>}</>;
 }
 // 업체 잔액으로 낸 결제(2026-11-20 사용자 '결제했는데 이중결제해서 이만큼 빠졌다고 꼭 표시'): 구매 금액 → 중복 결제 잔액 차감 → 실제 결제금액
 const balLabel = (p: Pay) => `${p.bal_reason ? `${p.bal_reason.split(',')[0]} ` : '업체 '}잔액 차감`;
@@ -53,11 +56,13 @@ function PayTable({ list }: { list: Pay[] }) {
     {big && <div className="iv-inv-big" role="dialog" aria-label="거래명세서" onClick={() => setBig(null)}>{big.map(id => <InvThumb key={id} id={id} />)}<a href={invoiceSrc(big[0])} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}>원본 열기</a></div>}</div>;
 }
 function BankTable({ list }: { list: Pay[] }) {
-  const rows = list.filter(p => p.amount > 0 && /계좌/.test(p.payment_method || ''));
-  if (!rows.length) return <p className="sf-hint">기록 없음</p>;
-  return <div className="iv-scroll"><table className="iv-form-tbl"><thead><tr><th>업체</th><th className="c">예금주</th><th className="c">은행</th><th className="c">계좌번호</th><th className="num">결제금액</th></tr></thead>
-    <tbody>{rows.map(p => <tr key={p.vendor_id} className="is-bank"><td>{p.name}</td><td className="c">{p.holder || '—'}</td><td className="c">{p.bank || '—'}</td><td className="c">{p.account || '—'}</td><td className="num"><b>{won(p.amount)}</b></td></tr>)}</tbody></table></div>;
+  // 2026-11-20 사용자: 계좌입금 표는 월말 결제(원장님이 입금할 것)만 — 결제 시 배송은 이미 결제했으니 안 보임
+  const rows = bankRows(list);
+  if (!rows.length) return null;
+  return <><h4 className="iv-paysub">계좌입금</h4><div className="iv-scroll"><table className="iv-form-tbl"><thead><tr><th>업체</th><th className="c">예금주</th><th className="c">은행</th><th className="c">계좌번호</th><th className="num">결제금액</th></tr></thead>
+    <tbody>{rows.map(p => <tr key={p.vendor_id} className="is-bank"><td>{p.name}</td><td className="c">{p.holder || '—'}</td><td className="c">{p.bank || '—'}</td><td className="c">{p.account || '—'}</td><td className="num"><b>{won(p.amount)}</b></td></tr>)}</tbody></table></div></>;
 }
+const bankRows = (list: Pay[]) => list.filter(p => p.amount > 0 && p.timing === 'month' && /계좌/.test(p.payment_method || ''));
 
 
 export function StockReport() {
@@ -136,7 +141,7 @@ export function MonthReport({ a, b, book }: { a: MonthRep; b: MonthRep; book?: B
         <tbody>{a.prepaid.map(p => <tr key={p.id}><td>{p.name}</td><td className="num"><b>{withUnit(p.vendor_stock, p.stock_unit)}</b></td><td className="num">{withUnit(p.hospital_stock, p.stock_unit)}</td></tr>)}</tbody></table></Block>}
     {a.payments && (() => { const list = traded(a.payments); return <Block n={++n} title="입고·결제 내역">
       <PayTable list={list} />
-      <h4 className="iv-paysub">계좌입금</h4><BankTable list={list} />
+      <BankTable list={list} />
       <h4 className="iv-paysub">결제 요약</h4>
       {(() => { const bal = list.reduce((x, p) => x + (p.bal_used || 0), 0), why = list.find(p => p.bal_used)?.bal_used ? balLabel(list.find(p => p.bal_used)!) : '';
         return <div className="iv-scroll"><table className="iv-form-tbl"><thead><tr><th className="c">결제 완료</th><th className="c">결제 예정</th>{bal > 0 && <th className="c">{why}</th>}<th className="c">합 계</th></tr></thead>

@@ -177,3 +177,12 @@ test('oldafter1: 예전 앱 출고 후 병원 재고와 달마다 같게(기초 
   const st = (await call(e, '/state')).data.items;
   assert.deepEqual([1027, 2008, 1002, 4008].map(id => st.find(i => i.id === id).hospital_stock), [0, 10, 2, 5]); // 지금 병원재고 그대로
 });
+
+test('paymethod1: 중외는 11월까지 계좌입금 · 결제 시 배송, 12월부터 홈페이지결제(온라인)', async () => {
+  const e = env();
+  await call(e, '/state');
+  const m = async mo => (await call(e, `/report?month=${mo}`)).data.payments.find(p => p.vendor_id === 3);
+  const nov = await m('2026-11'), dec = await m('2026-12');
+  assert.deepEqual([nov.payment_method, nov.timing, nov.when], ['계좌입금', 'order', '결제 시 배송']);
+  assert.deepEqual([dec.payment_method, dec.timing], ['홈페이지결제', 'order']);
+});

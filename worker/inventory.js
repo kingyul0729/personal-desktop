@@ -933,12 +933,13 @@ async function monthReport(db, month, brief = false) {
     WHERE t.deleted_at IS NULL AND t.cancelled_at IS NULL AND t.daily_date IS NULL AND (t.kind IN ('in','prepaid_in') OR (t.kind = 'prepaid_buy' AND t.vendor_delta > 0)) AND t.date BETWEEN ? AND ? ORDER BY t.date, t.id`, from, to);
   const byVendor = new Map();
   for (const r of [...pays, ...prepaidPays]) { const k = r.vendor_id ?? 0; const b = byVendor.get(k) || { amount: 0, dates: new Set() }; b.amount += r.amount || 0; b.dates.add(r.pay_date); byVendor.set(k, b); }
-  const allV = await all(db, 'SELECT id, name, company, payment_method, pay_timing, bank, account, holder, active FROM inv_vendors ORDER BY sort, id');
+  // 결제 방법이 바뀐 업체(method_from = 새 방법이 시작되는 달)는 그 전 달 보고서에 예전 방법으로(2026-11-20 사용자: 중외 11월까지 계좌입금, 12월부터 온라인)
+  const allV = (await all(db, 'SELECT * FROM inv_vendors ORDER BY sort, id')).map(v => (v.method_from && month < v.method_from && v.prev_payment_method ? { ...v, payment_method: v.prev_payment_method, pay_timing: v.prev_pay_timing } : v));
   // 업체 잔액 환급 입금(2026-11-20 사용자 '월말·연말 5번에 넣어줘'): 그 달 환급 입금을 업체 줄에 같이(결제금액·합계는 그대로)
   const balWhy = new Map((await all(db, `SELECT vendor_id, group_concat(DISTINCT reason) AS r FROM inv_vendor_bal WHERE kind = 'add' AND deleted_at IS NULL GROUP BY vendor_id`)).map(r => [r.vendor_id, r.r]));
   const refundRows = await all(db, `SELECT vendor_id, date, amount FROM inv_vendor_bal WHERE kind = 'refund' AND deleted_at IS NULL AND date BETWEEN ? AND ? ORDER BY date, id`, from, to);
   const lastDay = new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0)).toISOString().slice(0, 10);
-  const WHEN = { order: '주문 시 결제', month: '월말 결제' };
+  const WHEN = { order: '결제 시 배송', month: '월말 결제' };
   const rowsOf = v => {
     const b = byVendor.get(v.id ?? 0), timing = timingOf(v), used = usedBy.get(v.id) || 0, amount = (b?.amount || 0) - used; // 결제금액 = 실제 결제(잔액 차감 뺌)
     const mine = ins.filter(r => (r.vendor_id ?? 0) === (v.id ?? 0)), vin = mine.filter(r => r.kind !== 'prepaid_buy');

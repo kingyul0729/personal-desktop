@@ -3025,3 +3025,6 @@ button.iv-pinv { cursor: zoom-in; }
 .iv-balcalc { display: inline-flex; flex-direction: column; align-items: flex-end; gap: 2px; }
 .iv-balcalc small { font-size: 12px; color: #8d9197; white-space: nowrap; }
 .iv-balcalc small + small { color: #44617c; }
+
+/* 카드·홈페이지결제 = 늘 결제 완료(2026-11-20) */
+.iv-ptag.is-paid { background: #eaf4ee; color: #3f7a58; }
