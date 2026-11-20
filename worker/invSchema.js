@@ -2,6 +2,7 @@ import { BOOK_SCHEMA } from './staffBook.js';
 import { BAL_SCHEMA } from './invBalance.js';
 import { VENDOR_BASE, ITEMS, EXTRA_ITEMS } from './invMaster.js';
 import { moveTxDate, keepCountStmts } from './invTxDate.js';
+import { OLD_AFTER_PLAN } from './invDailyFix.js';
 // 예전 재고관리 앱의 직원 표 구조(마이그레이션 0009·0010·0014·0022) — tests/fixtures/inv-staff.sql 에서 만든 것.
 // 빈 데이터베이스에 직원 표가 없을 때 한 번만 실행한다.
 const INV_STAFF_SCHEMA = [
@@ -407,12 +408,7 @@ export async function ensureInvSchema(db) {
       // 그 품목의 11/5까지 기록이 예전 앱 자료 그대로일 때만(날짜·종류·증감), 아니면 그 품목은 손대지 않음.
       try {
         const now = Date.now(), M1 = '예전 앱 재고에 맞춤 · 기초 재고', M2 = '예전 앱 재고에 맞춤 · 기록 없는 차이';
-        const PLAN = [
-          { id: 1027, expect: [['2026-06-12', 'out', -1], ['2026-07-21', 'out', -1], ['2026-08-26', 'out', -1], ['2026-11-03', 'out', -2]], add: [['2026-06-11', 1, M1], ['2026-07-21', -1, M2]] },
-          { id: 2008, expect: [['2026-06-16', 'out', -1], ['2026-08-10', 'out', -1], ['2026-08-26', 'out', -1], ['2026-10-07', 'in', 10], ['2026-11-02', 'out', -3]], add: [['2026-06-15', 4, M1], ['2026-06-16', -3, M2], ['2026-10-07', -1, M2]] },
-          { id: 1002, expect: [['2026-06-02', 'in', 6], ['2026-07-31', 'out', -1], ['2026-10-15', 'out', -1]], add: [['2026-06-02', 1, M1], ['2026-07-31', -1, M2]] },
-          { id: 4008, expect: [['2026-09-08', 'out', -3], ['2026-09-08', 'in', 10], ['2026-11-03', 'out', -2]], reorder: true },
-        ];
+        const PLAN = OLD_AFTER_PLAN.map(p => ({ ...p, add: (p.add || []).map(([d, q, k]) => [d, q, k === 1 ? M1 : M2]) }));
         for (const p of PLAN) {
           const rows = (await db.prepare(`SELECT * FROM inv_tx WHERE item_id = ? AND deleted_at IS NULL AND date <= '2026-11-05' ORDER BY date, id`).bind(p.id).all()).results || [];
           const same = rows.length === p.expect.length && rows.every((r, k) => r.date === p.expect[k][0] && r.kind === p.expect[k][1] && Math.round(Number(r.hospital_delta) * 1000) === p.expect[k][2] * 1000);

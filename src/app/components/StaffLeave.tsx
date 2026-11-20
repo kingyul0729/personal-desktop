@@ -6,7 +6,8 @@ import { OldDataBanner } from './Inventory';
 import { StaffUnavailable } from './StaffSchedule';
 import { toneOf, vividOf } from './staffTone';
 import { staffGet, staffPost, StaffApiError } from '../staffApi';
-import { type MonthData, type StaffMember, WEEKDAYS, dateIn, daysInMonth, isRedDay, leaveSeq, monthLabel, optionsFor, payloadFor, shiftMonth, statePatch, todayLocal, weekdayOf } from '../staffRules';
+import { runUseFix } from '../leaveFixFlow';
+import { type MonthData, type StaffMember, WEEKDAYS, dateIn, daysInMonth, isRedDay, leaveSeq, monthLabel, optionsFor, shiftMonth, todayLocal, weekdayOf } from '../staffRules';
 
 // 직원연차 — 직원마다 자기 달력에 연차 날짜(순번 n/총)를 표시하고, 위에 지급연차 / 사용연차 / 잔여연차(누적, 월별 아님)를 보인다(2026-11-08 사용자 지정).
 // 연차 사용/되돌림은 직원스케줄 달력에서 '연차'를 고르면 서버가 처리한다(예전 앱과 같음).
@@ -163,18 +164,7 @@ function LeaveFix({ staff, log, kind, nums, after, onClose, onDone }: { staff: S
     setBusy(true); setError('');
     try {
       if (log.log_type === 'use') {
-        const from = log.log_date!;
-        if (kind === 'edit') {
-          if (date === from) throw new Error('바뀐 것이 없어요');
-          if (isRedDay(date)) throw new Error('빨간 날에는 연차를 넣지 않아요');
-          if (date.slice(0, 7) > todayLocal().slice(0, 7)) throw new Error('다음 달 연차는 직원스케줄에서 넣어 주세요');
-          const dst = await recOf(date);
-          if (dst?.attendance === '연차') throw new Error('그날은 이미 연차예요');
-          await staffPost('/attendance', payloadFor(staff, date, dst, statePatch('연차', staff, date, dst)));
-        }
-        const src = await recOf(from);
-        await staffPost('/attendance', payloadFor(staff, from, src, statePatch(state, staff, from, src)));
-        await staffPost(`/leave-fix/${log.id}`, { action: kind === 'edit' ? 'use-move' : 'use-cancel', reason: reason.trim(), date });
+        await runUseFix({ rec: recOf, post: staffPost }, staff, { logId: log.id, from: log.log_date!, kind, date, state, reason: reason.trim() });
       } else {
         await staffPost(`/leave-fix/${log.id}`, { action: kind, reason: reason.trim(), date, amount: Number(amount), total: Number(at), used: Number(au) });
       }

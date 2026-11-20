@@ -100,3 +100,69 @@ test('연차 사용: 사용일 수정(스케줄 같이 옮김)·취소(그날 �
   const f2 = ls.find(l => l.log_type === 'fix' && /취소/.test(l.memo));
   assert.deepEqual([f2.before_used, f2.after_used], [s0.used_leave, s0.used_leave - 1]);
 });
+
+// 중간 실패 검증(2026-11-21 '연차 수정이 순차 저장됩니다'): 화면 저장 순서(leaveFixFlow)를 실제 서버에 붙여 단계마다 끊어 본다.
+const { build } = await import('esbuild');
+const flowJs = await build({ stdin: { contents: `export { runUseFix } from './src/app/leaveFixFlow';`, resolveDir: process.cwd(), loader: 'ts' }, bundle: true, write: false, format: 'esm', platform: 'node', loader: { '.ts': 'ts', '.tsx': 'tsx' } });
+const { runUseFix } = await import('data:text/javascript;base64,' + Buffer.from(flowJs.outputFiles[0].text).toString('base64'));
+// fail: { n: 몇 번째 저장, when: 'before'(서버에 안 감) | 'after'(서버는 저장, 응답만 끊김), times }
+const api = (e, fail = {}) => { let k = 0, left = fail.times ?? 1; return {
+  rec: async d => ((await call(e, `/month?staff_id=2&month=${d.slice(0, 7)}`)).data.attendance || []).find(r => r.work_date === d) || null,
+  post: async (p, body) => { k++;
+    const hit = left > 0 && (fail.n === k || (fail.from && k >= fail.from && (fail.path ? p.startsWith(fail.path) : true)));
+    if (hit && fail.when === 'before') { left--; throw new Error('network'); }
+    const r = await call(e, p, body);
+    if (hit && fail.when === 'after') { left--; throw new Error('network'); }
+    if (r.status !== 200) throw new Error(r.data.error); return r.data; } }; };
+const stateOn = async (e, d) => ((await call(e, `/month?staff_id=2&month=${d.slice(0, 7)}`)).data.attendance || []).find(r => r.work_date === d)?.attendance ?? null;
+const member = { id: 2, is_leader: 0, name: '직원' };
+const setup = async () => { const e = env(); await me(e);
+  await call(e, '/attendance', att('2026-11-05', '정상근무', { start_time: '10:00', end_time: '19:30' }));
+  await call(e, '/attendance', att('2026-11-04', '연차'));
+  const s0 = await me(e); const u = (await logs(e)).find(l => l.log_type === 'use' && l.log_date === '2026-11-04');
+  return { e, s0, u }; };
+const IN = (u, kind) => ({ logId: u.id, from: '2026-11-04', kind, date: kind === 'edit' ? '2026-11-05' : '2026-11-04', state: '정상근무', reason: '테스트' });
+
+test('연차 수정 중간 실패: 첫 저장 실패 → 아무것도 안 바뀜', async () => {
+  const { e, s0, u } = await setup();
+  await assert.rejects(runUseFix(api(e, { n: 1, when: 'before' }), member, IN(u, 'cancel'), '2026-11-21'));
+  assert.equal(await stateOn(e, '2026-11-04'), '연차');
+  assert.equal((await me(e)).used_leave, s0.used_leave);
+  assert.equal((await logs(e)).some(l => l.log_type === 'fix'), false);
+});
+
+test('연차 사용일 수정 중간 실패: 새 날 연차 저장 실패 → 원래 날 연차로 되돌림, 사용연차 그대로', async () => {
+  const { e, s0, u } = await setup();
+  await assert.rejects(runUseFix(api(e, { n: 2, when: 'before' }), member, IN(u, 'edit'), '2026-11-21'), /되돌렸어요/);
+  assert.equal(await stateOn(e, '2026-11-04'), '연차');
+  assert.equal(await stateOn(e, '2026-11-05'), '정상근무');
+  assert.equal((await me(e)).used_leave, s0.used_leave);
+  // 되돌린 뒤 새 사용 줄로 다시 하면 정상
+  const u2 = (await logs(e)).find(l => l.log_type === 'use' && l.log_date === '2026-11-04' && l.can_fix);
+  await runUseFix(api(e), member, IN(u2, 'edit'), '2026-11-21');
+  assert.deepEqual([await stateOn(e, '2026-11-04'), await stateOn(e, '2026-11-05')], ['정상근무', '연차']);
+  assert.equal((await me(e)).used_leave, s0.used_leave);
+});
+
+test('연차 사용일 수정: 기록 연결이 계속 실패 → 스케줄·사용연차는 맞고, 저장을 다시 누르면 연결만 해서 끝남', async () => {
+  const { e, s0, u } = await setup();
+  await assert.rejects(runUseFix(api(e, { from: 3, path: '/leave-fix', when: 'before', times: 3 }), member, IN(u, 'edit'), '2026-11-21'), /한 번 더/);
+  assert.deepEqual([await stateOn(e, '2026-11-04'), await stateOn(e, '2026-11-05')], ['정상근무', '연차']);
+  assert.equal((await me(e)).used_leave, s0.used_leave);
+  await runUseFix(api(e), member, IN(u, 'edit'), '2026-11-21'); // 같은 창에서 다시 저장
+  const ls = await logs(e);
+  assert.ok(ls.find(l => l.id === u.id).cancelled_at);
+  assert.equal(ls.filter(l => l.log_type === 'fix').length, 1);
+  assert.equal(ls.filter(l => l.log_type === 'use' && l.log_date === '2026-11-05').length, 1); // 새 날 연차 두 번 안 들어감
+  assert.equal((await me(e)).used_leave, s0.used_leave);
+});
+
+test('연차 사용 취소: 연결 응답만 끊김 → 다시 보내도 정정 줄 하나, 사용연차 −1 한 번', async () => {
+  const { e, s0, u } = await setup();
+  await runUseFix(api(e, { n: 2, when: 'after' }), member, IN(u, 'cancel'), '2026-11-21');
+  const ls = await logs(e);
+  assert.equal(ls.filter(l => l.log_type === 'fix').length, 1);
+  assert.ok(ls.find(l => l.id === u.id).cancelled_at);
+  assert.equal((await me(e)).used_leave, s0.used_leave - 1);
+  assert.equal(await stateOn(e, '2026-11-04'), '정상근무');
+});

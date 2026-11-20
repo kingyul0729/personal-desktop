@@ -5,8 +5,8 @@ import { build } from 'esbuild';
 import { handleApi } from '../worker/index.js';
 
 // 품목별 재고(2026-11-19): 변동 내역 걸러 보기·재고 차이 표가 서버 기록과 정확히 맞는지
-const bundled = await build({ stdin: { contents: `export { txIs, diffDays, txTitle } from './src/app/components/inventory/StockMove';`, resolveDir: process.cwd(), loader: 'ts' }, bundle: true, write: false, format: 'esm', platform: 'node', jsx: 'automatic', loader: { '.tsx': 'tsx', '.ts': 'ts' } });
-const { txIs, diffDays, txTitle } = await import('data:text/javascript;base64,' + Buffer.from(bundled.outputFiles[0].text).toString('base64'));
+const bundled = await build({ stdin: { contents: `export { txIs, diffDays, txTitle, monthUsed } from './src/app/components/inventory/StockMove';`, resolveDir: process.cwd(), loader: 'ts' }, bundle: true, write: false, format: 'esm', platform: 'node', jsx: 'automatic', loader: { '.tsx': 'tsx', '.ts': 'ts' } });
+const { txIs, diffDays, txTitle, monthUsed } = await import('data:text/javascript;base64,' + Buffer.from(bundled.outputFiles[0].text).toString('base64'));
 
 function d1(s) { return { prepare(sql) { const st = s.prepare(sql); const b = (...v) => ({ async first() { return st.get(...v) ?? null; }, async all() { return { results: st.all(...v) }; }, async run() { return { meta: { changes: st.run(...v).changes } }; } }); return { bind: b, ...b() }; },
   async batch(l) { s.exec('BEGIN'); try { const r = []; for (const x of l) r.push(await x.run()); s.exec('COMMIT'); return r; } catch (e) { s.exec('ROLLBACK'); throw e; } }, async exec(q) { s.exec(q); } }; }
@@ -30,6 +30,9 @@ test('item hub: filters and 재고 차이 rows match the ledger; stock = sum of 
   const n = f => rows.filter(t => txIs(t, f)).length;
   assert.deepEqual({ use: n('use'), out: n('out'), diff: n('diff') }, { use: 2, out: 1, diff: 2 }); // 재고 맞추기 11/2 + 11/9 재고 차이
   assert.equal(txTitle(rows.find(t => t.kind === 'out' && !t.daily_date)), '출고');
+  // N월 사용 = 일일재고 사용(3 + 2) + 일반 출고(1) — 출고만 걸러 받아도 같은 값
+  assert.equal(monthUsed(rows), 6);
+  assert.equal(monthUsed((await call(e, `/tx?from=2026-11-01&to=2026-11-31&kind=out&item_id=${pack.id}`)).data.rows), 6);
   const d9 = diffDays(rows).find(d => d.date === '2026-11-09');
   assert.deepEqual({ used: d9.used, book: d9.book, closing: d9.closing, diff: d9.diff }, { used: 3, book: 6, closing: 5, diff: -1 });
   // 지금 재고 = 이 달 기록 증감 합(이 달 전 재고 0)

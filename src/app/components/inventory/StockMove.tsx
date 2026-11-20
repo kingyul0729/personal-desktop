@@ -115,6 +115,8 @@ export const ITEM_FILTERS: [ItemFilter, string][] = [['all', '전체'], ['in', '
 export const txIs = (t: InvTx, f: ItemFilter) => f === 'all' ? true : f === 'in' ? t.kind === 'in' || (t.kind === 'prepaid_in' && t.hospital_delta >= 0)
   : f === 'use' ? t.kind === 'out' && !!t.daily_date : f === 'out' ? t.kind === 'out' && !t.daily_date
   : f === 'diff' ? t.kind === 'adjust' && t.hospital_delta !== 0 : t.vendor_delta !== 0;
+// 품목별 재고 'N월 사용'(2026-11-21 사용자 '일반 출고가 빠짐'): 그 달 출고 기록 모두(일일재고 사용 + 일반 출고) — 월말보고 사용량과 같은 기준
+export const monthUsed = (rows: InvTx[]) => Math.round(rows.filter(t => t.kind === 'out').reduce((a, t) => a - t.hospital_delta, 0) * 1000) / 1000;
 export const txTitle = (t: InvTx) => t.kind === 'out' ? (t.daily_date ? '일일재고 사용' : '출고') : t.kind === 'adjust' ? (t.hospital_delta === 0 && t.vendor_delta !== 0 ? '업체 보관 잔량 고치기' : t.daily_date ? '재고 차이' : '재고 맞추기')
   : t.kind === 'prepaid_buy' ? '선결제' : t.kind === 'prepaid_in' ? '업체 보관에서 입고' : '입고';
 // 재고 차이 날짜별: 그날 사용(일일재고 사용 합) · 실제 마감재고(그날 마지막 기록 뒤 병원재고) · 장부 재고(= 실제 − 차이) · 차이(그날 재고 맞추기 합)

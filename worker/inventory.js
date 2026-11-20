@@ -20,6 +20,7 @@ import { ensureInvSchema, INV_TABLES } from './invSchema.js';
 import { moveTxDate, keepCountStmts, ordered } from './invTxDate.js';
 import { handleBalance, planUse, useStmt, undoUseStmt, usedInPeriod, balTable } from './invBalance.js';
 import { oldFixLeft } from './invOldFix.js';
+import { fixCheck } from './invCheck.js';
 
 const json = (body, status = 200) => Response.json(body, { status, headers: { 'cache-control': 'no-store' } });
 const bad = (error, status = 400) => json({ error }, status);
@@ -711,6 +712,7 @@ async function inventoryRoute(request, env, url, user, db, path, m) {
     }
 
     // ── 일일 재고(마감) ──
+    if (m === 'GET' && path === '/fix-check') return json(await fixCheck(db)); // 재고 기록 점검(읽기만, invCheck.js)
     if (m === 'GET' && path === '/fix-left') return oldFixLeft(inventoryRoute, env, url, db); // 예전 일일재고 사진 숫자 넣기(invOldFix.js)
     if (m === 'GET' && path === '/daily') {
       const date = okDate(url.searchParams.get('date')) ? url.searchParams.get('date') : kstToday();

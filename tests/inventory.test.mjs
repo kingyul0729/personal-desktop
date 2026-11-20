@@ -742,6 +742,15 @@ test('check: dailyfix1 finishes with the photo 10/31 and keeps the lead\'s 11/2�
   assert.deepEqual(r(await day('2026-11-02')), { close: 24, used: 2 });
   assert.deepEqual(r(await day('2026-11-03')), { close: 17, used: 6 });
   assert.equal(item(e, '보관용 3종 시트팩').hospital_stock, 17);
+  // 점검(2026-11-21): 사진 46일 모두 그 날 끝 병원재고 = 사진 마감재고
+  const chk = (await call(e, '/fix-check')).data;
+  assert.equal(chk.daily.checked > 200, true);
+  assert.deepEqual(chk.daily.wrong, []);
+  // 기록 하나가 빠지면(장부 밖에서 10/30 기록만 생김) 그 앞 사진 날짜들이 차이로 보임
+  e.inv.prepare(`INSERT INTO inv_tx (date, kind, item_id, qty, hospital_delta, vendor_delta) VALUES ('2026-10-30', 'out', ?, 1, -1, 0)`).run(id);
+  const w = (await call(e, '/fix-check')).data.daily.wrong;
+  assert.deepEqual(w.find(x => x.date === '2026-10-29' && x.item === '보관용 3종 시트팩'), { date: '2026-10-29', item: '보관용 3종 시트팩', photo: 31, app: 32 });
+  assert.equal(w.some(x => x.date === '2026-10-31'), false);
 });
 
 test('user spec 11-10: skipped days change nothing, the next count sets hospital stock exactly once', async () => {

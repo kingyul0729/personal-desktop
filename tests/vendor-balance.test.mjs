@@ -176,6 +176,25 @@ test('oldafter1: 예전 앱 출고 후 병원 재고와 달마다 같게(기초 
   assert.deepEqual(after(4008), [10, 7, 5]); // 9/8 입고 → 출고 순서
   const st = (await call(e, '/state')).data.items;
   assert.deepEqual([1027, 2008, 1002, 4008].map(id => st.find(i => i.id === id).hospital_stock), [0, 10, 2, 5]); // 지금 병원재고 그대로
+  // 점검: 4품목 모두 맞춤이 들어감
+  assert.deepEqual((await call(e, '/fix-check')).data.after.map(x => x.status), ['applied', 'applied', 'applied', 'applied']);
+});
+
+test('fix-check: 기록이 예상과 달라 oldafter1이 건너뛴 품목은 skipped, 사진 날짜 재고가 다르면 일일재고 차이로 보임(읽기만)', async () => {
+  const { resetInvSchemaCache } = await import('../worker/invSchema.js');
+  const e = env();
+  await call(e, '/state');
+  e.inv.prepare(`INSERT INTO inv_tx (date, kind, item_id, qty, hospital_delta, vendor_delta) VALUES ('2026-06-02', 'in', 1002, 6, 6, 0), ('2026-07-31', 'out', 1002, 1, -1, 0)`).run(); // 10/15 기록 빠짐
+  e.inv.prepare(`INSERT INTO inv_meta (key, value) VALUES ('import', 'x')`).run();
+  resetInvSchemaCache(); await call(e, '/state');
+  const before = e.inv.prepare('SELECT count(*) AS n FROM inv_tx').get().n;
+  const chk = (await call(e, '/fix-check')).data;
+  const c = chk.after.find(x => x.item_id === 1002);
+  assert.deepEqual([c.status, c.records, c.expected], ['skipped', 2, 3]);
+  assert.equal(chk.fixes.oldafter1, true);
+  assert.equal(chk.ok, false);
+  assert.ok(chk.daily.wrong.length > 0); // 사진 숫자를 아직 안 넣은 곳 → 차이로 보임
+  assert.equal(e.inv.prepare('SELECT count(*) AS n FROM inv_tx').get().n, before); // 점검은 기록을 바꾸지 않음
 });
 
 test('paymethod1: 중외는 11월까지 계좌입금 · 결제 시 배송, 12월부터 온라인결제(온라인)', async () => {

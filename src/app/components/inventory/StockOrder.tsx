@@ -4,7 +4,7 @@ import { LoadingBox, SavingMark } from '../Feedback';
 import { askConfirm } from '../AlertDialog';
 import { readWon } from '../../koreanAmount';
 import { type InvItem, type InvOption, type InvOrder, type InvState, type InvTx, type InvVendor, PAY_METHODS, TIMING_LABEL, UNITS, announceInventory, fmtQty, fmtWon, invGet, invSend, subscribeInventory, invUploadInvoice, md, optOpen, optState, timingOf, useInventory } from '../../inventoryApi';
-import { OutForm, TxLog } from './StockMove';
+import { OutForm, TxLog, monthUsed } from './StockMove';
 import { AdjustDialog } from './StockCheck';
 import { type Flag, FlagTag, Modal, PhotoPick, Problem, QtyInput, Seg, Shell, errText, flagOf, useToast, withUnit } from './shared';
 
@@ -83,9 +83,9 @@ function ItemDetail({ item, state, notify, stopped, tag, onPickOpt }: { item: In
   const orders = state.orders.filter(o => o.item_id === item.id);
   const vendor = state.vendors.find(v => v.id === item.vendor_id) || null;
   const month = state.today.slice(0, 7), u = item.stock_unit;
-  // 이달 사용 = 이번 달 일일재고 사용 합(보기만)
+  // 이달 사용 = 이번 달 출고 기록 모두(일일재고 사용 + 일반 출고, 보기만)
   useEffect(() => { let on = true; const load = () => invGet('/tx', { from: `${month}-01`, to: `${month}-31`, kind: 'out', item_id: String(item.id) })
-    .then(r => { if (on) setUsed(Math.round((r.rows as InvTx[]).filter(t => t.daily_date).reduce((a, t) => a - t.hospital_delta, 0) * 1000) / 1000); }).catch(() => { if (on) setUsed(null); });
+    .then(r => { if (on) setUsed(monthUsed(r.rows as InvTx[])); }).catch(() => { if (on) setUsed(null); });
     void load(); const off = subscribeInventory(() => { void load(); }); return () => { on = false; off(); }; }, [item.id, month]);
   const left = (o: InvOrder) => Math.round((o.qty + o.bonus_qty - (o.received_qty || 0)) * 1000) / 1000;
   const close = () => setDlg(null);
