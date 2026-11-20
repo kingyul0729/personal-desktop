@@ -27,21 +27,23 @@ export function useStmt(db, vendorId, amount, date, user, orderIdSql = '(SELECT 
 }
 /** 주문이 취소되면 그 주문에 걸린 차감도 되돌린다(잔액이 다시 생김). */
 export const undoUseStmt = (db, orderId, user) => db.prepare(`UPDATE inv_vendor_bal SET deleted_at = ?, deleted_by = ? WHERE order_id = ? AND kind = 'use' AND deleted_at IS NULL`).bind(Date.now(), user, orderId);
-/** 주문 때 잔액에서 쓸 금액: min(남은 금액, 주문 금액). */
+// 2026-11-20 사용자 '차감을 부가세 포함으로': 잔액(거래원장 금액)은 부가세 포함, 앱 가격은 부가세 빼고 → 차감은 주문 금액 × 1.1.
+export const withVat = n => Math.round((Number(n) || 0) * 1.1);
+/** 주문 때 잔액에서 쓸 금액: min(남은 금액, 주문 금액 + 부가세). */
 export async function planUse(db, vendorId, amount) {
   if (!vendorId || !(amount > 0)) return 0;
-  return Math.min(await balanceOf(db, vendorId), won(amount));
+  return Math.min(await balanceOf(db, vendorId), withVat(amount));
 }
 
 const PAID_AT_ORDER = `(v.pay_timing = 'order' OR (coalesce(v.pay_timing, '') NOT IN ('order', 'month') AND (v.payment_method LIKE '%카드%' OR v.payment_method LIKE '%홈페이지%')))`;
-/** 보고서용: 기간 안에 '구매 금액이 잡히는' 주문에 걸린 차감(업체별 합) — 카드·홈페이지·선결제 = 주문일, 월말 결제 = 금액이 걸린 첫 입고일. */
+/** 보고서용(차감은 부가세 포함이라 ÷1.1, 주문 금액까지): 기간 안에 '구매 금액이 잡히는' 주문에 걸린 차감(업체별 합) — 카드·홈페이지·선결제 = 주문일, 월말 결제 = 금액이 걸린 첫 입고일. */
 export async function usedInPeriod(db, from, to) {
-  const rows = await all(db, `SELECT b.vendor_id, b.amount, CASE WHEN o.prepaid = 1 OR ${PAID_AT_ORDER} THEN o.ordered_at
+  const rows = await all(db, `SELECT b.vendor_id, b.amount, o.amount AS order_amount, CASE WHEN o.prepaid = 1 OR ${PAID_AT_ORDER} THEN o.ordered_at
       ELSE (SELECT min(t.date) FROM inv_tx t WHERE t.order_id = o.id AND t.kind = 'in' AND t.amount > 0 AND t.deleted_at IS NULL) END AS pay_date
     FROM inv_vendor_bal b JOIN inv_orders o ON o.id = b.order_id LEFT JOIN inv_vendors v ON v.id = b.vendor_id
     WHERE b.kind = 'use' AND b.deleted_at IS NULL AND o.status <> 'cancelled'`);
   const by = new Map();
-  for (const r of rows) if (r.pay_date && r.pay_date >= from && r.pay_date <= to) by.set(r.vendor_id, (by.get(r.vendor_id) || 0) + won(r.amount));
+  for (const r of rows) if (r.pay_date && r.pay_date >= from && r.pay_date <= to) by.set(r.vendor_id, (by.get(r.vendor_id) || 0) + Math.min(won(r.order_amount), won(r.amount / 1.1))); // 보고서 금액은 앱 가격(부가세 빼고) 기준
   return by;
 }
 /** 보고서 표: 업체별 기간 전 남은 금액 · 등록 · 차감 · 환급 · 기간 말 남은 금액(기록 날짜 기준). 기록이 있는 업체만. */

@@ -297,12 +297,13 @@ export function PrepaidOrder({ item, orders, today, notify, vendor = null, bare,
 }
 
 // 업체 잔액에서 차감(2026-11-19 사용자): 체크하면 주문 금액과 남은 잔액 중 작은 만큼 빼고, 모자라면 나머지만 실제 결제.
+// 2026-11-20 사용자: 차감은 부가세 포함(주문 금액 × 1.1), 실제 결제는 앱 가격 기준(보고서와 같게).
 function BalanceUse({ balance, total, on, setOn }: { balance: number; total: number; on: boolean; setOn: (v: boolean) => void }) {
-  const use = Math.min(balance, total);
+  const use = Math.min(balance, Math.round(total * 1.1));
   return <div className="iv-baluse">
     <label className="iv-baluse-check"><input type="checkbox" checked={on} onChange={e => setOn(e.target.checked)} />업체 잔액에서 차감 <small>남은 금액 {fmtWon(balance)}</small></label>
-    {on && <dl><div><dt>주문 금액</dt><dd>{fmtWon(total)}</dd></div><div><dt>잔액 차감</dt><dd>−{fmtWon(use)}</dd></div>
-      <div className="is-total"><dt>실제 결제</dt><dd>{fmtWon(total - use)}</dd></div><div><dt>주문 후 잔액</dt><dd>{fmtWon(balance - use)}</dd></div></dl>}
+    {on && <dl><div><dt>주문 금액</dt><dd>{fmtWon(total)}</dd></div><div><dt>잔액 차감(부가세 포함)</dt><dd>−{fmtWon(use)}</dd></div>
+      <div className="is-total"><dt>실제 결제</dt><dd>{fmtWon(Math.max(0, total - Math.round(use / 1.1)))}</dd></div><div><dt>주문 후 잔액</dt><dd>{fmtWon(balance - use)}</dd></div></dl>}
   </div>;
 }
 

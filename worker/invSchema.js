@@ -280,13 +280,30 @@ export async function ensureInvSchema(db) {
               db.prepare(`INSERT INTO inv_orders (item_id, option_id, option_label, ordered_at, qty, bonus_qty, amount, prepaid, status, received_at, memo, created_by, created_at) VALUES (?, NULL, '3개', '2026-05-06', 3, 0, 54543, 0, 'received', '2026-05-06', ?, 'system', ?)`).bind(it.id, memo, now),
               db.prepare(`INSERT INTO inv_tx (date, kind, item_id, qty, bonus_qty, amount, hospital_delta, vendor_delta, hospital_after, vendor_after, order_id, daily_date, invoice, memo, created_by, created_at)
                 VALUES ('2026-05-06', 'in', ?, 3, 0, 54543, 0, 0, ?, ?, (SELECT max(id) FROM inv_orders), NULL, 0, ?, 'system', ?)`).bind(it.id, it.hospital_stock || 0, it.vendor_stock || 0, memo, now),
-              db.prepare(`INSERT INTO inv_vendor_bal (vendor_id, date, kind, amount, reason, order_id, created_by, created_at) VALUES (3, '2026-05-06', 'use', 54543, '주문', (SELECT max(id) FROM inv_orders), 'system', ?)`).bind(now));
+              db.prepare(`INSERT INTO inv_vendor_bal (vendor_id, date, kind, amount, reason, order_id, created_by, created_at) VALUES (3, '2026-05-06', 'use', 59997, '주문', (SELECT max(id) FROM inv_orders), 'system', ?)`).bind(now));
           }
           await db.batch(stmts);
         }
         await db.prepare(`INSERT OR REPLACE INTO inv_meta (key, value) VALUES ('fixes', ?)`).bind(`${fixes} jwbal2`.trim()).run();
         fixes = `${fixes} jwbal2`.trim();
       } catch (e) { console.error('jwbal2', e); }
+    }
+    if (!fixes.includes('jwvat1') && await claimFix(db, 'jwvat1')) {
+      // 2026-11-20 사용자 '차감을 부가세 포함으로 맞춰줘': 주문 금액 그대로 뺀 차감을 주문 금액 × 1.1로(남은 금액이 0보다 적어지지 않는 만큼만). 등록·환급은 그대로.
+      try {
+        const rows = (await db.prepare(`SELECT b.id, b.vendor_id, b.amount, o.amount AS oa FROM inv_vendor_bal b JOIN inv_orders o ON o.id = b.order_id
+          WHERE b.kind = 'use' AND b.deleted_at IS NULL AND o.status <> 'cancelled' AND round(b.amount) = round(o.amount) ORDER BY b.date, b.id`).all()).results || [];
+        const left = new Map();
+        for (const r of rows) {
+          if (!left.has(r.vendor_id)) left.set(r.vendor_id, Math.round((await db.prepare(`SELECT coalesce(sum(CASE kind WHEN 'add' THEN amount ELSE -amount END), 0) AS b FROM inv_vendor_bal WHERE vendor_id = ? AND deleted_at IS NULL`).bind(r.vendor_id).first())?.b || 0));
+          const add = Math.max(0, Math.min(Math.round(r.oa * 1.1) - Math.round(r.amount), left.get(r.vendor_id)));
+          if (!add) continue;
+          await db.prepare(`UPDATE inv_vendor_bal SET amount = ?, updated_by = 'system', updated_at = ? WHERE id = ?`).bind(Math.round(r.amount) + add, Date.now(), r.id).run();
+          left.set(r.vendor_id, left.get(r.vendor_id) - add);
+        }
+        await db.prepare(`INSERT OR REPLACE INTO inv_meta (key, value) VALUES ('fixes', ?)`).bind(`${fixes} jwvat1`.trim()).run();
+        fixes = `${fixes} jwvat1`.trim();
+      } catch (e) { console.error('jwvat1', e); }
     }
     if (!fixes.includes('leavelog1')) {
       // 2026-11-20 사용자: 연차 기록 수정·취소 — 기록은 지우지 않고 취소 표시(취소일·사유)와 정정 줄 연결(ref_id)만 더함. 있는 기록·숫자는 그대로.

@@ -95,14 +95,14 @@ function BalForm({ st, vendor, kind, row, onClose, onDone }: { st: BalState; ven
     } catch (e) { setError(errText(e)); setBusy(false); }
   };
   const title = `${kind === 'add' ? '잔액 등록' : kind === 'refund' ? '환급 입금' : '잔액 차감'} · ${vendor.name}`;
-  const use = ord ? Math.min(vendor.balance, ord.amount) : 0;
+  const use = ord ? Math.min(vendor.balance, Math.round(ord.amount * 1.1)) : 0; // 차감은 부가세 포함
   return <Modal title={title} onClose={onClose}>
     {kind === 'use' ? <>
       <label className="sf-input"><span>주문</span><select value={f.order} onChange={e => setF(x => ({ ...x, order: e.target.value }))}>
         <option value="">주문 선택</option>{orders.map(o => <option key={o.id} value={o.id}>{day(o.ordered_at)} {o.item_name} · {o.option_label || `${fmtQty(o.qty)} ${o.stock_unit}`} · {won(o.amount)}원</option>)}</select></label>
       {!orders.length && <p className="sf-hint">기록 없음</p>}
-      {ord && <dl className="vb-calc"><div><dt>주문 금액</dt><dd>{won(ord.amount)}원</dd></div><div><dt>잔액 차감</dt><dd>−{won(use)}원</dd></div>
-        <div className="is-total"><dt>실제 결제</dt><dd>{won(ord.amount - use)}원</dd></div><div><dt>차감 후 남은 금액</dt><dd>{won(vendor.balance - use)}원</dd></div></dl>}
+      {ord && <dl className="vb-calc"><div><dt>주문 금액</dt><dd>{won(ord.amount)}원</dd></div><div><dt>잔액 차감(부가세 포함)</dt><dd>−{won(use)}원</dd></div>
+        <div className="is-total"><dt>실제 결제</dt><dd>{won(Math.max(0, ord.amount - Math.round(use / 1.1)))}원</dd></div><div><dt>차감 후 남은 금액</dt><dd>{won(vendor.balance - use)}원</dd></div></dl>}
     </> : <>
       {kind === 'add' && <div className="sf-input"><span>사유</span><div className="sf-pills">{st.reasons.map(r => <button key={r} type="button" aria-pressed={f.reason === r} onClick={() => setF(x => ({ ...x, reason: r }))}>{r}</button>)}</div></div>}
       <div className="vb-form2">
