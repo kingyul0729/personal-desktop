@@ -3038,3 +3038,9 @@ button.iv-pinv { cursor: zoom-in; }
 .sf-wrap .iv-duo .iv-tiles > div:nth-child(n) { border-left: 1px solid var(--ui-line-soft); padding-left: 14px; }
 .sf-wrap .iv-duo .iv-tiles > div:nth-child(2n+1) { border-left: 0; padding-left: 0; }
 .sf-wrap .iv-duo .iv-tiles dd b { font-size: 18px; white-space: nowrap; }
+/* 월말 결제 입금 확인·팀장 결제(2026-11-20 사용자): 상태 태그를 누르면 결제 예정 ↔ 결제 완료, 팀장 결제는 회색 태그·흐린 금액(합계에서 뺌) */
+.iv-pstate.is-tap { border: 1px solid currentColor; font: inherit; font-size: 12px; font-weight: 700; padding: 3px 12px; cursor: pointer; }
+.iv-pstate.is-leader { background: #eef0f3; color: #5d636b; }
+.iv-inline-tag { margin: 0 0 0 6px; vertical-align: 1px; }
+.iv-leader-amt, .iv-leader-amt b { color: #9aa0a6 !important; font-weight: 600; }
+.iv-ptag.is-leader { background: #eef0f3; color: #5d636b; }

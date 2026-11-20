@@ -81,7 +81,8 @@ async function vendorList(db) { return all(db, `SELECT v.*, round(coalesce((SELE
 function vendorFields(body) {
   const t = k => (body[k] == null || String(body[k]).trim() === '' ? null : String(body[k]).trim().slice(0, 100));
   const method = t('payment_method');
-  const pt = /카드|온라인|홈페이지/.test(method || '') ? 'order' : ['order', 'month'].includes(body.pay_timing) ? body.pay_timing : null;
+  // 팀장 결제(2026-11-20 사용자: 바이더퀄리티는 팀장이 결제 — 보고서엔 보이되 병원 지출 계산에서 뺌)는 결제 시점 칸에 'leader'로
+  const pt = body.pay_timing === 'leader' ? 'leader' : /카드|온라인|홈페이지/.test(method || '') ? 'order' : ['order', 'month'].includes(body.pay_timing) ? body.pay_timing : null;
   return { name: t('name'), company: t('company'), payment_method: method, pay_timing: pt, bank: t('bank'), account: t('account'), holder: t('holder') };
 }
 
@@ -820,6 +821,16 @@ async function inventoryRoute(request, env, url, user, db, path, m) {
       return json({ ok: true });
     }
 
+    // 월말 결제 입금 확인(2026-11-20 사용자: 원장님이 입금하면 팀장이 '결제 예정' 태그를 눌러 '결제 완료'로, 다시 누르면 되돌림)
+    if (m === 'POST' && path === '/paid') {
+      const vid = Number(body.vendor_id) || 0, month = String(body.month || '');
+      if (!vid || !/^\d{4}-\d{2}$/.test(month)) return bad('업체와 달을 확인해 주세요.');
+      const key = `paid:${vid}:${month}`;
+      if (body.paid) await db.prepare('INSERT OR REPLACE INTO inv_meta (key, value) VALUES (?, ?)').bind(key, JSON.stringify({ date: kstToday(), by: user || null })).run();
+      else await db.prepare('DELETE FROM inv_meta WHERE key = ?').bind(key).run();
+      return json({ ok: true });
+    }
+
     // ── 보고서 ──
     if (m === 'GET' && path === '/report') {
       const month = /^\d{4}-\d{2}$/.test(url.searchParams.get('month') || '') ? url.searchParams.get('month') : kstToday().slice(0, 7);
@@ -902,7 +913,12 @@ async function monthReport(db, month, brief = false) {
     ...await all(db, `SELECT i.vendor_id, t.amount, t.date AS pay_date FROM inv_tx t JOIN inv_items i ON i.id = t.item_id LEFT JOIN inv_orders o ON o.id = t.order_id LEFT JOIN inv_vendors v ON v.id = i.vendor_id
       WHERE t.deleted_at IS NULL AND t.kind = 'in' AND t.amount > 0 AND t.date BETWEEN ? AND ? AND NOT (o.id IS NOT NULL AND o.prepaid = 0 AND ${PAID_AT_ORDER})`, from, to),
   ];
-  const generalPaid = pays.reduce((a, r) => a + (r.amount || 0), 0);
+  // 팀장 결제 업체(pay_timing 'leader')는 보고서 줄에는 보이되 병원 지출·결제 합계에서 뺀다(2026-11-20 사용자)
+  const leaderIds = new Set((await all(db, `SELECT id FROM inv_vendors WHERE pay_timing = 'leader'`)).map(r => r.id));
+  const isLeaderPay = r => leaderIds.has(r.vendor_id);
+  const generalPaid = pays.filter(r => !isLeaderPay(r)).reduce((a, r) => a + (r.amount || 0), 0);
+  const leaderPrepaid = leaderIds.size ? (await one(db, `SELECT coalesce(sum(t.amount), 0) AS n FROM inv_tx t JOIN inv_items i ON i.id = t.item_id JOIN inv_vendors v ON v.id = i.vendor_id
+    WHERE t.deleted_at IS NULL AND t.kind = 'prepaid_buy' AND v.pay_timing = 'leader' AND t.date BETWEEN ? AND ?`, from, to))?.n || 0 : 0;
   // 업체 잔액 차감(2026-11-19): 구매 금액이 잡히는 달에 같이 빼서 '실제 결제 금액'으로(같은 돈을 두 번 세지 않게)
   const usedBy = await usedInPeriod(db, from, to);
   const balUsed = [...usedBy.values()].reduce((a, n) => a + n, 0);
@@ -919,8 +935,8 @@ async function monthReport(db, month, brief = false) {
   // 영업일 = 피부관리 인원이 있는 날. 인원을 안 적은 달(성과 미입력)은 일일재고를 적은 날로(사용량이 있는데 '기록 없음'으로 보이지 않게)
   const openDays = days.open_days || days.record_days || 0;
   const out = {
-    month, spend_total: generalPaid + (spend.prepaid || 0) - balUsed, spend_buy: generalPaid + (spend.prepaid || 0), bal_used: balUsed, bal_refund: Math.round(refund?.n || 0),
-    spend_general: generalPaid, spend_prepaid: spend.prepaid || 0,
+    month, spend_total: generalPaid + (spend.prepaid || 0) - leaderPrepaid - balUsed, spend_buy: generalPaid + (spend.prepaid || 0) - leaderPrepaid, bal_used: balUsed, bal_refund: Math.round(refund?.n || 0),
+    spend_general: generalPaid, spend_prepaid: (spend.prepaid || 0) - leaderPrepaid,
     in_count: spend.in_count || 0, no_invoice: spend.no_invoice || 0, no_amount: spend.no_amount || 0, patients: days.patients || 0, open_days: openDays,
     usage: usage.map(u => ({ ...u, used: round(u.used), per_day: openDays ? Math.round((u.used / openDays) * 10) / 10 : null })),
   };
@@ -940,8 +956,10 @@ async function monthReport(db, month, brief = false) {
   const refundRows = await all(db, `SELECT vendor_id, date, amount FROM inv_vendor_bal WHERE kind = 'refund' AND deleted_at IS NULL AND date BETWEEN ? AND ? ORDER BY date, id`, from, to);
   const lastDay = new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0)).toISOString().slice(0, 10);
   const WHEN = { order: '결제 시 배송', month: '월말 결제' };
+  const paidMarks = new Map((await all(db, `SELECT key, value FROM inv_meta WHERE key LIKE ?`, `paid:%:${month}`)).map(r => [Number(r.key.split(':')[1]), r.value]));
   const rowsOf = v => {
-    const b = byVendor.get(v.id ?? 0), timing = timingOf(v), used = usedBy.get(v.id) || 0, amount = (b?.amount || 0) - used; // 결제금액 = 실제 결제(잔액 차감 뺌)
+    const leader = v.pay_timing === 'leader';
+    const b = byVendor.get(v.id ?? 0), timing = leader ? 'leader' : timingOf(v), used = usedBy.get(v.id) || 0, amount = (b?.amount || 0) - used; // 결제금액 = 실제 결제(잔액 차감 뺌)
     const mine = ins.filter(r => (r.vendor_id ?? 0) === (v.id ?? 0)), vin = mine.filter(r => r.kind !== 'prepaid_buy');
     const bank = /계좌|이체|입금/.test(v.payment_method || '');
     return { vendor_id: v.id ?? 0, name: v.name, company: v.company || null, payment_method: v.payment_method, timing, when: WHEN[timing] || '결제 시점 미정', amount,
@@ -950,7 +968,9 @@ async function monthReport(db, month, brief = false) {
       // 원장님 보고용 표기(2026-11-12 사용자): 주문 시 결제 = 결제 완료, 월말 결제 = '이달 말까지 결제 예정'(날짜가 지나도 보고서 표기는 그대로)
       bal_reason: used ? (balWhy.get(v.id) || null) : null,
       refunds: refundRows.filter(r => r.vendor_id === v.id).map(r => ({ date: r.date, amount: Math.round(r.amount) })),
-      status: !amount ? (used ? '잔액 차감' : '결제 없음') : timing === 'order' ? '결제 완료' : timing === 'month' ? '결제 예정' : '—', bal_used: used,
+      // 월말 결제는 입금 확인을 누르면 결제 완료(paid_mark), 팀장 결제는 '팀장 결제'(합계에서 뺌)
+      status: !amount ? (used ? '잔액 차감' : '결제 없음') : leader ? '팀장 결제' : timing === 'order' ? '결제 완료' : timing === 'month' ? (paidMarks.has(v.id) ? '결제 완료' : '결제 예정') : '—', bal_used: used,
+      can_mark: !leader && timing === 'month' && amount > 0, paid_mark: paidMarks.has(v.id),
       lines: mine.map(r => ({ date: r.date, item: r.item_name, qty: r.kind === 'prepaid_buy' ? r.vendor_delta : round(r.qty + (r.kind === 'in' ? r.bonus_qty || 0 : 0)), unit: r.stock_unit,
         // 명세서(2026-11-12 사용자 '5번에 명세서 이미지 표기'): 사진이 있으면 등록(눌러서 봄), 예전 앱 받음도 등록, 돈이 나간 줄인데 없으면 미등록, 0원 줄은 —
         invoice_ids: r.invoice_ids || null, invoice: r.invoice_ids || r.invoice ? 'done' : r.amount > 0 ? 'missing' : 'none',
@@ -960,6 +980,7 @@ async function monthReport(db, month, brief = false) {
   out.payments = [...allV.filter(v => v.active || byVendor.has(v.id) || refundRows.some(r => r.vendor_id === v.id)).map(rowsOf), ...(byVendor.has(0) ? [rowsOf({ id: 0, name: '업체 미지정', payment_method: null })] : [])];
   out.pay_done = out.payments.filter(p => p.status === '결제 완료').reduce((a, p) => a + p.amount, 0);
   out.pay_due = out.payments.filter(p => p.status === '결제 예정').reduce((a, p) => a + p.amount, 0);
+  out.pay_leader = out.payments.filter(p => p.status === '팀장 결제').reduce((a, p) => a + p.amount, 0);
   out.vendor_bal = await balTable(db, from, to);
   out.keep = await keepTable(db, from, to);
   out.inbound = await all(db, `SELECT t.date, t.kind, t.qty, t.bonus_qty, t.amount, t.invoice, t.memo, t.cancelled_at, t.cancel_reason, v.bank, v.account, v.holder, i.name AS item_name, i.stock_unit, v.name AS vendor_name, v.payment_method

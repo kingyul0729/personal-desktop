@@ -1080,3 +1080,32 @@ test('stopvend1: 간호팀·셀퓨전씨·에스트라·쿠팡 stopped — gone 
   for (const n of ['간호팀', '셀퓨전씨', '에스트라', '쿠팡']) assert.ok(!names.includes(n), n);
   assert.ok(st.items.some(i => i.vendor_name === '쿠팡'));
 });
+
+test('user 11-20: 팀장 결제 vendors show in report but stay out of totals; 월말 결제 status tag toggles 결제 완료', async () => {
+  const e = env(); await call(e, '/state');
+  assert.equal(e.inv.prepare('SELECT pay_timing FROM inv_vendors WHERE id = 16').get().pay_timing, 'leader'); // 바이더퀄리티 = 팀장 결제
+  const a = await call(e, '/items', 'POST', { name: '팀장품목', stock_unit: 'ea', price: 10000, new_vendor: { name: '팀장업체', payment_method: '카드결제', pay_timing: 'leader' } });
+  const b = await call(e, '/items', 'POST', { name: '월말품목', stock_unit: 'ea', price: 20000, new_vendor: { name: '월말업체', payment_method: '계좌입금', pay_timing: 'month' } });
+  const lv = a.data.vendors.find(v => v.name === '팀장업체'), mv = b.data.vendors.find(v => v.name === '월말업체');
+  assert.equal(lv.pay_timing, 'leader');
+  const before = (await call(e, '/report?month=2026-11')).data.spend_total;
+  for (const [nm, d] of [['팀장품목', '2026-11-10'], ['월말품목', '2026-11-11']]) {
+    const it = item(e, nm); const opt = e.inv.prepare('SELECT id FROM inv_options WHERE item_id = ? AND active = 1').get(it.id);
+    assert.equal((await call(e, '/orders', 'POST', { item_id: it.id, option_id: opt.id, count: 1, date: d })).status, 200);
+    const ord = (await call(e, '/state')).data.orders.find(o => o.item_id === it.id);
+    assert.equal((await call(e, '/receive', 'POST', { order_id: ord.id, actual_qty: 1, date: d })).status, 200);
+  }
+  let rep = (await call(e, '/report?month=2026-11')).data;
+  const L = rep.payments.find(p => p.vendor_id === lv.id), M = rep.payments.find(p => p.vendor_id === mv.id);
+  assert.deepEqual([L.status, L.amount, L.can_mark], ['팀장 결제', 10000, false]);
+  assert.deepEqual([M.status, M.can_mark], ['결제 예정', true]);
+  assert.equal(rep.spend_total - before, 20000); // 팀장 결제 10,000원은 지출에서 빠짐
+  assert.equal(rep.pay_leader, 10000);
+  assert.equal((await call(e, '/paid', 'POST', { vendor_id: mv.id, month: '2026-11', paid: true })).status, 200);
+  rep = (await call(e, '/report?month=2026-11')).data;
+  assert.equal(rep.payments.find(p => p.vendor_id === mv.id).status, '결제 완료');
+  assert.ok(rep.pay_done >= 20000);
+  await call(e, '/paid', 'POST', { vendor_id: mv.id, month: '2026-11', paid: false });
+  assert.equal((await call(e, '/report?month=2026-11')).data.payments.find(p => p.vendor_id === mv.id).status, '결제 예정');
+  assert.equal((await call(e, '/paid', 'POST', { vendor_id: mv.id, month: '11월' })).status, 400);
+});

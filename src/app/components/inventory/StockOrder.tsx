@@ -355,14 +355,19 @@ function VendorFields({ f, setF, title }: { f: VendorF; setF: (u: (x: VendorF) =
   const set = (k: keyof VendorF) => (e: React.ChangeEvent<HTMLInputElement>) => { const v = e.target.value; setF(x => ({ ...x, [k]: v })); };
   // 결제 방법은 여러 개 고를 수 있음(예: 알라딘 필링 카드결제·계좌입금)
   const picked = PAY_METHODS.filter(m => f.payment_method.split('·').map(x => x.trim()).includes(m));
-  const toggle = (m: string) => setF(x => { const cur = PAY_METHODS.filter(k => x.payment_method.split('·').map(y => y.trim()).includes(k)); const next = cur.includes(m as typeof cur[number]) ? cur.filter(k => k !== m) : [...cur, m]; const pm = PAY_METHODS.filter(k => (next as string[]).includes(k)).join('·'); return { ...x, payment_method: pm, pay_timing: autoOrder(pm) ? 'order' : x.pay_timing }; });
+  const toggle = (m: string) => setF(x => { const cur = PAY_METHODS.filter(k => x.payment_method.split('·').map(y => y.trim()).includes(k)); const next = cur.includes(m as typeof cur[number]) ? cur.filter(k => k !== m) : [...cur, m]; const pm = PAY_METHODS.filter(k => (next as string[]).includes(k)).join('·'); return { ...x, payment_method: pm, pay_timing: x.pay_timing === 'leader' ? 'leader' : autoOrder(pm) ? 'order' : x.pay_timing }; });
+  const leader = f.pay_timing === 'leader';
   return <div className="iv-vbox"><h4>{title}</h4>
     <div className="iv-fgrid">
       <label className="sf-input"><span>업체명</span><input value={f.name} onChange={set('name')} placeholder="예: 상떼화장품" /></label>
       <label className="sf-input"><span>회사명</span><input value={f.company} onChange={set('company')} placeholder="예: (주)에스메디글로벌" /></label>
     </div>
     <div className="iv-pickrow"><span>결제 방법 <i className="iv-req">*</i></span><div className="sf-pills" role="group" aria-label="결제 방법">{PAY_METHODS.map(m => <button key={m} type="button" role="checkbox" aria-checked={picked.includes(m)} onClick={() => toggle(m)}>{m}</button>)}</div></div>
-    {autoOrder(f.payment_method) ? <div className="iv-pickrow"><span>결제 시점</span><span className="iv-ptag is-paid">결제 완료</span></div>
+    {/* 팀장 결제(2026-11-20 사용자): 보고서엔 보이되 병원 지출 계산에서 뺌 */}
+    <div className="iv-pickrow"><span>결제한 사람</span><div className="sf-pills" role="radiogroup" aria-label="결제한 사람">
+      <button type="button" role="radio" aria-checked={!leader} onClick={() => setF(x => ({ ...x, pay_timing: autoOrder(x.payment_method) ? 'order' : '' }))}>병원 결제</button>
+      <button type="button" role="radio" aria-checked={leader} onClick={() => setF(x => ({ ...x, pay_timing: 'leader' }))}>팀장 결제</button></div></div>
+    {leader ? null : autoOrder(f.payment_method) ? <div className="iv-pickrow"><span>결제 시점</span><span className="iv-ptag is-paid">결제 완료</span></div>
       : <div className="iv-pickrow"><span>결제 시점 <i className="iv-req">*</i></span><div className="sf-pills" role="radiogroup" aria-label="결제 시점">{(['order', 'month'] as const).map(t => <button key={t} type="button" role="radio" aria-checked={f.pay_timing === t} onClick={() => setF(x => ({ ...x, pay_timing: t }))}>{TIMING_LABEL[t]}</button>)}</div></div>}
     {picked.includes('계좌입금') && <div className="iv-fgrid">
       <label className="sf-input"><span>은행</span><input value={f.bank} onChange={set('bank')} placeholder="은행 이름" /></label>
@@ -371,8 +376,8 @@ function VendorFields({ f, setF, title }: { f: VendorF; setF: (u: (x: VendorF) =
     </div>}
   </div>;
 }
-const vendorReady = (f: VendorF) => !!f.name.trim() && PAY_METHODS.some(m => f.payment_method.includes(m)) && (autoOrder(f.payment_method) || f.pay_timing === 'order' || f.pay_timing === 'month');
-const vendorBody = (f: VendorF) => ({ ...f, pay_timing: autoOrder(f.payment_method) ? 'order' : f.pay_timing || null, ...(f.payment_method.includes('계좌') ? {} : { bank: '', account: '', holder: '' }) });
+const vendorReady = (f: VendorF) => !!f.name.trim() && PAY_METHODS.some(m => f.payment_method.includes(m)) && (autoOrder(f.payment_method) || f.pay_timing === 'order' || f.pay_timing === 'month' || f.pay_timing === 'leader');
+const vendorBody = (f: VendorF) => ({ ...f, pay_timing: f.pay_timing === 'leader' ? 'leader' : autoOrder(f.payment_method) ? 'order' : f.pay_timing || null, ...(f.payment_method.includes('계좌') ? {} : { bank: '', account: '', holder: '' }) });
 
 const unitOpts = (cur: string) => (cur && !UNITS.includes(cur) ? [cur, ...UNITS] : UNITS);
 export function ItemForm({ item, state, notify, onSaved, onDeleted }: { item: InvItem | null; state: InvState; notify: (m: string) => void; onSaved: (id?: number) => void; onDeleted: () => void }) {
@@ -442,7 +447,7 @@ function VendorLine({ vendor, open, setOpen, state, notify, onSaved }: { vendor:
   return <>
     <div className="iv-vline"><span>결제</span>
       <span className="iv-ptag is-method">{vendor.payment_method || '결제 방법 —'}</span>
-      {autoOrder(vendor.payment_method || '') ? <span className="iv-ptag is-paid">결제 완료</span> : <span className={`iv-ptag${t ? '' : ' is-none'}`}>{t ? TIMING_LABEL[t] : '결제 시점 미정'}</span>}
+      {vendor.pay_timing === 'leader' ? <span className="iv-ptag is-leader">팀장 결제</span> : autoOrder(vendor.payment_method || '') ? <span className="iv-ptag is-paid">결제 완료</span> : <span className={`iv-ptag${t ? '' : ' is-none'}`}>{t ? TIMING_LABEL[t] : '결제 시점 미정'}</span>}
       {vendor.active === 0 && <span className="iv-ptag is-stop">거래 중단</span>}
       <button type="button" className={`sf-btn iv-vbtn${open ? ' is-on' : ''}`} onClick={() => { setOpen(!open); setF(vendorF(vendor)); }}>업체 정보</button></div>
     {open && <div className="iv-vedit">

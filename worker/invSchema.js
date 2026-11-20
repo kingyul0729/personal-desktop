@@ -452,6 +452,14 @@ export async function ensureInvSchema(db) {
         fixes = `${fixes} onlinepay1`.trim();
       } catch (e) { console.error('onlinepay1', e); }
     }
+    if (!fixes.includes('leaderpay1')) {
+      // 2026-11-20 사용자: 바이더퀄리티는 원장님이 아니라 팀장이 결제 — 보고서엔 '팀장 결제'로 보이고 병원 지출·결제 합계에서 빠짐(재고 기록은 그대로)
+      try {
+        await db.prepare(`UPDATE inv_vendors SET pay_timing = 'leader' WHERE id = 16 AND name = '바이더퀄리티'`).run();
+        await db.prepare(`INSERT OR REPLACE INTO inv_meta (key, value) VALUES ('fixes', ?)`).bind(`${fixes} leaderpay1`.trim()).run();
+        fixes = `${fixes} leaderpay1`.trim();
+      } catch (e) { console.error('leaderpay1', e); }
+    }
     if (!fixes.includes('leavelog1')) {
       // 2026-11-20 사용자: 연차 기록 수정·취소 — 기록은 지우지 않고 취소 표시(취소일·사유)와 정정 줄 연결(ref_id)만 더함. 있는 기록·숫자는 그대로.
       for (const col of ['cancelled_at TEXT', 'cancel_reason TEXT', 'ref_id INTEGER']) {

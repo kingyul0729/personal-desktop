@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { LoadingBox } from '../Feedback';
 import { readWon } from '../../koreanAmount';
-import { fmtQty, invGet, shiftMonth, subscribeInventory, todayLocal } from '../../inventoryApi';
+import { announceInventory, fmtQty, invGet, invSend, shiftMonth, subscribeInventory, todayLocal } from '../../inventoryApi';
+import { askConfirm } from '../AlertDialog';
 import { InvThumb, Seg, errText } from './shared';
 import { invoiceSrc } from '../../inventoryApi';
 import { staffGet } from '../../staffApi';
@@ -12,28 +13,39 @@ export type MonthRep = { month: string; spend_total: number; spend_general: numb
   inbound?: { date: string; kind: string; qty: number; bonus_qty: number; amount: number | null; invoice: number; memo: string | null; item_name: string; stock_unit: string; vendor_name: string | null; payment_method: string | null; cancelled_at?: number | null; cancel_reason?: string | null }[];
   prepaid?: { id: number; name: string; stock_unit: string; vendor_stock: number; hospital_stock: number }[];
   stock?: { id: number; name: string; stock_unit: string; hospital_stock: number; min_stock: number }[]; as_of?: string | null;
-  payments?: Pay[]; pay_done?: number; pay_due?: number;
+  payments?: Pay[]; pay_done?: number; pay_due?: number; pay_leader?: number;
   spend_buy?: number; bal_used?: number };
 // 5번 결제 내역에서 업체 잔액으로 낸 금액만 표기(2026-11-19 사용자 '따로 블록 없이 결제됐다는 것만')
-export type Pay = { bal_used?: number; bal_reason?: string | null; refunds?: { date: string; amount: number }[]; vendor_id: number; name: string; company: string | null; payment_method: string | null; timing?: 'order' | 'month' | null; when: string; amount: number; pay_dates?: string[]; in_dates?: string[]; in_items?: number; status?: string; lines?: { date: string; item: string; qty: number; unit: string; note: string | null; invoice?: 'done' | 'missing' | 'none'; invoice_ids?: string | null }[]; holder?: string | null; bank?: string | null; account?: string | null };
+export type Pay = { bal_used?: number; bal_reason?: string | null; refunds?: { date: string; amount: number }[]; vendor_id: number; name: string; company: string | null; payment_method: string | null; timing?: 'order' | 'month' | 'leader' | null; when: string; can_mark?: boolean; paid_mark?: boolean; amount: number; pay_dates?: string[]; in_dates?: string[]; in_items?: number; status?: string; lines?: { date: string; item: string; qty: number; unit: string; note: string | null; invoice?: 'done' | 'missing' | 'none'; invoice_ids?: string | null }[]; holder?: string | null; bank?: string | null; account?: string | null };
 const mdd = (d: string) => `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}`;
 // 결제 내역(2026-11-12 사용자 시안 5, 원장님 보고용): 그 달에 거래한 업체만(결제했거나 병원으로 물건이 들어온 곳 — 0원·업체 보관에서 입고·선결제 포함),
 // 칸 = 번호 · 업체 · 입고일 · 품목 · 수량 · 결제 방법·상태 · 결제금액. 칸 색칠 없이 금액(굵게)·상태(작은 태그)만 강조, 결제 예정은 연핑크.
 // 계좌입금 = 그 달에 계좌로 보낼 업체 줄(연핑크), 결제 요약 = 결제 완료 · 결제 예정 · 합계.
 const traded = (list: Pay[]) => list.filter(p => p.amount > 0 || (p.lines?.length ?? 0) > 0 || (p.refunds?.length ?? 0) > 0);
 const refundSum = (p: Pay) => (p.refunds || []).reduce((t, r) => t + r.amount, 0);
-function PayStatus({ p }: { p: Pay }) {
+// 팀장 결제(2026-11-20 사용자): 보고서 줄엔 보이되 합계·지출 계산에서 뺀다
+const isLeader = (p: Pay) => p.status === '팀장 결제';
+const hospitalSum = (list: Pay[]) => list.reduce((x, p) => x + (isLeader(p) ? 0 : p.amount), 0);
+function PayStatus({ p, month }: { p: Pay; month?: string }) {
   // 2026-11-20 사용자: 계좌입금·방문결제는 '· 결제 시 배송/월말 결제'를 붙이고, 업체 잔액으로 낸 것도 결제는 끝났으니 '결제 완료'
   const st = p.status === '잔액 차감' ? '결제 완료' : p.status;
-  const how = p.payment_method && !/카드|온라인|홈페이지/.test(p.payment_method) && p.timing ? ` · ${p.timing === 'order' ? '결제 시 배송' : '월말 결제'}` : '';
-  return <>{p.payment_method ? `${p.payment_method}${how}` : '—'}<br />{st === '결제 완료' || st === '결제 예정' ? <span className={`iv-pstate ${st === '결제 완료' ? 'is-done' : 'is-due'}`}>{st}</span> : <small className="iv-muted">{st || '—'}</small>}</>;
+  const how = p.payment_method && !/카드|온라인|홈페이지/.test(p.payment_method) && (p.timing === 'order' || p.timing === 'month') ? ` · ${p.timing === 'order' ? '결제 시 배송' : '월말 결제'}` : '';
+  // 월말 결제 입금 확인(2026-11-20 사용자 '버튼 따로 없이'): 상태 태그를 누르면 결제 예정 ↔ 결제 완료
+  const toggle = async () => {
+    const done = st === '결제 완료';
+    if (!await askConfirm({ title: done ? '결제 예정으로 되돌릴까요?' : '결제 완료로 바꿀까요?', message: p.name, kind: 'ask' })) return;
+    await invSend('POST', '/paid', { vendor_id: p.vendor_id, month, paid: !done }); announceInventory();
+  };
+  const cls = st === '결제 완료' ? 'is-done' : st === '결제 예정' ? 'is-due' : isLeader(p) ? 'is-leader' : '';
+  return <>{p.payment_method ? `${p.payment_method}${how}` : '—'}<br />{p.can_mark && month ? <button type="button" className={`iv-pstate is-tap ${cls}`} onClick={toggle}>{st}</button>
+    : cls ? <span className={`iv-pstate ${cls}`}>{st}</span> : <small className="iv-muted">{st || '—'}</small>}</>;
 }
 // 업체 잔액으로 낸 결제(2026-11-20 사용자 '결제했는데 이중결제해서 이만큼 빠졌다고 꼭 표시'): 구매 금액 → 중복 결제 잔액 차감 → 실제 결제금액
 const balLabel = (p: Pay) => `${p.bal_reason ? `${p.bal_reason.split(',')[0]} ` : '업체 '}잔액 차감`;
 function BalCalc({ p }: { p: Pay }) {
   return <span className="iv-balcalc"><small>구매 금액 {won(p.amount + (p.bal_used || 0))}</small><small>{balLabel(p)} −{won(p.bal_used || 0)}</small><b className="iv-pamt">{won(p.amount)}</b></span>;
 }
-function PayTable({ list }: { list: Pay[] }) {
+function PayTable({ list, month }: { list: Pay[]; month?: string }) {
   const [big, setBig] = useState<string[] | null>(null);
   if (!list.length) return <p className="sf-hint">기록 없음</p>;
   const Inv = ({ l }: { l: NonNullable<Pay['lines']>[number] }) => l.invoice_ids ? <button type="button" className="iv-pinv is-done" onClick={() => setBig(String(l.invoice_ids).split(','))}>등록</button>
@@ -41,7 +53,7 @@ function PayTable({ list }: { list: Pay[] }) {
   return <div className="iv-scroll"><table className="iv-form-tbl"><thead><tr><th className="c w-no">번호</th><th>업체</th><th className="c">입고일</th><th>품목</th><th className="num">수량</th><th className="c">명세서</th><th className="c">결제 방법 · 상태</th><th className="num">결제금액</th></tr></thead>
     <tbody>{list.map((p, i) => { const lines = p.lines?.length ? p.lines : (p.refunds?.length ? [] : [null]); const rf = p.refunds || []; const n = lines.length + rf.length;
       const head = (j: number) => j === 0 && <><td className="c" rowSpan={n}>{i + 1}</td><td rowSpan={n}>{p.name}</td></>;
-      const tail = (j: number) => j === 0 && <><td className="c" rowSpan={n}><PayStatus p={p} /></td><td className="num" rowSpan={n}>{p.bal_used ? <BalCalc p={p} /> : p.amount ? <b className="iv-pamt">{won(p.amount)}</b> : '0원'}{rf.length ? <small className="iv-pay-co">환급 입금 {won(refundSum(p))}</small> : null}</td></>;
+      const tail = (j: number) => j === 0 && <><td className="c" rowSpan={n}><PayStatus p={p} month={month} /></td><td className={`num${isLeader(p) ? ' iv-leader-amt' : ''}`} rowSpan={n}>{p.bal_used ? <BalCalc p={p} /> : p.amount ? <b className="iv-pamt">{won(p.amount)}</b> : '0원'}{rf.length ? <small className="iv-pay-co">환급 입금 {won(refundSum(p))}</small> : null}</td></>;
       return [...lines.map((l, j) => <tr key={`${p.vendor_id}-${j}`}>
         {head(j)}
         <td className="c">{l ? mdd(l.date) : '—'}</td>
@@ -52,7 +64,7 @@ function PayTable({ list }: { list: Pay[] }) {
       </tr>), ...rf.map((r, k) => { const j = lines.length + k; return <tr key={`${p.vendor_id}-r${k}`}>
         {head(j)}<td className="c">{mdd(r.date)}</td><td>업체 잔액 환급 입금<small className="iv-pay-co">{won(r.amount)}</small></td><td className="num">—</td><td className="c">—</td>{tail(j)}
       </tr>; })]; })}
-      <tr className="is-total"><th colSpan={7}>합 계</th><td className="num"><b>{won(list.reduce((x, p) => x + p.amount, 0))}</b></td></tr></tbody></table>
+      <tr className="is-total"><th colSpan={7}>합 계</th><td className="num"><b>{won(hospitalSum(list))}</b></td></tr></tbody></table>
     {big && <div className="iv-inv-big" role="dialog" aria-label="거래명세서" onClick={() => setBig(null)}>{big.map(id => <InvThumb key={id} id={id} />)}<a href={invoiceSrc(big[0])} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}>원본 열기</a></div>}</div>;
 }
 function BankTable({ list }: { list: Pay[] }) {
@@ -62,7 +74,7 @@ function BankTable({ list }: { list: Pay[] }) {
   return <><h4 className="iv-paysub">계좌입금</h4><div className="iv-scroll"><table className="iv-form-tbl"><thead><tr><th>업체</th><th className="c">예금주</th><th className="c">은행</th><th className="c">계좌번호</th><th className="num">결제금액</th></tr></thead>
     <tbody>{rows.map(p => <tr key={p.vendor_id} className="is-bank"><td>{p.name}</td><td className="c">{p.holder || '—'}</td><td className="c">{p.bank || '—'}</td><td className="c">{p.account || '—'}</td><td className="num"><b>{won(p.amount)}</b></td></tr>)}</tbody></table></div></>;
 }
-const bankRows = (list: Pay[]) => list.filter(p => p.amount > 0 && p.timing === 'month' && /계좌/.test(p.payment_method || ''));
+const bankRows = (list: Pay[]) => list.filter(p => p.amount > 0 && p.timing === 'month' && p.status === '결제 예정' && /계좌/.test(p.payment_method || '')); // 입금 확인한 업체는 계좌입금 표에서 빠짐
 
 
 export function StockReport() {
@@ -150,12 +162,12 @@ export function MonthReport({ a, b, book, team = [] }: { a: MonthRep; b: MonthRe
           <tbody>{rows.map(x => <tr key={x.id}><td><b>{x.name}</b></td><td className="num">{dash(x.work_days, v => `${v}일`)}</td><td className="num">{dash(x.total_hours, v => `${v}시간`)}</td><td className="num">{dash(x.total_managed, v => `${v}명`)}</td><td className="num">{dash(x.avg_managed, v => `${v}명`)}</td><td className="num">{dash(x.total_designated, v => `${v}명`)}</td><td className="num">{dash(x.leave_used, v => `${v}일`)}</td><td className="num"><b>{x.remain_leave != null ? `${x.remain_leave}일` : '—'}</b></td></tr>)}</tbody></table></div>}
       </Block>; })()}
     {a.payments && (() => { const list = traded(a.payments); return <Block n={++n} title="입고·결제 내역">
-      <PayTable list={list} />
+      <PayTable list={list} month={a.month} />
       <BankTable list={list} />
       <h4 className="iv-paysub">결제 요약</h4>
       {(() => { const bal = list.reduce((x, p) => x + (p.bal_used || 0), 0), why = list.find(p => p.bal_used)?.bal_used ? balLabel(list.find(p => p.bal_used)!) : '';
-        return <div className="iv-scroll"><table className="iv-form-tbl"><thead><tr><th className="c">결제 완료</th><th className="c">결제 예정</th>{bal > 0 && <th className="c">{why}</th>}<th className="c">합 계</th></tr></thead>
-          <tbody><tr><td className="num is-done">{won(a.pay_done || 0)}</td><td className="num is-due">{won(a.pay_due || 0)}</td>{bal > 0 && <td className="num">{won(bal)}</td>}<td className="num"><b>{won(list.reduce((x, p) => x + p.amount, 0))}</b></td></tr></tbody></table></div>; })()}
+        return <div className="iv-scroll"><table className="iv-form-tbl"><thead><tr><th className="c">결제 완료</th><th className="c">결제 예정</th>{bal > 0 && <th className="c">{why}</th>}{a.pay_leader ? <th className="c">팀장 결제</th> : null}<th className="c">합 계</th></tr></thead>
+          <tbody><tr><td className="num is-done">{won(a.pay_done || 0)}</td><td className="num is-due">{won(a.pay_due || 0)}</td>{bal > 0 && <td className="num">{won(bal)}</td>}{a.pay_leader ? <td className="num iv-leader-amt">{won(a.pay_leader)}</td> : null}<td className="num"><b>{won(hospitalSum(list))}</b></td></tr></tbody></table></div>; })()}
     </Block>; })()}
     <p className="iv-foot">출력 {new Date().toLocaleString('ko-KR')}</p>
   </article>;
@@ -185,10 +197,11 @@ export function YearReport({ year, months, team = [], book }: { year: string; mo
     ['총 피부관리 인원', `${sum('patients')}명`, false], ['입고 건수', `${sum('in_count')}건`, false],
   ];
   // 업체별 결제: 달마다의 입고·결제 내역을 업체로 모은다
-  const vendors = new Map<string, { name: string; method: string | null; months: Set<string>; amount: number; done: number; due: number; refund: number; bal: number; why: string }>();
+  const vendors = new Map<string, { name: string; method: string | null; months: Set<string>; amount: number; done: number; due: number; refund: number; bal: number; why: string; leader: boolean }>();
   for (const m of months) for (const p of traded(m.payments || [])) {
-    const v = vendors.get(p.name) || { name: p.name, method: p.payment_method, months: new Set<string>(), amount: 0, done: 0, due: 0, refund: 0, bal: 0, why: '' };
-    v.refund += refundSum(p); v.bal += p.bal_used || 0; if (p.bal_used) v.why = balLabel(p); if (p.amount > 0 || (p.lines?.length ?? 0) > 0) v.months.add(m.month); v.amount += p.amount; if (p.status === '결제 예정') v.due += p.amount; else v.done += p.amount;
+    const v = vendors.get(p.name) || { name: p.name, method: p.payment_method, months: new Set<string>(), amount: 0, done: 0, due: 0, refund: 0, bal: 0, why: '', leader: false };
+    if (isLeader(p)) v.leader = true;
+    v.refund += refundSum(p); v.bal += p.bal_used || 0; if (p.bal_used) v.why = balLabel(p); if (p.amount > 0 || (p.lines?.length ?? 0) > 0) v.months.add(m.month); v.amount += p.amount; if (isLeader(p)) { /* 팀장 결제: 병원 결제 완료·예정에 안 넣음 */ } else if (p.status === '결제 예정') v.due += p.amount; else v.done += p.amount;
     vendors.set(p.name, v);
   }
   const vendorList = [...vendors.values()].sort((a, b) => b.amount - a.amount);
@@ -209,8 +222,8 @@ export function YearReport({ year, months, team = [], book }: { year: string; mo
         <tr className="iv-total-row"><td>합계</td><td className="num">{won(sum('spend_total'))}</td><td className="num">{won(sum('spend_general'))}</td><td className="num">{won(sum('spend_prepaid'))}</td><td className="num">{sum('patients')}명</td><td className="num">{sum('in_count')}건</td></tr></tbody></table></div></Block>
     <Block n={++n} title="업체별 결제" sub={vendorList.length ? `거래 업체 ${vendorList.length}곳` : undefined}>
       {!vendorList.length ? <p className="sf-hint">기록 없음</p> : <div className="iv-scroll"><table className="sf-table iv-year"><thead><tr><th>업체</th><th>결제 방법</th><th className="num">거래 개월 수</th><th className="num">결제 완료</th><th className="num">결제 예정</th><th className="num">결제금액</th></tr></thead>
-        <tbody>{vendorList.map(v => <tr key={v.name}><td><b>{v.name}</b></td><td>{v.method || '—'}</td><td className="num">{v.months.size}개월</td><td className="num">{dash(v.done, won)}</td><td className="num">{dash(v.due, won)}</td><td className="num">{v.bal ? <span className="iv-balcalc"><small>구매 금액 {won(v.amount + v.bal)}</small><small>{v.why} −{won(v.bal)}</small><b>{won(v.amount)}</b></span> : <b>{won(v.amount)}</b>}{v.refund ? <small className="iv-pay-co">환급 입금 {won(v.refund)}</small> : null}</td></tr>)}
-          <tr className="iv-total-row"><td>합계</td><td /><td /><td className="num">{won(vendorList.reduce((t, v) => t + v.done, 0))}</td><td className="num">{won(vendorList.reduce((t, v) => t + v.due, 0))}</td><td className="num">{won(vendorList.reduce((t, v) => t + v.amount, 0))}</td></tr></tbody></table></div>}
+        <tbody>{vendorList.map(v => <tr key={v.name}><td><b>{v.name}</b>{v.leader && <span className="iv-pstate is-leader iv-inline-tag">팀장 결제</span>}</td><td>{v.method || '—'}</td><td className="num">{v.months.size}개월</td><td className="num">{dash(v.done, won)}</td><td className="num">{dash(v.due, won)}</td><td className={`num${v.leader ? ' iv-leader-amt' : ''}`}>{v.bal ? <span className="iv-balcalc"><small>구매 금액 {won(v.amount + v.bal)}</small><small>{v.why} −{won(v.bal)}</small><b>{won(v.amount)}</b></span> : <b>{won(v.amount)}</b>}{v.refund ? <small className="iv-pay-co">환급 입금 {won(v.refund)}</small> : null}</td></tr>)}
+          <tr className="iv-total-row"><td>합계</td><td /><td /><td className="num">{won(vendorList.reduce((t, v) => t + v.done, 0))}</td><td className="num">{won(vendorList.reduce((t, v) => t + v.due, 0))}</td><td className="num">{won(vendorList.reduce((t, v) => t + (v.leader ? 0 : v.amount), 0))}</td></tr></tbody></table></div>}
     </Block>
     <Block n={++n} title="직원 근무·연차" sub={`${year}년 한 해 합계 · 잔여연차는 오늘 기준`}>
       {!team.length ? <p className="sf-hint">기록 없음</p> : <div className="iv-scroll"><table className="sf-table iv-year"><thead><tr><th>직원</th><th className="num">근무일수</th><th className="num">실근무시간</th><th className="num">관리 수</th><th className="num">지정 환자 수</th>
