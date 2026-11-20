@@ -82,10 +82,10 @@ export const unitHint = (it: InvItem) => (it.order_unit && it.pack_qty && it.ord
 export const optOpen = (o: InvOption, date: string) => (!o.start_date || o.start_date <= date) && (!o.end_date || date <= o.end_date);
 export const optState = (o: InvOption, date: string): 'always' | 'on' | 'soon' | 'ended' => (!o.start_date && !o.end_date ? 'always' : o.end_date && date > o.end_date ? 'ended' : o.start_date && date < o.start_date ? 'soon' : 'on');
 export const md = (d: string) => `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}`;
-// 결제 시점: 카드·홈페이지결제는 늘 주문 시, 그 밖은 업체마다 저장한 값(없으면 미정)
-export const timingOf = (v: InvVendor | null | undefined): 'order' | 'month' | null => (v?.pay_timing === 'order' || v?.pay_timing === 'month' ? v.pay_timing : /카드|홈페이지/.test(v?.payment_method || '') ? 'order' : null);
-// 2026-11-20 사용자: '주문 시 결제' → '결제 시 배송'(결제해야 보내 주는 곳). 카드·홈페이지결제는 고르는 칸 없이 늘 결제 완료
+// 결제 시점: 카드·온라인결제는 늘 주문 시, 그 밖은 업체마다 저장한 값(없으면 미정)
+export const timingOf = (v: InvVendor | null | undefined): 'order' | 'month' | null => (v?.pay_timing === 'order' || v?.pay_timing === 'month' ? v.pay_timing : /카드|온라인|홈페이지/.test(v?.payment_method || '') ? 'order' : null);
+// 2026-11-20 사용자: '주문 시 결제' → '결제 시 배송'(결제해야 보내 주는 곳). 카드·온라인결제는 고르는 칸 없이 늘 결제 완료
 export const TIMING_LABEL = { order: '결제 시 배송', month: '월말 결제' } as const;
-export const autoPaid = (m?: string | null) => /카드|홈페이지/.test(m || '');
-export const PAY_METHODS = ['카드결제', '홈페이지결제', '계좌입금', '방문결제'] as const;
+export const autoPaid = (m?: string | null) => /카드|온라인|홈페이지/.test(m || '');
+export const PAY_METHODS = ['카드결제', '온라인결제', '계좌입금', '방문결제'] as const;
 export const UNITS = ['ea', 'box', 'ml', 'sheet', 'l', 'set', 'kg', 'g'];

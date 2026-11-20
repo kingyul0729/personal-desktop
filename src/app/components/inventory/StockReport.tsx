@@ -25,7 +25,7 @@ const refundSum = (p: Pay) => (p.refunds || []).reduce((t, r) => t + r.amount, 0
 function PayStatus({ p }: { p: Pay }) {
   // 2026-11-20 사용자: 계좌입금·방문결제는 '· 결제 시 배송/월말 결제'를 붙이고, 업체 잔액으로 낸 것도 결제는 끝났으니 '결제 완료'
   const st = p.status === '잔액 차감' ? '결제 완료' : p.status;
-  const how = p.payment_method && !/카드|홈페이지/.test(p.payment_method) && p.timing ? ` · ${p.timing === 'order' ? '결제 시 배송' : '월말 결제'}` : '';
+  const how = p.payment_method && !/카드|온라인|홈페이지/.test(p.payment_method) && p.timing ? ` · ${p.timing === 'order' ? '결제 시 배송' : '월말 결제'}` : '';
   return <>{p.payment_method ? `${p.payment_method}${how}` : '—'}<br />{st === '결제 완료' || st === '결제 예정' ? <span className={`iv-pstate ${st === '결제 완료' ? 'is-done' : 'is-due'}`}>{st}</span> : <small className="iv-muted">{st || '—'}</small>}</>;
 }
 // 업체 잔액으로 낸 결제(2026-11-20 사용자 '결제했는데 이중결제해서 이만큼 빠졌다고 꼭 표시'): 구매 금액 → 중복 결제 잔액 차감 → 실제 결제금액

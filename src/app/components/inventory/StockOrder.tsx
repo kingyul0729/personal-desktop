@@ -138,7 +138,7 @@ function ItemDetail({ item, state, notify, stopped, tag, onPickOpt }: { item: In
 
 // ② 받기: 고른 품목의 받기 전 주문만. 실제 도착 수량 + 명세서 사진 + 입고확정(사진은 그 입고 기록에 바로 올라가 '명세서 받음').
 // 선결제 품목은 잔량에서(잔량 −, 병원재고 +), 일반 품목은 나눠 받으면 날짜마다 따로. 아래에 일반 품목은 '증정·행사로 받기', 선결제 품목은 '잔량 고치기'.
-// 결제정보(2026-11-11 사용자 문서): 계좌입금 업체는 입금에 필요한 업체명·예금주·은행·계좌번호·총 결제금액, 카드·홈페이지·방문결제는 결제 방법·금액만(명세서는 입출고 내역).
+// 결제정보(2026-11-11 사용자 문서): 계좌입금 업체는 입금에 필요한 업체명·예금주·은행·계좌번호·총 결제금액, 카드·온라인·방문결제는 결제 방법·금액만(명세서는 입출고 내역).
 export function PayInfo({ vendor, amount }: { vendor: InvVendor | null; amount: number | null }) {
   if (!vendor) return null;
   const bank = /계좌|이체|입금/.test(vendor.payment_method || '');
@@ -350,7 +350,7 @@ export function ItemEditor({ state, notify, onChange }: { state: InvState; notif
 // 업체 칸(2026-11-12 사용자: 업체 탭 없이 품목 화면에서 — 거래처에서 '+ 새 업체'를 고르면 펼쳐지고 저장 한 번에 둘 다, 있는 업체는 '업체 정보')
 type VendorF = { name: string; company: string; payment_method: string; pay_timing: string; bank: string; account: string; holder: string };
 const vendorF = (v?: InvVendor | null): VendorF => ({ name: v?.name || '', company: v?.company || '', payment_method: v?.payment_method || '', pay_timing: v?.pay_timing || '', bank: v?.bank || '', account: v?.account || '', holder: v?.holder || '' });
-const autoOrder = (m: string) => /카드|홈페이지/.test(m);
+const autoOrder = (m: string) => /카드|온라인|홈페이지/.test(m);
 function VendorFields({ f, setF, title }: { f: VendorF; setF: (u: (x: VendorF) => VendorF) => void; title: string }) {
   const set = (k: keyof VendorF) => (e: React.ChangeEvent<HTMLInputElement>) => { const v = e.target.value; setF(x => ({ ...x, [k]: v })); };
   // 결제 방법은 여러 개 고를 수 있음(예: 알라딘 필링 카드결제·계좌입금)

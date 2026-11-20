@@ -70,9 +70,9 @@ function priceFor(item, stockQty) {
 // 선결제 개당원가 = 실제 구매금액 ÷ 증정 포함 총수량(가장 최근 선결제 구매 기준)
 const unitCostOf = tx => (tx && tx.amount != null && tx.qty + tx.bonus_qty > 0 ? Math.round((tx.amount / (tx.qty + tx.bonus_qty)) * 100) / 100 : null);
 
-// 결제 시점(2026-11-12 사용자): 카드·홈페이지결제는 늘 '주문 시 결제', 그 밖(계좌입금·방문결제)은 업체마다 저장한 값, 안 정했으면 미정(null)
-const PAY_METHODS = ['카드결제', '홈페이지결제', '계좌입금', '방문결제'];
-const timingOf = v => (v && (v.pay_timing === 'order' || v.pay_timing === 'month') ? v.pay_timing : /카드|홈페이지/.test(v?.payment_method || '') ? 'order' : null);
+// 결제 시점(2026-11-12 사용자): 카드·온라인결제는 늘 '주문 시 결제', 그 밖(계좌입금·방문결제)은 업체마다 저장한 값, 안 정했으면 미정(null)
+const PAY_METHODS = ['카드결제', '온라인결제', '계좌입금', '방문결제'];
+const timingOf = v => (v && (v.pay_timing === 'order' || v.pay_timing === 'month') ? v.pay_timing : /카드|온라인|홈페이지/.test(v?.payment_method || '') ? 'order' : null);
 // 옵션 기간(행사): 비우면 늘. 그 날짜가 기간 안이면 주문 가능
 const optOpen = (o, date) => (!o.start_date || o.start_date <= date) && (!o.end_date || date <= o.end_date);
 const OUT_OF_PERIOD = '행사 기간이 아닌 옵션이에요.';
@@ -81,7 +81,7 @@ async function vendorList(db) { return all(db, `SELECT v.*, round(coalesce((SELE
 function vendorFields(body) {
   const t = k => (body[k] == null || String(body[k]).trim() === '' ? null : String(body[k]).trim().slice(0, 100));
   const method = t('payment_method');
-  const pt = /카드|홈페이지/.test(method || '') ? 'order' : ['order', 'month'].includes(body.pay_timing) ? body.pay_timing : null;
+  const pt = /카드|온라인|홈페이지/.test(method || '') ? 'order' : ['order', 'month'].includes(body.pay_timing) ? body.pay_timing : null;
   return { name: t('name'), company: t('company'), payment_method: method, pay_timing: pt, bank: t('bank'), account: t('account'), holder: t('holder') };
 }
 
@@ -344,8 +344,8 @@ async function inventoryRoute(request, env, url, user, db, path, m) {
       const f = vendorFields(body);
       const name = f.name || v.name;
       if (name !== v.name && await one(db, 'SELECT id FROM inv_vendors WHERE name = ? AND id <> ?', name, v.id)) return bad('같은 이름의 업체가 이미 있어요.');
-      // 결제 시점을 안 보냈으면 저장된 값 유지(카드·홈페이지면 늘 주문 시)
-      const pt = 'pay_timing' in body || /카드|홈페이지/.test(f.payment_method || '') ? f.pay_timing : v.pay_timing;
+      // 결제 시점을 안 보냈으면 저장된 값 유지(카드·온라인면 늘 주문 시)
+      const pt = 'pay_timing' in body || /카드|온라인|홈페이지/.test(f.payment_method || '') ? f.pay_timing : v.pay_timing;
       await db.prepare('UPDATE inv_vendors SET name = ?, company = ?, payment_method = ?, pay_timing = ?, bank = ?, account = ?, holder = ? WHERE id = ?')
         .bind(name, f.company, f.payment_method, pt, f.bank, f.account, f.holder, v.id).run();
       return json({ ok: true, vendors: await vendorList(db) });
@@ -891,11 +891,11 @@ async function keepTable(db, from, to) {
     WHERE i.active = 1 GROUP BY i.id ORDER BY i.prepaid DESC, i.sort, i.id`);
   return rows.map(r => ({ ...r, bought: round(r.bought), to_hospital: round(r.to_hospital), left_qty: round(r.left_qty) })).filter(r => r.bought || r.to_hospital || r.left_qty);
 }
-const PAID_AT_ORDER = `(v.pay_timing = 'order' OR (coalesce(v.pay_timing, '') NOT IN ('order', 'month') AND (v.payment_method LIKE '%카드%' OR v.payment_method LIKE '%홈페이지%')))`;
+const PAID_AT_ORDER = `(v.pay_timing = 'order' OR (coalesce(v.pay_timing, '') NOT IN ('order', 'month') AND (v.payment_method LIKE '%카드%' OR v.payment_method LIKE '%온라인%' OR v.payment_method LIKE '%홈페이지%')))`;
 async function monthReport(db, month, brief = false) {
   const from = `${month}-01`, to = `${month}-31`;
-  // 결제 시점 기준(2026-11-11 사용자): 카드·홈페이지결제 업체는 주문할 때 결제 → 주문일 달에, 계좌이체·방문결제(그 밖)는 월말 결제 → 입고일 달에.
-  // 같은 결제를 두 번 세지 않게 카드·홈페이지 주문으로 받은 입고 기록의 금액은 빼고 주문 금액으로 한 번만 센다. 선결제는 결제 기록 날짜.
+  // 결제 시점 기준(2026-11-11 사용자): 카드·온라인결제 업체는 주문할 때 결제 → 주문일 달에, 계좌이체·방문결제(그 밖)는 월말 결제 → 입고일 달에.
+  // 같은 결제를 두 번 세지 않게 카드·온라인 주문으로 받은 입고 기록의 금액은 빼고 주문 금액으로 한 번만 센다. 선결제는 결제 기록 날짜.
   const pays = [
     ...await all(db, `SELECT i.vendor_id, o.amount, o.ordered_at AS pay_date FROM inv_orders o JOIN inv_items i ON i.id = o.item_id LEFT JOIN inv_vendors v ON v.id = i.vendor_id
       WHERE o.prepaid = 0 AND o.status <> 'cancelled' AND o.amount > 0 AND o.ordered_at BETWEEN ? AND ? AND ${PAID_AT_ORDER}`, from, to),

@@ -35,8 +35,8 @@ export async function planUse(db, vendorId, amount) {
   return Math.min(await balanceOf(db, vendorId), withVat(amount));
 }
 
-const PAID_AT_ORDER = `(v.pay_timing = 'order' OR (coalesce(v.pay_timing, '') NOT IN ('order', 'month') AND (v.payment_method LIKE '%카드%' OR v.payment_method LIKE '%홈페이지%')))`;
-/** 보고서용(차감은 부가세 포함이라 ÷1.1, 주문 금액까지): 기간 안에 '구매 금액이 잡히는' 주문에 걸린 차감(업체별 합) — 카드·홈페이지·선결제 = 주문일, 월말 결제 = 금액이 걸린 첫 입고일. */
+const PAID_AT_ORDER = `(v.pay_timing = 'order' OR (coalesce(v.pay_timing, '') NOT IN ('order', 'month') AND (v.payment_method LIKE '%카드%' OR v.payment_method LIKE '%온라인%' OR v.payment_method LIKE '%홈페이지%')))`;
+/** 보고서용(차감은 부가세 포함이라 ÷1.1, 주문 금액까지): 기간 안에 '구매 금액이 잡히는' 주문에 걸린 차감(업체별 합) — 카드·온라인·선결제 = 주문일, 월말 결제 = 금액이 걸린 첫 입고일. */
 export async function usedInPeriod(db, from, to) {
   const rows = await all(db, `SELECT b.vendor_id, b.amount, o.amount AS order_amount, CASE WHEN o.prepaid = 1 OR ${PAID_AT_ORDER} THEN o.ordered_at
       ELSE (SELECT min(t.date) FROM inv_tx t WHERE t.order_id = o.id AND t.kind = 'in' AND t.amount > 0 AND t.deleted_at IS NULL) END AS pay_date

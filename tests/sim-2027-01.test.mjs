@@ -251,7 +251,7 @@ test('2027-01 가상 운영', async t => {
     // 결제 시점(2026-11-12 사용자): 중외 = 주문 시 결제, 피부미소는 아직 안 정함(결제 시점 미정 — 입고일 달에 셈), 하라셀 = 월말
     assert.equal(pay('중외').when, '결제 시 배송'); assert.equal(pay('피부미소').when, '월말 결제'); // 피부미소 = 월말(2026-11-12 사용자)
     assert.ok('holder' in pay('피부미소') && 'bank' in pay('피부미소') && 'account' in pay('피부미소'));
-    assert.equal(pay('중외').payment_method, '홈페이지결제'); assert.ok(!('holder' in pay('중외'))); // 2026-12부터 온라인(paymethod1)
+    assert.equal(pay('중외').payment_method, '온라인결제'); assert.ok(!('holder' in pay('중외'))); // 2026-12부터 온라인(paymethod1)
     assert.equal(pay('하라셀').status, '결제 예정'); assert.equal(pay('더마소드').status, '결제 완료'); // 원장님 보고용 표기: 월말 결제 = 결제 예정(날짜 지나도)
     assert.deepEqual(pay('하라셀').pay_dates, ['2027-01-31']);
     assert.equal(rep.pay_done + rep.pay_due + rep.payments.filter(x => x.status === '—').reduce((a, x) => a + x.amount, 0), rep.spend_total);
