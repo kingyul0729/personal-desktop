@@ -3048,3 +3048,4 @@ button.iv-pinv { cursor: zoom-in; }
 .iv-report, .iv-report * { word-break: keep-all; overflow-wrap: break-word; }
 .iv-report th, .iv-report td.num, .iv-report .iv-pstate, .iv-report .iv-tiles dt, .iv-report .iv-tiles dd b, .iv-report .iv-num { white-space: nowrap; }
 .iv-report .iv-num small { white-space: normal; }
+.iv-line { display: block; width: 100%; height: auto; max-height: 230px; }
