@@ -305,6 +305,28 @@ export async function ensureInvSchema(db) {
         fixes = `${fixes} jwvat1`.trim();
       } catch (e) { console.error('jwvat1', e); }
     }
+    if (!fixes.includes('jwnov1') && fixes.includes('jwvat1') && await db.prepare(`SELECT 1 FROM inv_meta WHERE key = 'import'`).first() && await claimFix(db, 'jwnov1')) {
+      // 2026-11-20 사용자 '일단 수정해줘': 중외 11월 구매 = 중화제 2개 + GA30% 2개(앱 가격, 업체 계산과 같음)를 받을 주문으로 넣고 업체 잔액에서 부가세 포함 차감
+      // (39,998 + 103,998) → 남은 금액 144,001원. 11월에 이 두 품목 주문이 이미 있거나 5월 말고 다른 차감이 있으면 손대지 않음.
+      try {
+        const its = (await db.prepare(`SELECT * FROM inv_items WHERE vendor_id = 3 AND name IN ('중화제', 'GA30%')`).all()).results || [];
+        const other = await db.prepare(`SELECT 1 FROM inv_vendor_bal WHERE vendor_id = 3 AND kind = 'use' AND deleted_at IS NULL AND date <> '2026-05-06'`).first();
+        const dup = await db.prepare(`SELECT 1 FROM inv_orders o JOIN inv_items i ON i.id = o.item_id WHERE i.vendor_id = 3 AND i.name IN ('중화제', 'GA30%') AND o.ordered_at >= '2026-11-01' AND o.status <> 'cancelled'`).first();
+        if (its.length === 2 && !other && !dup) {
+          const now = Date.now(), memo = '11월 구매 · 업체 잔액 차감';
+          const stmts = [];
+          for (const it of its) {
+            const opt = await db.prepare(`SELECT id FROM inv_options WHERE item_id = ? ORDER BY id LIMIT 1`).bind(it.id).first();
+            const amount = Math.round(Number(it.price) * 2);
+            stmts.push(db.prepare(`INSERT INTO inv_orders (item_id, option_id, option_label, ordered_at, qty, bonus_qty, amount, prepaid, status, memo, created_by, created_at) VALUES (?,?,'2개','2026-11-20',2,0,?,0,'ordered',?,'system',?)`).bind(it.id, opt?.id ?? null, amount, memo, now),
+              db.prepare(`INSERT INTO inv_vendor_bal (vendor_id, date, kind, amount, reason, order_id, created_by, created_at) VALUES (3, '2026-11-20', 'use', ?, '주문', (SELECT max(id) FROM inv_orders), 'system', ?)`).bind(Math.round(amount * 1.1), now));
+          }
+          await db.batch(stmts);
+        }
+        await db.prepare(`INSERT OR REPLACE INTO inv_meta (key, value) VALUES ('fixes', ?)`).bind(`${fixes} jwnov1`.trim()).run();
+        fixes = `${fixes} jwnov1`.trim();
+      } catch (e) { console.error('jwnov1', e); }
+    }
     if (!fixes.includes('leavelog1')) {
       // 2026-11-20 사용자: 연차 기록 수정·취소 — 기록은 지우지 않고 취소 표시(취소일·사유)와 정정 줄 연결(ref_id)만 더함. 있는 기록·숫자는 그대로.
       for (const col of ['cancelled_at TEXT', 'cancel_reason TEXT', 'ref_id INTEGER']) {
