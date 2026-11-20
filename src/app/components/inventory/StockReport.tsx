@@ -205,6 +205,7 @@ export function YearReport({ year, months, team = [], book }: { year: string; mo
     vendors.set(p.name, v);
   }
   const vendorList = [...vendors.values()].sort((a, b) => b.amount - a.amount);
+  const tsum = (k: 'work_days' | 'hours' | 'managed' | 'designated' | 'leave_used' | 'consult' | 'sat_off' | 'early_leave' | 'unpaid') => Math.round(team.reduce((t, x) => t + x[k], 0) * 10) / 10;
   let n = 0;
   return <article className="iv-paper">
     <h2>{year}년 피부팀 연말 보고</h2>
@@ -228,7 +229,9 @@ export function YearReport({ year, months, team = [], book }: { year: string; mo
       {!team.length ? <p className="sf-hint">기록 없음</p> : <div className="iv-scroll"><table className="sf-table iv-year"><thead><tr><th>직원</th><th className="num">근무일수</th><th className="num">실근무시간</th><th className="num">관리 수</th><th className="num">지정 환자 수</th>
         <th className="num">토요일 휴무</th><th className="num">잔여연차</th></tr></thead>
         <tbody>{team.map(x => <tr key={x.id}><td><b>{x.name}</b></td><td className="num">{dash(x.work_days, v => `${v}일`)}</td><td className="num">{dash(x.hours, v => `${v}시간`)}</td><td className="num">{dash(x.managed, v => `${v}명`)}</td><td className="num">{dash(x.designated, v => `${v}명`)}</td>
-          <td className="num">{dash(x.sat_off, v => `${v}회`)}</td><td className="num"><b>{x.remain_leave != null ? `${x.remain_leave}일` : '—'}</b></td></tr>)}</tbody></table></div>}
+          <td className="num">{dash(x.sat_off, v => `${v}회`)}</td><td className="num"><b>{x.remain_leave != null ? `${x.remain_leave}일` : '—'}</b></td></tr>)}
+          <tr className="iv-total-row"><td>합계</td><td className="num">{tsum('work_days')}일</td><td className="num">{tsum('hours')}시간</td><td className="num">{tsum('managed')}명</td><td className="num">{tsum('designated')}명</td>
+            <td className="num">{tsum('sat_off')}회</td><td /></tr></tbody></table></div>}
     </Block>
     <p className="iv-foot">출력 {new Date().toLocaleString('ko-KR')}</p>
   </article>;
