@@ -23,7 +23,7 @@ export const toggleCare = (care: string[], k: string) => {
   return k === 'X' ? ['X'] : BOOK_CARE.filter(x => x !== 'X' && (x === k || care.includes(x)));
 };
 
-export default function StaffBook() {
+export default function StaffBook({ tabs, hide = false }: { tabs?: React.ReactNode; hide?: boolean } = {}) {
   const [date, setDate] = useState(todayLocal);
   const [day, setDay] = useState<BookDay | null>(null);
   const [error, setError] = useState(''), [toast, setToast] = useState('');
@@ -71,7 +71,8 @@ export default function StaffBook() {
   // 관리담당 목록: 그날 출근한 사람만(근태가 아직 없으면 모두)
   const people = day ? (day.working.length ? day.staff.filter(s => day.working.includes(s.id)) : day.staff) : [];
 
-  return <div className="sf-wrap bk-wrap">
+  return <div className="sf-wrap bk-wrap" hidden={hide}>
+    {tabs}
     <div className="sf-bar">
       <div className="sf-month">
         <button type="button" aria-label="전날" onClick={() => setDate(d => shiftDay(d, -1))}><ChevronLeft size={18} strokeWidth={1.8} /></button>

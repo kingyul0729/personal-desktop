@@ -5,6 +5,7 @@ import { LoadingBox, SavingMark } from './Feedback';
 import { OldDataBanner } from './Inventory';
 import { StaffAvatar } from './staffTone';
 import StaffLeave from './StaffLeave';
+import StaffBook from './StaffBook';
 import { staffGet, staffPost, StaffApiError } from '../staffApi';
 import {
   type AttendanceRecord, type MonthData, type StaffMember, WEEKDAYS, WORK_STATES, ST_LEADER, ST_STAFF, calendarLines, dateIn, dayLabelKo, daysInMonth, diffMin,
@@ -65,20 +66,21 @@ export function StaffUnavailable({ message, unavailable, detail }: { message: st
     {detail && <pre className="sf-detail">{detail}</pre>}</div>;
 }
 
-// 스케줄·연차·성과 한 화면(2026-11-20 사용자 '한 페이지에, 기능은 그대로 상단에 탭만'): 맨 위 알약 탭 셋, 각 탭은 예전 화면 그대로.
+// 스케줄·연차·성과·예약표 한 화면(2026-11-20 사용자 '한 페이지에, 기능은 그대로 상단에 탭만', 예약표는 같은 날 오후 추가): 맨 위 알약 탭 넷, 각 탭은 예전 화면 그대로.
 // 한 번 연 탭은 숨겨 두기만 해서(입력·고른 달 유지) 탭을 오가도 남는다.
-type HubTab = 'schedule' | 'leave' | 'perf';
+type HubTab = 'schedule' | 'leave' | 'perf' | 'book';
 export default function StaffHub() {
   const [tab, setTab] = useState<HubTab>('schedule');
   const [seen, setSeen] = useState<Record<string, boolean>>({ schedule: true });
   const go = (t: HubTab) => { setTab(t); setSeen(v => ({ ...v, [t]: true, ...(t === 'perf' ? { schedule: true } : {}) })); };
   const tabs = <div className="sf-pills sf-hubtabs" role="tablist" aria-label="직원">
-    {([['schedule', '스케줄'], ['leave', '연차'], ['perf', '성과']] as [HubTab, string][]).map(([k, label]) =>
+    {([['schedule', '스케줄'], ['leave', '연차'], ['perf', '성과'], ['book', '예약표']] as [HubTab, string][]).map(([k, label]) =>
       <button key={k} type="button" role="tab" aria-pressed={tab === k} aria-selected={tab === k} onClick={() => go(k)}>{label}</button>)}
   </div>;
   return <>
-    <StaffSchedule tab={tab === 'perf' ? 'perf' : 'schedule'} tabs={tabs} hide={tab === 'leave'} />
+    <StaffSchedule tab={tab === 'perf' ? 'perf' : 'schedule'} tabs={tabs} hide={tab === 'leave' || tab === 'book'} />
     {seen.leave && <StaffLeave tabs={tabs} hide={tab !== 'leave'} />}
+    {seen.book && <StaffBook tabs={tabs} hide={tab !== 'book'} />}
   </>;
 }
 
