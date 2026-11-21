@@ -103,7 +103,8 @@ function optionUnits(item, o) {
 // 지금 병원재고에서 그 날짜 뒤(date > 마감일)에 생긴 입고·출고·반입·재고 맞추기 증감을 빼면 그날 마감 뒤 재고가 된다.
 // 기록을 언제 입력했는지와 상관없이 기록의 날짜만 본다.
 async function stockAtDates(db, date) {
-  const rows = await all(db, `SELECT item_id, sum(hospital_delta) AS d FROM inv_tx WHERE deleted_at IS NULL AND date > ? GROUP BY item_id`, date);
+  // +item_id: 품목 색인으로 표 전체를 읽지 않고 날짜 색인(그 날 뒤 기록만)을 쓰게
+  const rows = await all(db, `SELECT item_id, sum(hospital_delta) AS d FROM inv_tx WHERE deleted_at IS NULL AND date > ? GROUP BY +item_id`, date);
   return new Map(rows.map(r => [r.item_id, r.d || 0]));
 }
 

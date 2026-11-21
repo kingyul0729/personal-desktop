@@ -66,6 +66,10 @@ const INV_STOCK_SCHEMA = [
      hospital_delta REAL NOT NULL DEFAULT 0, vendor_delta REAL NOT NULL DEFAULT 0, hospital_after REAL, vendor_after REAL, order_id INTEGER, daily_date TEXT, invoice INTEGER NOT NULL DEFAULT 0, memo TEXT, source TEXT, created_by TEXT, created_at INTEGER, deleted_at INTEGER, deleted_by TEXT)`,
   `CREATE INDEX IF NOT EXISTS inv_tx_date ON inv_tx(date)`,
   `CREATE INDEX IF NOT EXISTS inv_tx_daily ON inv_tx(daily_date, item_id)`,
+  `CREATE INDEX IF NOT EXISTS inv_tx_item_date ON inv_tx(item_id, date, id)`, // 2026-11-21 D1 하루 읽기 한도: 품목별 '그 날 뒤 증감' 계산이 표 전체를 읽던 것
+  `CREATE INDEX IF NOT EXISTS inv_tx_order ON inv_tx(order_id)`,
+  `CREATE INDEX IF NOT EXISTS inv_orders_item ON inv_orders(item_id)`,
+  `CREATE INDEX IF NOT EXISTS inv_tx_kind ON inv_tx(kind, item_id)`,
   `CREATE TABLE IF NOT EXISTS inv_daily (date TEXT PRIMARY KEY, patients INTEGER, status TEXT, extra TEXT, updated_by TEXT, updated_at INTEGER)`,
   `CREATE TABLE IF NOT EXISTS inv_meta (key TEXT PRIMARY KEY, value TEXT)`,
   ...INV_INVOICE_SCHEMA,
@@ -447,6 +451,15 @@ export async function ensureInvSchema(db) {
         await db.prepare(`INSERT OR REPLACE INTO inv_meta (key, value) VALUES ('fixes', ?)`).bind(`${fixes} onlinepay1`.trim()).run();
         fixes = `${fixes} onlinepay1`.trim();
       } catch (e) { console.error('onlinepay1', e); }
+    }
+    if (!fixes.includes('idx1')) {
+      // 2026-11-21 사이트가 D1 무료 하루 읽기 한도(500만 줄)에 걸려 멈춤: 품목별 '그 날 뒤 증감'(보고서·입출고 내역·일일재고)과 주문별 받은 수량이
+      // inv_tx 전체를 줄마다 다시 읽었음 → 품목·날짜, 주문 색인. 기록·숫자는 그대로.
+      try {
+        for (const q of [`CREATE INDEX IF NOT EXISTS inv_tx_item_date ON inv_tx(item_id, date, id)`, `CREATE INDEX IF NOT EXISTS inv_tx_order ON inv_tx(order_id)`, `CREATE INDEX IF NOT EXISTS inv_orders_item ON inv_orders(item_id)`, `CREATE INDEX IF NOT EXISTS inv_tx_kind ON inv_tx(kind, item_id)`]) await db.prepare(q).run();
+        await db.prepare(`INSERT OR REPLACE INTO inv_meta (key, value) VALUES ('fixes', ?)`).bind(`${fixes} idx1`.trim()).run();
+        fixes = `${fixes} idx1`.trim();
+      } catch (e) { console.error('idx1', e); }
     }
     if (!fixes.includes('leaderpay1')) {
       // 2026-11-20 사용자: 바이더퀄리티는 원장님이 아니라 팀장이 결제 — 보고서엔 '팀장 결제'로 보이고 병원 지출·결제 합계에서 빠짐(재고 기록은 그대로)
