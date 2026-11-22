@@ -1,6 +1,6 @@
 export interface PriceFolder { id: string; name: string; variant: 'heart' | 'kitty' | 'flower' | 'cherry'; }
 export type ImageOrientation = 'landscape' | 'portrait';
-export interface PriceImage { id: string; name: string; folderId: string; src: string; variants?: Partial<Record<ImageOrientation, string>>; }
+export interface PriceImage { id: string; name: string; folderId: string; src: string; variants?: Partial<Record<ImageOrientation, string>>; hasPortrait?: boolean; ownPortrait?: boolean; }
 export interface PriceFiles { authenticated: boolean; folders: PriceFolder[]; images: PriceImage[]; }
 
 export const initialPriceFiles: PriceFiles = {

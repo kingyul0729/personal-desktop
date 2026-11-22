@@ -431,3 +431,32 @@ test('bundled price sheets stay gone after trash-uploads and emptying the trash'
   assert.equal((await call(env, '/api/price-files')).data.images.length, 0);
   assert.equal(env.sqlite.prepare('SELECT COUNT(*) AS n FROM price_images').get().n, 0);
 });
+
+test('가격표 가로·세로 한 쌍(2026-11-21): 세로 그림 넣기·교체, 가로 교체, 세로 빼기, 순서 바꾸기, 완전 삭제는 두 그림 모두', async () => {
+  const env = environment();
+  await call(env, '/api/price-files');
+  const add = async name => { const f = new FormData(); f.set('file', png()); f.set('name', name); f.set('folderId', 'me:toning'); return (await call(env, '/api/price-images', { method: 'POST', body: f })).data.images.find(i => i.name === name); };
+  const a = await add('가'), b = await add('나');
+  assert.equal(a.hasPortrait, false);
+  const side = async (id, s) => { const f = new FormData(); f.set('file', png()); f.set('id', id); f.set('side', s); return call(env, '/api/price-images', { method: 'POST', body: f }); };
+  let r = await side(a.id, 'portrait');
+  let got = r.data.images.find(i => i.id === a.id);
+  assert.ok(got.hasPortrait && got.variants.portrait.includes('side=portrait'));
+  assert.equal((await call(env, got.variants.portrait.replace(/^/, ''))).status, 200);
+  assert.equal(env.objects.size, 3);
+  const oldSrc = got.src;
+  got = (await side(a.id, 'landscape')).data.images.find(i => i.id === a.id);
+  assert.notEqual(got.src, oldSrc, '교체하면 주소가 바뀜');
+  assert.equal(env.objects.size, 3, '예전 가로 그림 파일은 지움');
+  await side(a.id, 'portrait');
+  assert.equal(env.objects.size, 3, '세로 교체도 예전 파일은 지움');
+  got = (await call(env, '/api/price-files', { method: 'POST', body: { action: 'remove-portrait', id: a.id } })).data.images.find(i => i.id === a.id);
+  assert.equal(got.hasPortrait, false); assert.equal(env.objects.size, 2);
+  const order = (await call(env, '/api/price-files', { method: 'POST', body: { action: 'reorder', folderId: 'me:toning', ids: [b.id, a.id] } })).data.images.filter(i => i.folderId === 'me:toning').map(i => i.id);
+  assert.deepEqual(order.slice(0, 2), [b.id, a.id]);
+  assert.equal((await side('없는id', 'portrait')).status, 404);
+  await side(b.id, 'portrait');
+  await call(env, '/api/price-files', { method: 'POST', body: { action: 'delete-image', id: b.id } });
+  await act(env, { action: 'purge-file', type: 'price', id: b.id });
+  assert.equal(env.objects.size, 1, '완전 삭제는 가로·세로 둘 다');
+});

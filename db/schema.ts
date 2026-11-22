@@ -11,6 +11,8 @@ export const priceImages = sqliteTable('price_images', {
   name: text('name').notNull(), objectKey: text('object_key'), source: text('source'),
   mime: text('mime').notNull(), createdAt: integer('created_at').notNull(),
   trashedAt: integer('trashed_at'),
+  // 2026-11-21 가격표 탭 넘김: 세로용 그림(가로는 object_key/source)과 폴더 안 순서
+  portraitKey: text('portrait_key'), portraitMime: text('portrait_mime'), sort: integer('sort'),
 }, (t) => [index('idx_price_images_owner_folder').on(t.owner, t.folderId)]);
 
 // Confirmed memos only; the in-progress text lives in memo_drafts until Save.

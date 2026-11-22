@@ -97,10 +97,17 @@ async function list(env, owner) {
   await seed(env, owner);
   const [folders, images] = await Promise.all([
     statement(env, 'SELECT id, name, variant FROM price_folders WHERE owner = ? AND trashed_at IS NULL ORDER BY created_at, rowid', owner).all(),
-    statement(env, 'SELECT id, name, folder_id AS folderId, source FROM price_images WHERE owner = ? AND trashed_at IS NULL ORDER BY created_at, rowid', owner).all(),
+    statement(env, 'SELECT id, name, folder_id AS folderId, source, object_key AS objectKey, portrait_key AS portraitKey, created_at AS createdAt FROM price_images WHERE owner = ? AND trashed_at IS NULL ORDER BY coalesce(sort, 1000000000), created_at, rowid', owner).all(),
   ]);
   return { authenticated: true, folders: folders.results,
-    images: images.results.map(({ source, ...image }) => ({ ...image, ...imageSources(source || `/api/price-images/${encodeURIComponent(image.id)}`) })) };
+    // 가로·세로 한 쌍(2026-11-21): 올린 세로 그림이 있으면 그걸 세로로, 가로 그림은 올린 파일(object_key) 또는 기본 그림. ?v= 는 교체 뒤 새로 받게.
+    images: images.results.map(({ source, objectKey, portraitKey, createdAt, ...image }) => {
+      const own = `/api/price-images/${encodeURIComponent(image.id)}`;
+      const base = objectKey ? { src: `${own}?v=${encodeURIComponent(objectKey.split('/').pop())}` } : imageSources(source || own);
+      if (!portraitKey) return { ...image, ...base, hasPortrait: !!base.variants?.portrait };
+      const portrait = `${own}?side=portrait&v=${encodeURIComponent(portraitKey.split('/').pop())}`;
+      return { ...image, src: base.src, variants: { landscape: base.variants?.landscape || base.src, portrait }, hasPortrait: true, ownPortrait: true };
+    }) };
 }
 
 export function imageType(bytes) {
@@ -271,11 +278,11 @@ async function purgeApp(env, owner, type, id) {
     return removed.meta.changes > 0;
   }
   if (type === 'price') {
-    const row = await statement(env, 'SELECT object_key FROM price_images WHERE id = ? AND owner = ? AND trashed_at IS NOT NULL', id, owner).first();
+    const row = await statement(env, 'SELECT object_key, portrait_key FROM price_images WHERE id = ? AND owner = ? AND trashed_at IS NOT NULL', id, owner).first();
     if (!row) return false;
     // Remove the record first so a storage cleanup failure never leaves a broken image behind.
     await statement(env, 'DELETE FROM price_images WHERE id = ? AND owner = ?', id, owner).run();
-    if (row.object_key) await env.BUCKET.delete(row.object_key).catch(error => console.error('Image cleanup failed', error));
+    for (const key of [row.object_key, row.portrait_key]) if (key) await env.BUCKET.delete(key).catch(error => console.error('Image cleanup failed', error));
     return true;
   }
   const result = await statement(env, 'DELETE FROM work_capsules WHERE id = ? AND owner = ? AND trashed_at IS NOT NULL', id, owner).run();
@@ -689,17 +696,39 @@ export async function handleApi(request, env) {
   if (imageMatch && request.method === 'GET') {
     const id = decodeId(imageMatch[1]);
     if (id === null) return json({ error: '이미지를 찾을 수 없습니다.' }, 404);
-    const row = await statement(env, 'SELECT object_key, mime FROM price_images WHERE id = ? AND owner = ? AND trashed_at IS NULL', id, owner).first();
-    if (!row?.object_key) return json({ error: '이미지를 찾을 수 없습니다.' }, 404);
-    const object = await env.BUCKET.get(row.object_key);
+    const row = await statement(env, 'SELECT object_key, mime, portrait_key, portrait_mime FROM price_images WHERE id = ? AND owner = ? AND trashed_at IS NULL', id, owner).first();
+    const portrait = url.searchParams.get('side') === 'portrait';
+    const key = portrait ? row?.portrait_key : row?.object_key;
+    if (!key) return json({ error: '이미지를 찾을 수 없습니다.' }, 404);
+    const object = await env.BUCKET.get(key);
     if (!object) return json({ error: '이미지를 불러오지 못했습니다.' }, 404);
-    return new Response(object.body, { headers: { 'Content-Type': row.mime, 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff' } });
+    // 주소에 ?v=(파일 키)가 붙어 교체하면 주소가 바뀌므로 기기에 오래 둬도 됨(넘길 때 다시 받지 않게)
+    return new Response(object.body, { headers: { 'Content-Type': portrait ? row.portrait_mime : row.mime, 'Cache-Control': url.searchParams.has('v') ? 'private, max-age=31536000, immutable' : 'private, no-store', 'X-Content-Type-Options': 'nosniff' } });
   }
   if (url.pathname === '/api/price-images' && request.method === 'POST') {
     if (Number(request.headers.get('Content-Length') || 0) > 12 * 1024 * 1024) return json({ error: '이미지는 10MB 이하로 추가해 주세요.' }, 413);
     const form = await request.formData().catch(() => null);
     if (!form) return json({ error: '이름과 10MB 이하 이미지를 확인해 주세요.' }, 400);
     const file = form.get('file');
+    // 교체·세로 그림(2026-11-21): id + side('landscape' 교체 | 'portrait' 세로 그림 넣기·교체) — 같은 가격표 자리에서 그림만 바꿈
+    const targetId = form.get('id');
+    if (typeof targetId === 'string' && targetId) {
+      const side = form.get('side') === 'portrait' ? 'portrait' : 'landscape';
+      if (!(file instanceof File) || file.size > 10 * 1024 * 1024 || file.size === 0) return json({ error: '10MB 이하 이미지를 확인해 주세요.' }, 400);
+      const row = await statement(env, 'SELECT object_key, portrait_key FROM price_images WHERE id = ? AND owner = ? AND trashed_at IS NULL', targetId, owner).first();
+      if (!row) return json({ error: '가격표를 찾을 수 없습니다.' }, 404);
+      const bytes = await file.arrayBuffer();
+      const mime = imageType(bytes);
+      if (!mime) return json({ error: 'JPG, PNG, WEBP 이미지만 추가할 수 있습니다.' }, 400);
+      const objectKey = `price-images/${owner}/${targetId}-${side === 'portrait' ? 'p' : 'l'}-${crypto.randomUUID().slice(0, 8)}`;
+      await env.BUCKET.put(objectKey, bytes, { httpMetadata: { contentType: mime } });
+      try {
+        await statement(env, side === 'portrait' ? 'UPDATE price_images SET portrait_key = ?, portrait_mime = ? WHERE id = ? AND owner = ?' : 'UPDATE price_images SET object_key = ?, mime = ?, source = NULL WHERE id = ? AND owner = ?', objectKey, mime, targetId, owner).run();
+      } catch (error) { await env.BUCKET.delete(objectKey); throw error; }
+      const old = side === 'portrait' ? row.portrait_key : row.object_key;
+      if (old) await env.BUCKET.delete(old).catch(() => {});
+      return json(await list(env, owner));
+    }
     const name = cleanName(form.get('name'));
     const folderId = form.get('folderId');
     if (!(file instanceof File) || !name || file.size > 10 * 1024 * 1024 || file.size === 0) return json({ error: '이름과 10MB 이하 이미지를 확인해 주세요.' }, 400);
@@ -739,6 +768,17 @@ export async function handleApi(request, env) {
       // Goes to the trash; the record and stored image are removed only when purged there.
       const result = await statement(env, 'UPDATE price_images SET trashed_at = ? WHERE id = ? AND owner = ? AND trashed_at IS NULL', Date.now(), body.id, owner).run();
       if (!result.meta.changes) return json({ error: '가격표를 찾을 수 없습니다.' }, 404);
+    } else if (body.action === 'remove-portrait') {
+      // 세로 그림만 빼기 — 가로 그림·가격표는 그대로
+      const row = await statement(env, 'SELECT portrait_key FROM price_images WHERE id = ? AND owner = ? AND trashed_at IS NULL', body.id, owner).first();
+      if (!row) return json({ error: '가격표를 찾을 수 없습니다.' }, 404);
+      await statement(env, 'UPDATE price_images SET portrait_key = NULL, portrait_mime = NULL WHERE id = ? AND owner = ?', body.id, owner).run();
+      if (row.portrait_key) await env.BUCKET.delete(row.portrait_key).catch(() => {});
+    } else if (body.action === 'reorder') {
+      // 순서 바꾸기: 한 폴더 안 가격표 id를 보인 순서대로 받아 sort = 0, 1, 2 …
+      const ids = Array.isArray(body.ids) ? body.ids.filter(id => typeof id === 'string').slice(0, 500) : [];
+      if (!ids.length) return json({ error: '순서를 확인할 수 없습니다.' }, 400);
+      await env.DB.batch(ids.map((id, i) => statement(env, 'UPDATE price_images SET sort = ? WHERE id = ? AND owner = ? AND folder_id = ?', i, id, owner, body.folderId)));
     } else if (body.action === 'delete-folder') {
       // 폴더 삭제(2026-11-13 사용자 '파일삭제기능'): 폴더는 숨기고 안의 가격표는 모두 휴지통으로 — 휴지통에서 가격표를 복원하면 폴더도 같이 돌아온다.
       // 폴더 줄은 지우지 않는다(기본 폴더가 다시 생기지 않게).

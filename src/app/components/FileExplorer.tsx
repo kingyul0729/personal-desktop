@@ -1,227 +1,239 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { Folder, FolderInput, FolderOpen, FolderPlus, ImagePlus, Pencil, Search, Trash2, X } from 'lucide-react';
-import { FinderMain, FinderPath } from './FinderFrame';
-import { ToneDot, ToneFolder } from './ToneFolder';
-import { ImageDocumentViewer } from './ImageDocumentViewer';
+import { useEffect, useMemo, useRef, useState, type PointerEvent as RPointerEvent } from 'react';
+import { ChevronLeft, ChevronRight, FolderInput, GripVertical, Minus, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { KittyDialog } from './KittyDialog';
 import { askConfirm } from './AlertDialog';
 import { LoadingBox, SavingMark } from './Feedback';
 import { announceTrash, useTrashChange } from '../trash';
 import { initialPriceFiles, type PriceFiles, type PriceFolder, type PriceImage } from '../priceFiles';
 
-type Editor = { type: 'folder'; folder?: PriceFolder } | { type: 'image'; image: PriceImage } | { type: 'upload'; file: File } | { type: 'delete'; image: PriceImage };
+// 가격표(2026-11-21 사용자가 다른 앱 화면으로 지정 — 폴더·썸네일을 눌러 여는 방식 대신 '탭에서 바로 넘겨 보기'):
+// 맨 위 카테고리 탭(이름 + 장수) → 고른 탭의 가격표가 화면 가득, 좌우로 밀거나 ‹ › 로 넘김, 아래 점 + 'N / M'.
+// 아이패드를 돌리면 가로·세로 그림 중 맞는 것(한쪽만 있으면 있는 것). 한 번 탭 = 버튼 숨기기/보이기, 두 번 탭 = 2.5배 확대(다시 두 번 탭 = 원래).
+// [편집]: 가격표마다 한 줄 — ≡ 끌어서 순서, 가로·세로 칸(빈 칸 누르면 올리기, 채운 칸 누르면 교체), 이름 고치기, 삭제, 맨 아래 가격표 추가,
+// 탭 이름 고치기·삭제·새 탭·묶음 파일로 넣기. 색은 앱 기본색 그대로(갈색 배경 안 씀).
+const ZOOM = 2.5;
+const post = async (body: unknown) => {
+  const response = await fetch('/api/price-files', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const data = await response.json().catch(() => null);
+  if (!response.ok || !data) throw new Error(data?.error || '저장하지 못했습니다. 다시 시도해 주세요.');
+  return data as PriceFiles;
+};
+const sendImage = async (fields: Record<string, string | File>) => {
+  const form = new FormData(); for (const [k, v] of Object.entries(fields)) form.set(k, v);
+  const response = await fetch('/api/price-images', { method: 'POST', body: form });
+  const data = await response.json().catch(() => null);
+  if (!response.ok || !data) throw new Error(data?.error || '올리지 못했습니다. 다시 시도해 주세요.');
+  return data as PriceFiles;
+};
+const useTall = () => {
+  const get = () => typeof window !== 'undefined' && window.innerHeight > window.innerWidth;
+  const [tall, setTall] = useState(get);
+  useEffect(() => { const on = () => setTall(get()); window.addEventListener('resize', on); window.addEventListener('orientationchange', on); return () => { window.removeEventListener('resize', on); window.removeEventListener('orientationchange', on); }; }, []);
+  return tall;
+};
+export const sideOf = (image: PriceImage, tall: boolean) => (tall ? image.variants?.portrait : image.variants?.landscape) || image.src;
 
-// 가격표 보관함은 Finder처럼: 처음엔 카테고리 폴더들, 폴더를 열면 가격표 썸네일. ‹ › 는 폴더 단위로 오간다.
-// 왼쪽 메뉴의 가격표 아래에 폴더 이름을 보여 주고(onFolders), 거기서 고른 폴더로 바로 이동한다(goto: 누를 때마다 n이 바뀜).
+type Dialog = { type: 'name'; image: PriceImage } | { type: 'folder'; folder?: PriceFolder } | { type: 'add'; file: File };
+
 export function FileExplorer({ onFolders, goto, onLocation }: { onFolders?: (folders: { id: string; name: string }[]) => void; goto?: { id: string; n: number }; onLocation?: (id: string) => void } = {}) {
   const [files, setFiles] = useState<PriceFiles>(initialPriceFiles);
-  const [history, setHistory] = useState<{ list: string[]; at: number }>({ list: ['root'], at: 0 });
-  const location = history.list[history.at];
-  const [searching, setSearching] = useState(false);
-  const [scale, setScale] = useState(() => { try { const v = Number(localStorage.getItem('price-finder-scale')); return v >= 80 && v <= 130 ? v : 100; } catch { return 100; } });
-  useEffect(() => { try { localStorage.setItem('price-finder-scale', String(scale)); } catch { /* 이 기기에서만 쓰는 편의 설정 */ } }, [scale]);
-  const [gallery, setGallery] = useState<{ images: PriceImage[]; index: number } | null>(null);
-  const opened = gallery?.images[gallery.index] ?? null;
-  const [query, setQuery] = useState('');
-  const [editor, setEditor] = useState<Editor | null>(null);
-  const [name, setName] = useState('');
-  const [folderId, setFolderId] = useState('');
-  const variant: PriceFolder['variant'] = 'heart'; // 폴더 그림은 하나로 통일 (모양 선택 없음)
-  const [pending, setPending] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  // Only a failed list load offers reloading; other messages are not fixed by it.
-  const [canRetry, setCanRetry] = useState(false);
-  const [notice, setNotice] = useState('');
-  const [preview, setPreview] = useState('');
-  const upload = useRef<HTMLInputElement>(null);
-  const bundle = useRef<HTMLInputElement>(null);
-  const currentFolder = files.folders.find(folder => folder.id === location);
+  const [error, setError] = useState(''), [notice, setNotice] = useState('');
+  const [tab, setTab] = useState(() => { try { return localStorage.getItem('price-tab') || ''; } catch { return ''; } });
+  const [pages, setPages] = useState<Record<string, number>>({});
+  const [editing, setEditing] = useState(false);
+  const [pending, setPending] = useState(false);
+  const [dialog, setDialog] = useState<Dialog | null>(null);
+  const [name, setName] = useState('');
+  const tall = useTall();
 
   async function refresh(signal?: AbortSignal) {
-    setLoading(true); setError(''); setCanRetry(false);
+    setLoading(true); setError('');
     try {
       const response = await fetch('/api/price-files', { signal, cache: 'no-store' });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error);
       setFiles(data);
-      const resolveFolder = (value: string) => data.folders.find((folder: PriceFolder) => folder.id === value || folder.id.endsWith(`:${value}`))?.id ?? value;
-      setHistory(current => ({ ...current, list: current.list.map(resolveFolder) }));
-    } catch (e) { if ((e as Error).name !== 'AbortError') { setError('가격표를 불러오지 못했습니다. 다시 불러오기를 눌러 주세요.'); setCanRetry(true); } }
+    } catch (e) { if ((e as Error).name !== 'AbortError') setError('가격표를 불러오지 못했습니다.'); }
     finally { if (!signal?.aborted) setLoading(false); }
   }
-  useEffect(() => { const controller = new AbortController(); void refresh(controller.signal); return () => controller.abort(); }, []);
+  useEffect(() => { const c = new AbortController(); void refresh(c.signal); return () => c.abort(); }, []);
   useTrashChange('price', () => { void refresh(); });
-  useEffect(() => {
-    if (editor?.type !== 'upload') { setPreview(''); return; }
-    const src = URL.createObjectURL(editor.file); setPreview(src);
-    return () => URL.revokeObjectURL(src);
-  }, [editor]);
+  // 탭이 화면 위에 있으니 왼쪽 메뉴에는 하위 목록을 두지 않는다(고르면 메뉴가 접힘)
+  useEffect(() => { onFolders?.([]); }, []);
+  const folders = files.folders;
+  const current = folders.find(f => f.id === tab || f.id.endsWith(`:${tab}`)) ?? folders[0];
+  useEffect(() => { if (current) { try { localStorage.setItem('price-tab', current.id); } catch { /* 이 기기 편의 */ } onLocation?.(current.id); } }, [current?.id]);
+  useEffect(() => { if (goto) setTab(goto.id); }, [goto?.n]);
+  const images = useMemo(() => files.images.filter(i => i.folderId === current?.id), [files.images, current?.id]);
+  const page = Math.min(pages[current?.id ?? ''] ?? 0, Math.max(0, images.length - 1));
+  const go = (n: number) => current && setPages(p => ({ ...p, [current.id]: Math.max(0, Math.min(images.length - 1, n)) }));
 
-  useEffect(() => { onFolders?.(files.folders.map(folder => ({ id: folder.id, name: folder.name }))); }, [files.folders]);
-  useEffect(() => { onLocation?.(location); }, [location]);
-  useEffect(() => { if (goto) navigate(goto.id); }, [goto?.n]);
-  const navigate = (next: string) => {
-    setGallery(null); setQuery(''); setSearching(false);
-    if (next !== location) setHistory(({ list, at }) => ({ list: [...list.slice(0, at + 1), next], at: at + 1 }));
-  };
-  const step = (delta: number) => { setGallery(null); setQuery(''); setSearching(false); setHistory(({ list, at }) => ({ list, at: Math.min(list.length - 1, Math.max(0, at + delta)) })); };
-  const openEditor = (next: Editor) => {
-    setError(''); setCanRetry(false); setNotice(''); setEditor(next);
-    setName(next.type === 'folder' ? next.folder?.name ?? '' : next.type === 'upload' ? next.file.name.replace(/\.[^.]+$/, '') : next.image.name);
-    setFolderId(next.type === 'image' ? next.image.folderId : currentFolder?.id ?? files.folders[0]?.id ?? '');
-    // 폴더 그림은 하나로 통일되어 모양은 고르지 않는다.
-  };
-  const closeEditor = () => { if (!pending) { setEditor(null); setError(''); } };
-  const save = async (event: FormEvent) => {
-    event.preventDefault(); if (!editor || pending) return;
-    setPending(true); setError('');
-    try {
-      let response: Response;
-      if (editor.type === 'upload') {
-        const form = new FormData(); form.set('file', editor.file); form.set('name', name); form.set('folderId', folderId);
-        response = await fetch('/api/price-images', { method: 'POST', body: form });
-      } else {
-        const body = editor.type === 'folder' ? { action: editor.folder ? 'rename-folder' : 'create-folder', id: editor.folder?.id, name, variant }
-          : editor.type === 'delete' ? { action: 'delete-image', id: editor.image.id }
-            : { action: 'edit-image', id: editor.image.id, name, folderId };
-        response = await fetch('/api/price-files', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-      }
-      // A gateway can answer with an HTML error page; never show its parse error.
-      const data = await response.json().catch(() => null);
-      if (!response.ok || !data) throw new Error(data?.error || '저장하지 못했습니다. 다시 시도해 주세요.');
-      setFiles(data); setNotice(editor.type === 'delete' ? '휴지통으로 이동했습니다.' : '저장했습니다.'); if (editor.type === 'delete') announceTrash('price'); setEditor(null);
-    } catch (e) { setError((e as Error).message || '저장하지 못했습니다. 다시 시도해 주세요.'); }
+  const run = async (job: () => Promise<PriceFiles>, done = '') => {
+    setPending(true); setError(''); setNotice('');
+    try { setFiles(await job()); if (done) setNotice(done); return true; }
+    catch (e) { setError((e as Error).message || '저장하지 못했습니다.'); return false; }
     finally { setPending(false); }
   };
-
-  // 묶음 파일로 넣기(2026-11-13 사용자 '각 가격표 탭 페이지에 구분해서 올려줘'): Claude가 가격표 사진을 폴더별로 묶어 만든 파일
-  // { format: 'dachaeum-pricelist', folders: [{ name, images: [{ name, type, data(base64) }] }] } 을 한 번 올리면
-  // 폴더가 없으면 만들고(같은 이름이 있으면 거기에), 사진을 순서대로 넣는다. 같은 폴더에 같은 이름이 이미 있으면 건너뛴다.
-  // 저장은 화면에서 하나씩 올릴 때와 같은 길(create-folder → POST /api/price-images). 가격표 사진·묶음 파일은 저장소에 넣지 않는다.
-  const importBundle = async (file?: File) => {
-    if (!file || pending) return;
-    setPending(true); setError(''); setCanRetry(false);
-    let added = 0, skipped = 0, current = files;
-    const read = async (response: Response) => { const data = await response.json().catch(() => null); if (!response.ok || !data) throw new Error(data?.error || '저장하지 못했습니다. 다시 시도해 주세요.'); return data as PriceFiles; };
+  // 파일 고르기(가격표 추가 / 가로·세로 교체 / 묶음 파일)
+  const picker = useRef<HTMLInputElement>(null);
+  const pickFor = useRef<null | ((file: File) => void)>(null);
+  const pick = (accept: string, then: (file: File) => void) => { pickFor.current = then; if (picker.current) { picker.current.accept = accept; picker.current.click(); } };
+  const IMG = 'image/jpeg,image/png,image/webp';
+  const tooBig = (f: File) => { if (f.size > 10 * 1024 * 1024) { setError('10MB 이하의 이미지를 골라 주세요.'); return true; } return false; };
+  const replace = (image: PriceImage, side: 'landscape' | 'portrait') => pick(IMG, f => { if (!tooBig(f)) void run(() => sendImage({ file: f, id: image.id, side })); });
+  const removePortrait = async (image: PriceImage) => {
+    if (!await askConfirm({ title: '삭제하시겠습니까?', message: `‘${image.name}’ 세로 그림`, kind: 'delete' })) return;
+    void run(() => post({ action: 'remove-portrait', id: image.id }));
+  };
+  const removeImage = async (image: PriceImage) => {
+    if (!await askConfirm({ title: '삭제하시겠습니까?', message: `‘${image.name}’`, kind: 'delete' })) return;
+    if (await run(() => post({ action: 'delete-image', id: image.id }), '휴지통으로 이동했습니다.')) announceTrash('price');
+  };
+  const removeFolder = async (folder: PriceFolder) => {
+    if (!await askConfirm({ title: '삭제하시겠습니까?', message: `‘${folder.name}’ 탭 · 가격표 ${images.length}장`, kind: 'delete' })) return;
+    if (await run(() => post({ action: 'delete-folder', id: folder.id }), '휴지통으로 이동했습니다.')) { announceTrash('price'); setTab(''); }
+  };
+  const openDialog = (d: Dialog) => { setError(''); setDialog(d); setName(d.type === 'name' ? d.image.name : d.type === 'folder' ? d.folder?.name ?? '' : d.file.name.replace(/\.[^.]+$/, '')); };
+  const saveDialog = async () => {
+    if (!dialog || !name.trim()) return;
+    const d = dialog;
+    const ok = await run(() => d.type === 'name' ? post({ action: 'edit-image', id: d.image.id, name: name.trim(), folderId: d.image.folderId })
+      : d.type === 'folder' ? post({ action: d.folder ? 'rename-folder' : 'create-folder', id: d.folder?.id, name: name.trim(), variant: 'heart' })
+        : sendImage({ file: d.file, name: name.trim(), folderId: current!.id }));
+    if (ok) {
+      setDialog(null);
+      if (d.type === 'folder' && !d.folder) setFiles(f => { const made = f.folders.find(x => x.name === name.trim()); if (made) setTab(made.id); return f; });
+    }
+  };
+  // 순서 바꾸기: ≡ 를 잡고 위아래로 끌기 → 놓으면 저장
+  const [drag, setDrag] = useState<{ id: string; y0: number; dy: number; h: number; from: number } | null>(null);
+  const dragTo = drag ? Math.max(0, Math.min(images.length - 1, drag.from + Math.round(drag.dy / drag.h))) : -1;
+  const ordered = useMemo(() => {
+    if (!drag) return images;
+    const list = images.slice(); const [moved] = list.splice(drag.from, 1); list.splice(dragTo, 0, moved); return list;
+  }, [images, drag, dragTo]);
+  const startDrag = (e: RPointerEvent, image: PriceImage, index: number) => {
+    const row = (e.currentTarget as HTMLElement).closest('.pb-row') as HTMLElement | null;
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    setDrag({ id: image.id, y0: e.clientY, dy: 0, h: (row?.offsetHeight ?? 90) + 10, from: index });
+  };
+  const endDrag = () => {
+    if (!drag || !current) return;
+    const ids = ordered.map(i => i.id); const changed = dragTo !== drag.from;
+    setDrag(null);
+    if (changed) { setFiles(f => ({ ...f, images: [...f.images.filter(i => i.folderId !== current.id), ...ids.map(id => f.images.find(i => i.id === id)!)] })); void run(() => post({ action: 'reorder', folderId: current.id, ids })); }
+  };
+  // 묶음 파일로 넣기(2026-11-13): { format: 'dachaeum-pricelist', folders: [{ name, images: [{ name, type, data }] }] } — 같은 이름 탭이면 거기에, 같은 이름 가격표는 건너뜀
+  const importBundle = async (file: File) => {
+    setPending(true); setError(''); setNotice('');
+    let added = 0, skipped = 0, now = files;
     try {
       const j = JSON.parse(await file.text());
       if (j?.format !== 'dachaeum-pricelist' || !Array.isArray(j.folders)) throw new Error('가격표 묶음 파일이 아니에요.');
-      const total = j.folders.reduce((n: number, f: { images?: unknown[] }) => n + (f.images?.length ?? 0), 0);
       for (const f of j.folders as { name: string; images: { name: string; type: string; data: string }[] }[]) {
-        let folder = current.folders.find(x => x.name === f.name);
-        if (!folder) {
-          current = await read(await fetch('/api/price-files', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'create-folder', name: f.name, variant }) }));
-          folder = current.folders.find(x => x.name === f.name);
-          if (!folder) throw new Error(`'${f.name}' 폴더를 만들지 못했어요.`);
-        }
+        let folder = now.folders.find(x => x.name === f.name);
+        if (!folder) { now = await post({ action: 'create-folder', name: f.name, variant: 'heart' }); folder = now.folders.find(x => x.name === f.name); if (!folder) throw new Error(`'${f.name}' 탭을 만들지 못했어요.`); }
         for (const image of f.images || []) {
-          if (current.images.some(x => x.folderId === folder!.id && x.name === image.name)) { skipped++; continue; }
+          if (now.images.some(x => x.folderId === folder!.id && x.name === image.name)) { skipped++; continue; }
           const bytes = Uint8Array.from(atob(image.data), c => c.charCodeAt(0));
-          const form = new FormData(); form.set('file', new File([bytes], `${image.name}.${(image.type || 'image/webp').split('/')[1]}`, { type: image.type || 'image/webp' })); form.set('name', image.name); form.set('folderId', folder.id);
-          current = await read(await fetch('/api/price-images', { method: 'POST', body: form }));
-          added++; setFiles(current); setNotice(`${added + skipped}/${total}`);
+          now = await sendImage({ file: new File([bytes], `${image.name}.${(image.type || 'image/webp').split('/')[1]}`, { type: image.type || 'image/webp' }), name: image.name, folderId: folder.id });
+          added++; setFiles(now);
         }
       }
-      setFiles(current); setNotice(skipped ? `${added}장 넣음 · 이미 있는 ${skipped}장` : `${added}장 넣었습니다.`);
-    } catch (e) { setFiles(current); setError(`${(e as Error).message || '파일을 읽지 못했어요.'}${added ? ` (${added}장까지 넣음)` : ''}`); }
-    finally { setPending(false); }
+      setNotice(skipped ? `${added}장 넣음 · 이미 있는 ${skipped}장` : `${added}장 넣었습니다.`);
+    } catch (e) { setError(`${(e as Error).message || '파일을 읽지 못했어요.'}${added ? ` (${added}장까지 넣음)` : ''}`); }
+    finally { setFiles(now); setPending(false); }
   };
 
-  const normalizedQuery = query.trim().toLocaleLowerCase('ko');
-  const folderName = (id: string) => files.folders.find(folder => folder.id === id)?.name ?? '';
-  // 검색은 보관함 전체(폴더 이름 포함)에서, 검색이 없으면 연 폴더 안의 가격표만.
-  const visibleImages = normalizedQuery
-    ? files.images.filter(image => `${image.name} ${folderName(image.folderId)}`.toLocaleLowerCase('ko').includes(normalizedQuery))
-    : currentFolder ? files.images.filter(image => image.folderId === currentFolder.id) : [];
-  const showingFolders = !normalizedQuery && !currentFolder;
-  const count = showingFolders ? files.folders.length : visibleImages.length;
-  const title = normalizedQuery ? '검색 결과' : currentFolder?.name ?? '가격표';
-  const path = opened ? `${folderName(opened.folderId) || '가격표'} / ${opened.name}` : title;
-
-  function renderFolders() {
-    if (!files.folders.length) return loading ? <div className="pf-loading"><LoadingBox label="가격표 불러오는 중…" /></div>
-      : <p className="finder-empty">{files.authenticated ? '폴더가 없습니다. 위쪽 새 폴더 버튼으로 만들어 주세요.' : '폴더가 없습니다.'}</p>;
-    return files.folders.map(folder => <button key={folder.id} type="button" className="desktop-icon" onClick={() => navigate(folder.id)}>
-      <div className="desktop-folder-art"><ToneFolder /></div>
-      <span><ToneDot name={folder.name} />{folder.name}</span>
-    </button>);
-  }
-  function renderImages() {
-    if (!visibleImages.length) return loading ? <div className="pf-loading"><LoadingBox label="가격표 불러오는 중…" /></div>
-      : <p className="finder-empty">{query ? '검색 결과가 없습니다. 시술명이나 폴더 이름으로 검색해 보세요.' : files.authenticated ? '가격표가 없습니다. 위쪽 이미지 추가 버튼으로 올려 주세요.' : '가격표가 없습니다.'}</p>;
-    return visibleImages.map((image, index) => <div key={image.id} className="pf-thumb">
-      <button type="button" className="pf-thumb-open" onClick={() => setGallery({ images: visibleImages, index })} aria-label={`${image.name} 열기`}>
-        <span className="pf-thumb-image"><img src={image.src} alt="" loading="lazy" /></span>
-        <span className="pf-thumb-name">{image.name}</span>
-        {normalizedQuery && <span className="pf-thumb-folder">{folderName(image.folderId)}</span>}
-      </button>
-      {files.authenticated && <div className="pf-thumb-actions"><button type="button" aria-label={`${image.name} 이름·폴더 변경`} onClick={() => openEditor({ type: 'image', image })}><Pencil size={13} />정리</button><button type="button" aria-label={`${image.name} 삭제`} onClick={() => openEditor({ type: 'delete', image })}><Trash2 size={13} />삭제</button></div>}
-    </div>);
-  }
-
-  // 폴더 삭제: 폴더와 안의 가격표를 모두 휴지통으로(휴지통에서 가격표를 복원하면 폴더도 돌아온다)
-  const deleteFolder = async (folder: PriceFolder) => {
-    if (pending) return;
-    const count = files.images.filter(image => image.folderId === folder.id).length;
-    if (!await askConfirm({ title: '삭제하시겠습니까?', message: `‘${folder.name}’ 폴더 · 가격표 ${count}장`, kind: 'delete' })) return;
-    setPending(true); setError(''); setNotice('');
-    try {
-      const response = await fetch('/api/price-files', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'delete-folder', id: folder.id }) });
-      const data = await response.json().catch(() => null);
-      if (!response.ok || !data) throw new Error(data?.error || '삭제하지 못했습니다. 다시 시도해 주세요.');
-      setFiles(data); setNotice('휴지통으로 이동했습니다.'); announceTrash('price'); setGallery(null); setHistory({ list: ['root'], at: 0 });
-    } catch (e) { setError((e as Error).message || '삭제하지 못했습니다. 다시 시도해 주세요.'); }
-    finally { setPending(false); }
-  };
-
-  const tools = <>
-    {files.authenticated ? <>
-      {currentFolder && !normalizedQuery && <button type="button" aria-label="폴더 이름 변경" title="폴더 이름 변경" onClick={() => openEditor({ type: 'folder', folder: currentFolder })}><Pencil size={18} strokeWidth={1.6} /></button>}
-      {currentFolder && !normalizedQuery && <button type="button" aria-label="폴더 삭제" title="폴더 삭제" disabled={pending} onClick={() => { void deleteFolder(currentFolder); }}><Trash2 size={18} strokeWidth={1.6} /></button>}
-      <button type="button" aria-label="새 폴더" title="새 폴더" onClick={() => openEditor({ type: 'folder' })}><FolderPlus size={19} strokeWidth={1.6} /></button>
-      <button type="button" aria-label="이미지 추가" title="이미지 추가" onClick={() => upload.current?.click()}><ImagePlus size={19} strokeWidth={1.6} /></button>
-      <button type="button" aria-label="묶음 파일로 넣기" title="묶음 파일로 넣기" disabled={pending} onClick={() => bundle.current?.click()}><FolderInput size={19} strokeWidth={1.6} /></button>
-    </> : <a className="finder-login" href="/signin-with-chatgpt?return_to=%2F" target="_top">로그인 후 정리</a>}
-    {searching || query ? <label className="finder-search"><Search size={15} /><input autoFocus type="search" aria-label="가격표 검색" placeholder="검색" value={query}
-      onChange={event => setQuery(event.target.value)} onKeyDown={event => { if (event.key === 'Escape') { setQuery(''); setSearching(false); } }} onBlur={() => { if (!query) setSearching(false); }} />
-      {query && <button type="button" aria-label="검색어 지우기" onClick={() => { setQuery(''); setSearching(false); }}><X size={14} /></button>}</label>
-      : <button type="button" className="finder-search-button" aria-label="검색" title="검색" onClick={() => setSearching(true)}><Search size={19} strokeWidth={1.6} /></button>}
-    <input ref={bundle} type="file" accept="application/json,.json" hidden onChange={event => { const file = event.target.files?.[0]; event.target.value = ''; void importBundle(file); }} />
-    <input ref={upload} type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={event => {
-      const file = event.target.files?.[0]; event.target.value = '';
-      if (!file) return;
-      if (file.size > 10 * 1024 * 1024) { setError('10MB 이하의 이미지를 선택해 주세요.'); setCanRetry(false); return; }
-      openEditor({ type: 'upload', file });
-    }} />
-  </>;
-  const pathParts = [{ icon: <FolderOpen size={14} strokeWidth={1.7} />, label: '가격표', onClick: currentFolder || normalizedQuery ? () => navigate('root') : undefined },
-    ...(currentFolder && !normalizedQuery ? [{ icon: <Folder size={14} strokeWidth={1.7} />, label: currentFolder.name }] : []),
-    ...(normalizedQuery ? [{ icon: <Search size={14} strokeWidth={1.7} />, label: `‘${query.trim()}’ 검색` }] : [])];
-
-  return <div className="file-explorer price-file-manager" aria-label={path}>
-    {opened && gallery ? <ImageDocumentViewer name={opened.name} src={opened.src} variants={opened.variants} index={gallery.index} count={gallery.images.length}
-      onNavigate={index => setGallery(current => current && index >= 0 && index < current.images.length ? { ...current, index } : current)}
-      onBack={() => setGallery(null)} />
-      : <FinderMain title={title} tools={tools}
-        onBack={history.at > 0 ? () => step(-1) : undefined} onForward={history.at < history.list.length - 1 ? () => step(1) : undefined}
-        path={<FinderPath parts={pathParts} />}
-        status={<>{count}개 항목{notice && !loading ? ` · ${notice}` : ''}</>} scale={scale} onScale={setScale}>
-        {error && !editor && <div role="alert" className="pf-feedback">{error}{canRetry && <button type="button" onClick={() => void refresh()}>다시 불러오기</button>}</div>}
-        <div className={showingFolders ? 'finder-grid' : 'finder-grid pf-thumb-grid'} style={{ ['--finder-scale' as string]: scale / 100 }}>
-          {showingFolders ? renderFolders() : renderImages()}
-        </div>
-      </FinderMain>}
-    {editor && <KittyDialog title={editor.type === 'delete' ? '휴지통으로 이동' : editor.type === 'folder' && !editor.folder ? '새 폴더' : '저장 확인'} onClose={closeEditor} busy={pending}>
-      <form onSubmit={save}>
-        {editor.type === 'delete' ? <p className="kitty-question">‘{editor.image.name}’ 가격표를 휴지통으로 옮길까요?<br />휴지통에서 복원할 수 있습니다.</p> : <>
-          {editor.type === 'upload' && preview && <img className="pf-upload-preview" src={preview} alt="추가할 가격표" />}
-          <label className="kitty-field">{editor.type === 'folder' ? '폴더 이름' : '가격표 이름'}<input autoFocus required maxLength={100} value={name} onChange={event => setName(event.target.value)} disabled={pending} /></label>
-          {editor.type !== 'folder' && <label className="kitty-field">저장할 폴더<select value={folderId} onChange={event => setFolderId(event.target.value)} disabled={pending} required>{files.folders.map(folder => <option key={folder.id} value={folder.id}>{folder.name}</option>)}</select></label>}
-        </>}
+  return <div className={`price-board${editing ? ' is-editing' : ''}`} aria-label="가격표 보관함">
+    <header className="pb-top">
+      <h2>가격표</h2>
+      <nav className="pb-tabs" aria-label="카테고리">
+        {folders.map(f => { const n = files.images.filter(i => i.folderId === f.id).length; return <button key={f.id} type="button" className={f.id === current?.id ? 'is-on' : ''} onClick={() => setTab(f.id)}>{f.name}<small>{n}</small></button>; })}
+        {editing && <button type="button" className="pb-tab-add" onClick={() => openDialog({ type: 'folder' })}><Plus size={15} />탭</button>}
+      </nav>
+      {files.authenticated ? <button type="button" className={`pb-edit${editing ? ' is-on' : ''}`} onClick={() => { setEditing(v => !v); setError(''); setNotice(''); }}>{editing ? '완료' : '편집'}</button>
+        : <a className="pb-edit" href="/signin-with-chatgpt?return_to=%2F" target="_top">로그인</a>}
+    </header>
+    {(error || notice) && <p className={`pb-msg${error ? ' is-error' : ''}`} role={error ? 'alert' : 'status'}>{error || notice}{pending && <SavingMark />}</p>}
+    {editing ? <div className="pb-edit-list">
+      {current && <div className="pb-folder-tools">
+        <button type="button" onClick={() => openDialog({ type: 'folder', folder: current })}><Pencil size={14} />탭 이름</button>
+        <button type="button" disabled={pending} onClick={() => void removeFolder(current)}><Trash2 size={14} />탭 삭제</button>
+        <button type="button" disabled={pending} onClick={() => pick('application/json,.json', f => void importBundle(f))}><FolderInput size={14} />묶음 파일로 넣기</button>
+      </div>}
+      {ordered.map(image => <div key={image.id} className={`pb-row${drag?.id === image.id ? ' is-drag' : ''}`}>
+        <button type="button" className="pb-grip" aria-label={`${image.name} 순서 옮기기`} style={{ touchAction: 'none' }}
+          onPointerDown={e => startDrag(e, image, images.indexOf(image))} onPointerMove={e => drag && setDrag({ ...drag, dy: e.clientY - drag.y0 })} onPointerUp={endDrag} onPointerCancel={() => setDrag(null)}><GripVertical size={18} /></button>
+        <button type="button" className="pb-th" aria-label={`${image.name} 가로 그림 교체`} onClick={() => replace(image, 'landscape')}><img src={image.variants?.landscape || image.src} alt="" loading="lazy" /><span>가로</span></button>
+        {image.hasPortrait ? <span className="pb-th is-tall"><button type="button" aria-label={`${image.name} 세로 그림 교체`} onClick={() => replace(image, 'portrait')}><img src={image.variants?.portrait} alt="" loading="lazy" /><span>세로</span></button>
+          {image.ownPortrait && <button type="button" className="pb-th-x" aria-label={`${image.name} 세로 그림 빼기`} onClick={() => void removePortrait(image)}><X size={12} /></button>}</span>
+          : <button type="button" className="pb-th is-tall is-empty" aria-label={`${image.name} 세로 그림 올리기`} onClick={() => replace(image, 'portrait')}><Plus size={14} />세로</button>}
+        <button type="button" className="pb-name" onClick={() => openDialog({ type: 'name', image })}>{image.name}<small>{image.hasPortrait ? '가로 · 세로' : '가로만'}</small></button>
+        <div className="pb-acts"><button type="button" onClick={() => replace(image, 'landscape')}>교체</button><button type="button" onClick={() => void removeImage(image)}>삭제</button></div>
+      </div>)}
+      {current && <button type="button" className="pb-add" disabled={pending} onClick={() => pick(IMG, f => { if (!tooBig(f)) openDialog({ type: 'add', file: f }); })}><Plus size={16} />가격표 추가</button>}
+    </div>
+      : images.length ? <Pager key={current?.id} images={images} page={page} tall={tall} onPage={go} />
+        : <div className="pb-empty">{loading ? <LoadingBox label="가격표 불러오는 중…" /> : '가격표 없음'}</div>}
+    <input ref={picker} type="file" hidden onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) pickFor.current?.(f); }} />
+    {dialog && <KittyDialog title={dialog.type === 'folder' ? (dialog.folder ? '탭 이름' : '새 탭') : dialog.type === 'add' ? '가격표 추가' : '가격표 이름'} onClose={() => !pending && setDialog(null)} busy={pending}>
+      <form onSubmit={e => { e.preventDefault(); void saveDialog(); }}>
+        <label className="kitty-field">{dialog.type === 'folder' ? '탭 이름' : '가격표 이름'}<input autoFocus required maxLength={100} value={name} onChange={e => setName(e.target.value)} disabled={pending} /></label>
         {error && <p className="kitty-error" role="alert">{error}</p>}
-        <footer className="kitty-dialog-actions"><button type="button" onClick={closeEditor} disabled={pending}>취소</button><button type="submit" className="kitty-primary" disabled={pending || (editor.type !== 'delete' && !name.trim())}>{pending ? <><SavingMark />처리 중…</> : editor.type === 'delete' ? '휴지통으로 이동' : '저장'}</button></footer>
+        <footer className="kitty-dialog-actions"><button type="button" onClick={() => setDialog(null)} disabled={pending}>취소</button><button type="submit" className="kitty-primary" disabled={pending || !name.trim()}>{pending ? <><SavingMark />저장 중…</> : '저장'}</button></footer>
       </form>
     </KittyDialog>}
+  </div>;
+}
+
+// 넘겨 보기: 한 장씩 화면 가득(비율 유지). 확대하지 않았을 때 좌우로 밀면 넘김, 한 번 탭 = 버튼 숨기기/보이기, 두 번 탭 = 2.5배.
+function Pager({ images, page, tall, onPage }: { images: PriceImage[]; page: number; tall: boolean; onPage: (n: number) => void }) {
+  const [controls, setControls] = useState(true);
+  const [zoom, setZoom] = useState(1);
+  const stage = useRef<HTMLDivElement>(null);
+  const touch = useRef<{ x: number; y: number; t: number; id: number } | null>(null);
+  const lastTap = useRef<{ t: number; x: number; y: number } | null>(null);
+  const tapTimer = useRef<number>();
+  const [dx, setDx] = useState(0);
+  const image = images[page];
+  useEffect(() => { setZoom(1); setDx(0); }, [page, tall]);
+  useEffect(() => { // 앞뒤 장 미리 받아 두기
+    for (const n of [page - 1, page + 1]) if (images[n]) { const img = new Image(); img.src = sideOf(images[n], tall); }
+  }, [page, tall, images]);
+  useEffect(() => {
+    const on = (e: KeyboardEvent) => { if ((e.target as HTMLElement)?.closest('input,textarea,dialog')) return; if (e.key === 'ArrowRight') onPage(page + 1); if (e.key === 'ArrowLeft') onPage(page - 1); };
+    window.addEventListener('keydown', on); return () => window.removeEventListener('keydown', on);
+  }, [page, onPage]);
+  const zoomAt = (to: number, x?: number, y?: number) => {
+    const el = stage.current; setZoom(to);
+    if (!el || to === 1) return;
+    const r = el.getBoundingClientRect(); const fx = x === undefined ? 0.5 : (x - r.left) / r.width, fy = y === undefined ? 0.5 : (y - r.top) / r.height;
+    requestAnimationFrame(() => { el.scrollLeft = fx * el.scrollWidth - r.width / 2; el.scrollTop = fy * el.scrollHeight - r.height / 2; });
+  };
+  const onDown = (e: RPointerEvent) => { if (e.pointerType === 'mouse' && e.button !== 0) return; touch.current = { x: e.clientX, y: e.clientY, t: e.timeStamp, id: e.pointerId }; };
+  const onMove = (e: RPointerEvent) => { const s = touch.current; if (!s || s.id !== e.pointerId || zoom > 1) return; const mx = e.clientX - s.x; if (Math.abs(mx) > Math.abs(e.clientY - s.y)) setDx(mx); };
+  const onUp = (e: RPointerEvent) => {
+    const s = touch.current; touch.current = null; if (!s || s.id !== e.pointerId) return;
+    const mx = e.clientX - s.x, my = e.clientY - s.y; setDx(0);
+    if (zoom === 1 && Math.abs(mx) > 50 && Math.abs(mx) > Math.abs(my) * 1.3) { onPage(page + (mx < 0 ? 1 : -1)); return; }
+    if (Math.abs(mx) > 10 || Math.abs(my) > 10) return;
+    const prev = lastTap.current, now = { t: e.timeStamp, x: e.clientX, y: e.clientY };
+    if (prev && now.t - prev.t < 300 && Math.hypot(now.x - prev.x, now.y - prev.y) < 30) { window.clearTimeout(tapTimer.current); lastTap.current = null; zoomAt(zoom > 1 ? 1 : ZOOM, e.clientX, e.clientY); return; }
+    lastTap.current = now; window.clearTimeout(tapTimer.current); tapTimer.current = window.setTimeout(() => setControls(v => !v), 260);
+  };
+  return <div className="pb-view">
+    <div ref={stage} className={`pb-stage${zoom > 1 ? ' is-zoom' : ''}`} style={{ touchAction: zoom > 1 ? 'pan-x pan-y' : 'pan-y' }}
+      onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={() => { touch.current = null; setDx(0); }}>
+      <img key={image.id + String(tall)} src={sideOf(image, tall)} alt={image.name} draggable={false}
+        style={zoom > 1 ? { width: `${zoom * 100}%`, height: `${zoom * 100}%` } : { transform: dx ? `translateX(${dx}px)` : undefined }} />
+    </div>
+    {controls && <>
+      <div className="pb-float pb-zoom"><button type="button" aria-label="축소" disabled={zoom === 1} onClick={() => zoomAt(1)}><Minus size={18} /></button><button type="button" aria-label="확대" disabled={zoom > 1} onClick={() => zoomAt(ZOOM)}><Plus size={18} /></button></div>
+      <button type="button" className="pb-float pb-nav is-prev" aria-label="이전 가격표" disabled={page === 0} onClick={() => onPage(page - 1)}><ChevronLeft size={22} /></button>
+      <button type="button" className="pb-float pb-nav is-next" aria-label="다음 가격표" disabled={page >= images.length - 1} onClick={() => onPage(page + 1)}><ChevronRight size={22} /></button>
+      <div className="pb-dots" aria-label={`${page + 1} / ${images.length}`}>{images.length <= 12 && images.map((x, i) => <button key={x.id} type="button" aria-label={x.name} className={i === page ? 'is-on' : ''} onClick={() => onPage(i)} />)}<span>{page + 1} / {images.length}</span></div>
+    </>}
   </div>;
 }

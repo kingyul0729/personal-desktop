@@ -94,5 +94,13 @@ export default [
   "statements": [
    "ALTER TABLE `price_folders` ADD `trashed_at` integer;"
   ]
+ },
+ {
+  "name": "0012_price_image_pair",
+  "statements": [
+   "ALTER TABLE `price_images` ADD `portrait_key` text;",
+   "ALTER TABLE `price_images` ADD `portrait_mime` text;",
+   "ALTER TABLE `price_images` ADD `sort` integer;"
+  ]
  }
 ];
