@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as RPointerEvent } from 'react';
 import { ChevronLeft, ChevronRight, FolderInput, GripVertical, Minus, Pencil, Plus, Trash2, X } from 'lucide-react';
+import { createPortal } from 'react-dom';
 import { KittyDialog } from './KittyDialog';
 import { askConfirm } from './AlertDialog';
 import { LoadingBox, SavingMark } from './Feedback';
@@ -175,7 +176,7 @@ export function FileExplorer({ onFolders, goto, onLocation }: { onFolders?: (fol
       </div>)}
       {current && <button type="button" className="pb-add" disabled={pending} onClick={() => pick(IMG, f => { if (!tooBig(f)) openDialog({ type: 'add', file: f }); })}><Plus size={16} />가격표 추가</button>}
     </div>
-      : images.length ? <Pager key={current?.id} images={images} page={page} tall={tall} onPage={go} />
+      : images.length ? <Pager key={current?.id} images={images} page={page} tall={tall} onPage={go} label={current?.name ?? ''} />
         : <div className="pb-empty">{loading ? <LoadingBox label="가격표 불러오는 중…" /> : '가격표 없음'}</div>}
     <input ref={picker} type="file" hidden onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) pickFor.current?.(f); }} />
     {dialog && <KittyDialog title={dialog.type === 'folder' ? (dialog.folder ? '탭 이름' : '새 탭') : dialog.type === 'add' ? '가격표 추가' : '가격표 이름'} onClose={() => !pending && setDialog(null)} busy={pending}>
@@ -188,8 +189,10 @@ export function FileExplorer({ onFolders, goto, onLocation }: { onFolders?: (fol
   </div>;
 }
 
-// 넘겨 보기: 한 장씩 화면 가득(비율 유지). 확대하지 않았을 때 좌우로 밀면 넘김, 한 번 탭 = 버튼 숨기기/보이기, 두 번 탭 = 2.5배.
-function Pager({ images, page, tall, onPage }: { images: PriceImage[]; page: number; tall: boolean; onPage: (n: number) => void }) {
+// 넘겨 보기(2026-11-22 사용자 화면대로, 가격표 색은 손대지 않고 틀만): 탭 아래에 한 장씩(비율 유지), 좌우로 밀거나 ‹ › 로 넘김, 아래 점 + 'N / M'.
+// 그림을 한 번 누르면 꽉 찬 화면(왼쪽 메뉴·탭 없이) — 위 오른쪽 '탭 N / M · − · + · 닫기', 양옆 ‹ ›, 한 번 탭 = 버튼 숨기기/보이기, 두 번 탭 = 2.5배.
+function Pager({ images, page, tall, onPage, label }: { images: PriceImage[]; page: number; tall: boolean; onPage: (n: number) => void; label: string }) {
+  const [full, setFull] = useState(false);
   const [controls, setControls] = useState(true);
   const [zoom, setZoom] = useState(1);
   const stage = useRef<HTMLDivElement>(null);
@@ -198,12 +201,15 @@ function Pager({ images, page, tall, onPage }: { images: PriceImage[]; page: num
   const tapTimer = useRef<number>();
   const [dx, setDx] = useState(0);
   const image = images[page];
-  useEffect(() => { setZoom(1); setDx(0); }, [page, tall]);
+  useEffect(() => { setZoom(1); setDx(0); }, [page, tall, full]);
   useEffect(() => { // 앞뒤 장 미리 받아 두기
     for (const n of [page - 1, page + 1]) if (images[n]) { const img = new Image(); img.src = sideOf(images[n], tall); }
   }, [page, tall, images]);
   useEffect(() => {
-    const on = (e: KeyboardEvent) => { if ((e.target as HTMLElement)?.closest('input,textarea,dialog')) return; if (e.key === 'ArrowRight') onPage(page + 1); if (e.key === 'ArrowLeft') onPage(page - 1); };
+    const on = (e: KeyboardEvent) => {
+      if ((e.target as HTMLElement)?.closest('input,textarea,dialog')) return;
+      if (e.key === 'ArrowRight') onPage(page + 1); if (e.key === 'ArrowLeft') onPage(page - 1); if (e.key === 'Escape') setFull(false);
+    };
     window.addEventListener('keydown', on); return () => window.removeEventListener('keydown', on);
   }, [page, onPage]);
   const zoomAt = (to: number, x?: number, y?: number) => {
@@ -219,21 +225,31 @@ function Pager({ images, page, tall, onPage }: { images: PriceImage[]; page: num
     const mx = e.clientX - s.x, my = e.clientY - s.y; setDx(0);
     if (zoom === 1 && Math.abs(mx) > 50 && Math.abs(mx) > Math.abs(my) * 1.3) { onPage(page + (mx < 0 ? 1 : -1)); return; }
     if (Math.abs(mx) > 10 || Math.abs(my) > 10) return;
+    if (!full) { setControls(true); setFull(true); return; }
     const prev = lastTap.current, now = { t: e.timeStamp, x: e.clientX, y: e.clientY };
     if (prev && now.t - prev.t < 300 && Math.hypot(now.x - prev.x, now.y - prev.y) < 30) { window.clearTimeout(tapTimer.current); lastTap.current = null; zoomAt(zoom > 1 ? 1 : ZOOM, e.clientX, e.clientY); return; }
     lastTap.current = now; window.clearTimeout(tapTimer.current); tapTimer.current = window.setTimeout(() => setControls(v => !v), 260);
   };
-  return <div className="pb-view">
+  const nav = <>
+    <button type="button" className="pb-float pb-nav is-prev" aria-label="이전 가격표" disabled={page === 0} onClick={() => onPage(page - 1)}><ChevronLeft size={22} /></button>
+    <button type="button" className="pb-float pb-nav is-next" aria-label="다음 가격표" disabled={page >= images.length - 1} onClick={() => onPage(page + 1)}><ChevronRight size={22} /></button>
+  </>;
+  const body = <div className={full ? 'pb-full' : 'pb-view'} role={full ? 'dialog' : undefined} aria-label={full ? `${label} 가격표 크게 보기` : undefined}>
     <div ref={stage} className={`pb-stage${zoom > 1 ? ' is-zoom' : ''}`} style={{ touchAction: zoom > 1 ? 'pan-x pan-y' : 'pan-y' }}
       onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={() => { touch.current = null; setDx(0); }}>
       <img key={image.id + String(tall)} src={sideOf(image, tall)} alt={image.name} draggable={false}
         style={zoom > 1 ? { width: `${zoom * 100}%`, height: `${zoom * 100}%` } : { transform: dx ? `translateX(${dx}px)` : undefined }} />
     </div>
-    {controls && <>
-      <div className="pb-float pb-zoom"><button type="button" aria-label="축소" disabled={zoom === 1} onClick={() => zoomAt(1)}><Minus size={18} /></button><button type="button" aria-label="확대" disabled={zoom > 1} onClick={() => zoomAt(ZOOM)}><Plus size={18} /></button></div>
-      <button type="button" className="pb-float pb-nav is-prev" aria-label="이전 가격표" disabled={page === 0} onClick={() => onPage(page - 1)}><ChevronLeft size={22} /></button>
-      <button type="button" className="pb-float pb-nav is-next" aria-label="다음 가격표" disabled={page >= images.length - 1} onClick={() => onPage(page + 1)}><ChevronRight size={22} /></button>
+    {full ? controls && <>
+      <div className="pb-full-bar"><span>{label} {page + 1} / {images.length}</span>
+        <button type="button" aria-label="축소" disabled={zoom === 1} onClick={() => zoomAt(1)}><Minus size={18} /></button>
+        <button type="button" aria-label="확대" disabled={zoom > 1} onClick={() => zoomAt(ZOOM)}><Plus size={18} /></button>
+        <button type="button" className="pb-full-close" onClick={() => setFull(false)}>닫기</button></div>
+      {nav}
+    </> : <>
+      {nav}
       <div className="pb-dots" aria-label={`${page + 1} / ${images.length}`}>{images.length <= 12 && images.map((x, i) => <button key={x.id} type="button" aria-label={x.name} className={i === page ? 'is-on' : ''} onClick={() => onPage(i)} />)}<span>{page + 1} / {images.length}</span></div>
     </>}
   </div>;
+  return full ? <>{createPortal(body, document.body)}<div className="pb-view" /></> : body;
 }
