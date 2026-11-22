@@ -238,7 +238,7 @@ function Pager({ images, page, tall, onPage, label }: { images: PriceImage[]; pa
     <div ref={stage} className={`pb-stage${zoom > 1 ? ' is-zoom' : ''}`} style={{ touchAction: zoom > 1 ? 'pan-x pan-y' : 'pan-y' }}
       onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={() => { touch.current = null; setDx(0); }}>
       <img key={image.id + String(tall)} src={sideOf(image, tall)} alt={image.name} draggable={false}
-        style={zoom > 1 ? { width: `${zoom * 100}%`, height: `${zoom * 100}%` } : { transform: dx ? `translateX(${dx}px)` : undefined }} />
+        style={zoom > 1 ? { width: `${zoom * 100}%` } : { transform: dx ? `translateX(${dx}px)` : undefined }} />
     </div>
     {full ? controls && <>
       <div className="pb-full-bar"><span>{label} {page + 1} / {images.length}</span>

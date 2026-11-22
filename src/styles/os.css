@@ -3066,10 +3066,11 @@ button.iv-pinv { cursor: zoom-in; }
 .pb-msg.is-error { color: #c2504a; }
 .pb-empty { flex: 1; display: grid; place-items: center; color: #7D838B; font-size: 14px; }
 .pb-view { position: relative; flex: 1; min-height: 0; }
-.pb-stage { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 0; overflow: hidden; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
-.pb-stage img { max-width: 100%; max-height: 100%; object-fit: contain; display: block; transition: transform .15s ease-out; pointer-events: none; }
+/* 2026-11-22 사용자 '화면이 꽉 안 차, 가로 세로 다': 그림을 가로 폭에 꽉 맞추고(양옆 빈자리 없음) 화면보다 길면 위아래로 밀어 봄, 짧으면 가운데 */
+.pb-stage { position: absolute; inset: 0; display: flex; flex-direction: column; padding: 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.pb-stage img { flex: none; width: 100%; height: auto; margin: auto 0; display: block; transition: transform .15s ease-out; pointer-events: none; }
 .pb-stage.is-zoom { overflow: auto; display: block; padding: 0; -webkit-overflow-scrolling: touch; }
-.pb-stage.is-zoom img { max-width: none; max-height: none; object-fit: contain; transition: none; }
+.pb-stage.is-zoom img { margin: 0; transition: none; }
 .pb-float { position: absolute; z-index: 2; border: 1px solid #c9d6e3; background: #ffffffeb; box-shadow: 0 1px 6px #44617c18; color: #44617c; }
 .pb-float button { border: 0; background: none; color: inherit; width: 36px; height: 36px; display: grid; place-items: center; border-radius: 50%; cursor: pointer; }
 .pb-float button:disabled, .pb-nav:disabled { opacity: .3; }
@@ -3102,8 +3103,8 @@ button.iv-pinv { cursor: zoom-in; }
   .pb-acts { grid-column: 2 / -1; justify-content: flex-end; }
 }
 /* 꽉 찬 화면(2026-11-22 사용자 화면대로): 그림 한 번 누르면 왼쪽 메뉴·탭 없이 화면 전체, 위 오른쪽 한 줄 '탭 N / M · − · + · 닫기' */
-.pb-full { position: fixed; inset: 0; z-index: 1000000; background: var(--app-bg, #fafafa); padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
-.pb-full .pb-stage { inset: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); cursor: zoom-in; }
+.pb-full { position: fixed; inset: 0; z-index: 1000000; background: var(--app-bg, #fafafa); }
+.pb-full .pb-stage { inset: 0; cursor: zoom-in; }
 .pb-view .pb-stage { cursor: zoom-in; }
 .pb-full-bar { position: absolute; z-index: 2; top: calc(14px + env(safe-area-inset-top)); right: calc(14px + env(safe-area-inset-right)); display: flex; align-items: center; gap: 8px; padding: 6px 6px 6px 18px; border-radius: 999px; background: #2D3136cc; color: #fff; font-size: 14px; font-variant-numeric: tabular-nums; }
 .pb-full-bar span { margin-right: 6px; white-space: nowrap; }
