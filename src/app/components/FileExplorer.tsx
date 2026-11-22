@@ -126,23 +126,30 @@ export function FileExplorer({ onFolders, goto, onLocation }: { onFolders?: (fol
     if (changed) { setFiles(f => ({ ...f, images: [...f.images.filter(i => i.folderId !== current.id), ...ids.map(id => f.images.find(i => i.id === id)!)] })); void run(() => post({ action: 'reorder', folderId: current.id, ids })); }
   };
   // 묶음 파일로 넣기(2026-11-13): { format: 'dachaeum-pricelist', folders: [{ name, images: [{ name, type, data }] }] } — 같은 이름 탭이면 거기에, 같은 이름 가격표는 건너뜀
+  // 묶음 파일(2026-11-22 세로 그림 함께): 그림마다 { name, type, data, portrait?: { type, data } } — 세로가 있으면 같은 가격표의 세로 칸으로.
+  // 같은 이름이 이미 있으면 그림은 그대로 두고, 세로 칸이 비어 있을 때만 세로를 채움. 다 넣은 뒤 탭 안 순서는 파일 순서대로(파일에 없는 가격표는 뒤에).
   const importBundle = async (file: File) => {
     setPending(true); setError(''); setNotice('');
-    let added = 0, skipped = 0, now = files;
+    let added = 0, skipped = 0, tall = 0, now = files;
+    const toFile = (name: string, x: { type?: string; data: string }) => { const type = x.type || 'image/webp'; return new File([Uint8Array.from(atob(x.data), c => c.charCodeAt(0))], `${name}.${type.split('/')[1]}`, { type }); };
     try {
       const j = JSON.parse(await file.text());
       if (j?.format !== 'dachaeum-pricelist' || !Array.isArray(j.folders)) throw new Error('가격표 묶음 파일이 아니에요.');
-      for (const f of j.folders as { name: string; images: { name: string; type: string; data: string }[] }[]) {
+      for (const f of j.folders as { name: string; images: { name: string; type: string; data: string; portrait?: { type: string; data: string } }[] }[]) {
         let folder = now.folders.find(x => x.name === f.name);
         if (!folder) { now = await post({ action: 'create-folder', name: f.name, variant: 'heart' }); folder = now.folders.find(x => x.name === f.name); if (!folder) throw new Error(`'${f.name}' 탭을 만들지 못했어요.`); }
         for (const image of f.images || []) {
-          if (now.images.some(x => x.folderId === folder!.id && x.name === image.name)) { skipped++; continue; }
-          const bytes = Uint8Array.from(atob(image.data), c => c.charCodeAt(0));
-          now = await sendImage({ file: new File([bytes], `${image.name}.${(image.type || 'image/webp').split('/')[1]}`, { type: image.type || 'image/webp' }), name: image.name, folderId: folder.id });
-          added++; setFiles(now);
+          let item = now.images.find(x => x.folderId === folder!.id && x.name === image.name);
+          if (item) skipped++;
+          else { now = await sendImage({ file: toFile(image.name, image), name: image.name, folderId: folder.id }); added++; item = now.images.filter(x => x.folderId === folder!.id && x.name === image.name).pop(); }
+          if (image.portrait && item && !item.ownPortrait) { now = await sendImage({ file: toFile(`${image.name}-세로`, image.portrait), id: item.id, side: 'portrait' }); tall++; }
+          setFiles(now);
         }
+        const names = (f.images || []).map(x => x.name), inTab = now.images.filter(x => x.folderId === folder!.id);
+        const ids = [...names.map(n => inTab.find(x => x.name === n)?.id).filter((x): x is string => !!x), ...inTab.filter(x => !names.includes(x.name)).map(x => x.id)];
+        if (ids.length > 1) now = await post({ action: 'reorder', folderId: folder.id, ids });
       }
-      setNotice(skipped ? `${added}장 넣음 · 이미 있는 ${skipped}장` : `${added}장 넣었습니다.`);
+      setNotice([`${added}장 넣음`, tall ? `세로 ${tall}장` : '', skipped ? `이미 있는 ${skipped}장` : ''].filter(Boolean).join(' · '));
     } catch (e) { setError(`${(e as Error).message || '파일을 읽지 못했어요.'}${added ? ` (${added}장까지 넣음)` : ''}`); }
     finally { setFiles(now); setPending(false); }
   };
