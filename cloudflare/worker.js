@@ -6,7 +6,7 @@ import app from '../worker/index.js';
 import MIGRATIONS from './migrations.js';
 
 const SESSION_COOKIE = 'dc_session';
-const SESSION_DAYS = 30;
+const SESSION_DAYS = 1;   // 2026-11-23 사용자 '하루만 저장' (예전 30일)
 const PBKDF2_ITER = 100000;
 const enc = new TextEncoder();
 const nowISO = () => new Date().toISOString();
@@ -77,6 +77,8 @@ async function readSession(env, request) {
   const m = (request.headers.get('cookie') || '').match(new RegExp('(?:^|;\\s*)' + SESSION_COOKIE + '=([^;]+)'));
   if (!m) return null; const [p, sig] = m[1].split('.'); if (!p || !sig || sig !== await hmac(await secret(env), p)) return null;
   try { const s = JSON.parse(new TextDecoder().decode(b64uDec(p))); if (!s.exp || s.exp < Date.now()) return null;
+    // 예전 30일짜리 로그인(동의서 사이트에서 만든 것 포함)은 하루 넘게 남아 있으면 다시 로그인
+    if (s.exp > Date.now() + SESSION_DAYS * 86400000 + 60000) return null;
     // 중지된 계정은 바로 막는다
     const u = await env.DB.prepare('SELECT active FROM users WHERE id = ?').bind(s.uid).first(); return u && Number(u.active) ? s : null; } catch (e) { return null; }
 }
