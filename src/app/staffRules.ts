@@ -99,10 +99,10 @@ export function leaveCumulative(byStaff: Record<string, string[]>) {
 }
 
 // 그 해 사용 순번 = 지금 사용 연차 - (이 날 뒤에 쓴 연차 수). 앞 기록이 빠진 해에도 최근 순번이 맞게.
+// 연차 순번 = 그 해 연차 날짜를 날짜순으로 1·2·3…(2026-11-25 사용자 '연차를 순서대로 1.2.3 다시 나열' — 예전 앱 표기·사용연차 기준 순번 대신)
 export function leaveSeq(s: StaffMember, idx: Record<string, number> | undefined, date: string) {
   if (!idx || idx[date] == null) return s.used_leave ?? '-';
-  const later = Object.keys(idx).length - idx[date];
-  return (s.used_leave ?? 0) - later;
+  return idx[date];
 }
 
 // 빨간 날(병원 휴일) 목록은 서버와 같이 쓴다
@@ -125,8 +125,7 @@ export function calendarLines(date: string, staff: StaffMember[], recOf: (sid: n
     if (!st) { if (weekdayOf(date) !== 0 && date <= today) none++; continue; }
     if (st === '정상근무') continue;
     let label = SHORT[st] || st;
-    const shown = /표기 (\d+\/\d+)/.exec(rec?.memo || '');
-    if (st === '연차') label = shown ? `연차 ${shown[1]}` : `연차 ${leaveSeq(s, cum[s.id], date)}/${s.total_leave ?? '-'}`;
+    if (st === '연차') label = `연차 ${leaveSeq(s, cum[s.id], date)}/${s.total_leave ?? '-'}`;
     const kind = st === '휴일' || st === '병원휴무' || st === '무급 기타' ? 'hol' : WORK_STATES.includes(st) ? 'work' : st === '연차' ? 'leave' : 'off';
     lines.push({ sid: s.id, name: s.name, label, kind });
   }
