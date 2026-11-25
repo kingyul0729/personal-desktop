@@ -16,11 +16,18 @@ export const priceImages = sqliteTable('price_images', {
 }, (t) => [index('idx_price_images_owner_folder').on(t.owner, t.folderId)]);
 
 // 2026-11-26 프로그램 비교(상담용): 탭 이름(category)별 프로그램 · 총금액(원, 부가세 포함) · 시술 구성 JSON [{name, qty|null, label?}]
+// · 라인 이름(line) · 설명(descr) · 맞춤 피부(fit). 라인 요약은 price_program_lines(라인 이름 · 특징 · 맞춤 피부).
 export const pricePrograms = sqliteTable('price_programs', {
   id: text('id').primaryKey(), owner: text('owner').notNull(), category: text('category').notNull(),
-  name: text('name').notNull(), price: integer('price'), items: text('items').notNull().default('[]'), note: text('note').notNull().default(''),
+  name: text('name').notNull(), price: integer('price'), items: text('items').notNull().default('[]'),
+  line: text('line').notNull().default(''), descr: text('descr').notNull().default(''), fit: text('fit').notNull().default(''),
   sort: integer('sort').notNull().default(0), updatedAt: integer('updated_at').notNull(),
 }, (t) => [index('idx_price_programs_owner').on(t.owner, t.category)]);
+export const priceProgramLines = sqliteTable('price_program_lines', {
+  id: text('id').primaryKey(), owner: text('owner').notNull(), category: text('category').notNull(), name: text('name').notNull(),
+  feature: text('feature').notNull().default(''), fit: text('fit').notNull().default(''),
+  sort: integer('sort').notNull().default(0), updatedAt: integer('updated_at').notNull(),
+}, (t) => [index('idx_price_program_lines_owner').on(t.owner, t.category)]);
 
 // Confirmed memos only; the in-progress text lives in memo_drafts until Save.
 export const memos = sqliteTable('memos', {

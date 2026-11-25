@@ -3313,3 +3313,11 @@ button.iv-pinv { cursor: zoom-in; }
 .pc-feat > b + p { border-top: 0; }
 .pc-feat p.is-empty { color: #a3a6ab; }
 .pc-form-note { width: 100%; min-height: 72px; padding: 8px 10px; border: 1px solid #c9d6e3; border-radius: 8px; font: inherit; font-size: 14px; resize: vertical; box-sizing: border-box; }
+/* 구성 특징 · 라인 차이: 이름표(설명·맞춤 피부·특징) + 글 */
+.pc-feat > b small { margin-left: 6px; font-size: 12px; font-weight: 600; color: #7D838B; }
+.pc-dl { margin: 0; display: flex; flex-direction: column; }
+.pc-dl > div { padding: 7px 0; border-top: 1px solid #f2f4f6; }
+.pc-dl > div:first-child { border-top: 0; }
+.pc-dl dt { font-size: 12px; font-weight: 700; color: #557591; margin-bottom: 2px; }
+.pc-dl dd { margin: 0; font-size: 14.5px; line-height: 1.55; color: #2D3136; word-break: keep-all; }
+.pc-edit-cap { margin: 8px 0 0; font-size: 13px; font-weight: 700; color: #5d646d; }

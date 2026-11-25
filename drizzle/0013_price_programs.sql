@@ -5,8 +5,21 @@ CREATE TABLE `price_programs` (
 	`name` text NOT NULL,
 	`price` integer,
 	`items` text DEFAULT '[]' NOT NULL,
-	`note` text DEFAULT '' NOT NULL,
+	`line` text DEFAULT '' NOT NULL,
+	`descr` text DEFAULT '' NOT NULL,
+	`fit` text DEFAULT '' NOT NULL,
 	`sort` integer DEFAULT 0 NOT NULL,
 	`updated_at` integer NOT NULL
 );--> statement-breakpoint
-CREATE INDEX `idx_price_programs_owner` ON `price_programs` (`owner`,`category`);
+CREATE INDEX `idx_price_programs_owner` ON `price_programs` (`owner`,`category`);--> statement-breakpoint
+CREATE TABLE `price_program_lines` (
+	`id` text PRIMARY KEY NOT NULL,
+	`owner` text NOT NULL,
+	`category` text NOT NULL,
+	`name` text NOT NULL,
+	`feature` text DEFAULT '' NOT NULL,
+	`fit` text DEFAULT '' NOT NULL,
+	`sort` integer DEFAULT 0 NOT NULL,
+	`updated_at` integer NOT NULL
+);--> statement-breakpoint
+CREATE INDEX `idx_price_program_lines_owner` ON `price_program_lines` (`owner`,`category`);

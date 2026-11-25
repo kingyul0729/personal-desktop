@@ -5,7 +5,7 @@ import { KittyDialog } from './KittyDialog';
 import { askConfirm } from './AlertDialog';
 import { LoadingBox, SavingMark } from './Feedback';
 import { announceTrash, useTrashChange } from '../trash';
-import { ProgramCompare, ProgramEditor, loadPrograms, sendPrograms, type Program } from './PriceProgramCompare';
+import { ProgramCompare, ProgramEditor, emptyPrograms, loadPrograms, sendPrograms, type ProgramData } from './PriceProgramCompare';
 import { initialPriceFiles, type PriceFiles, type PriceFolder, type PriceImage } from '../priceFiles';
 
 // 가격표(2026-11-21 사용자가 다른 앱 화면으로 지정 — 폴더·썸네일을 눌러 여는 방식 대신 '탭에서 바로 넘겨 보기'):
@@ -51,7 +51,7 @@ export function FileExplorer({ onFolders, goto, onLocation }: { onFolders?: (fol
   // 프로그램 비교(2026-11-26 사용자): [한 장] [프로그램 비교] — 비교는 상담용이라 탭 줄·편집 버튼 숨김
   const [mode, setMode] = useState<'one' | 'compare'>(() => { try { return localStorage.getItem('price-mode') === 'compare' ? 'compare' : 'one'; } catch { return 'one'; } });
   useEffect(() => { try { localStorage.setItem('price-mode', mode); } catch { /* 이 기기 편의 */ } }, [mode]);
-  const [programs, setPrograms] = useState<Program[]>([]);
+  const [programs, setPrograms] = useState<ProgramData>(emptyPrograms);
   useEffect(() => { if (editing) loadPrograms().then(setPrograms).catch(() => undefined); }, [editing]);
 
   async function refresh(signal?: AbortSignal) {
@@ -160,13 +160,13 @@ export function FileExplorer({ onFolders, goto, onLocation }: { onFolders?: (fol
     finally { setFiles(now); setPending(false); }
   };
 
-  // 프로그램 파일({format:'dachaeum-programs', programs:[{category, name, price, items:[{name, qty|label}]}]}) — 같은 탭·같은 이름은 금액·구성만 바꿈
+  // 프로그램 파일({format:'dachaeum-programs', lines:[{category, name, feature, fit}], programs:[{category, name, price?, items?, line?, desc?, fit?}]}) — 같은 탭·같은 이름은 고침(설명만 든 파일이면 금액·구성은 그대로)
   const importPrograms = async (file: File) => {
     setPending(true); setError(''); setNotice('');
     try {
       const j = JSON.parse(await file.text());
       const next = await sendPrograms({ action: 'import', ...j });
-      setPrograms(next); setNotice(`프로그램 ${next.length}개`);
+      setPrograms(next); setNotice(`프로그램 ${next.programs.length}개 · 라인 ${next.lines.length}개`);
     } catch (e) { setError(e instanceof SyntaxError ? '프로그램 파일이 아니에요.' : (e as Error).message); }
     finally { setPending(false); }
   };
@@ -203,7 +203,7 @@ export function FileExplorer({ onFolders, goto, onLocation }: { onFolders?: (fol
         <div className="pb-acts"><button type="button" onClick={() => replace(image, 'landscape')}>교체</button><button type="button" onClick={() => void removeImage(image)}>삭제</button></div>
       </div>)}
       {current && <button type="button" className="pb-add" disabled={pending} onClick={() => pick(IMG, f => { if (!tooBig(f)) openDialog({ type: 'add', file: f }); })}><Plus size={16} />가격표 추가</button>}
-      {current && <ProgramEditor category={current.name} programs={programs} onChange={setPrograms} />}
+      {current && <ProgramEditor category={current.name} data={programs} onChange={setPrograms} />}
     </div>
       : mode === 'compare' ? <ProgramCompare />
       : images.length ? <Pager key={current?.id} images={images} page={page} tall={tall} onPage={go} label={current?.name ?? ''} />

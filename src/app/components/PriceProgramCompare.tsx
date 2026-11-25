@@ -9,20 +9,27 @@ import { readWon } from '../koreanAmount';
 // 아래 = 가격 차이 · 구성 차이 · 안내 한 줄. 서로 다른 구성만 연한 색으로 강조, '차이만 보기'는 같은 줄을 숨김.
 // 추천 순위·우수 표시·할인율은 넣지 않는다. 숫자는 가격표 그림이 아니라 price_programs(앱에서 적거나 파일로 넣음).
 export type ProgramItem = { name: string; qty: number | null; label?: string };
-export type Program = { id: string; category: string; name: string; price: number | null; items: ProgramItem[]; note?: string };
+export type Program = { id: string; category: string; name: string; price: number | null; items: ProgramItem[]; line?: string; desc?: string; fit?: string };
+export type ProgramLine = { id: string; category: string; name: string; feature: string; fit: string };
+export type ProgramData = { programs: Program[]; lines: ProgramLine[] };
+export const emptyPrograms: ProgramData = { programs: [], lines: [] };
 
-export async function loadPrograms(): Promise<Program[]> {
+const asData = (d: Partial<ProgramData> | null): ProgramData => ({ programs: d?.programs ?? [], lines: d?.lines ?? [] });
+export async function loadPrograms(): Promise<ProgramData> {
   const r = await fetch('/api/price-programs', { cache: 'no-store' });
   const d = await r.json().catch(() => null);
   if (!r.ok || !d) throw new Error(d?.error || '프로그램을 불러오지 못했어요.');
-  return d.programs as Program[];
+  return asData(d);
 }
-export async function sendPrograms(body: unknown): Promise<Program[]> {
+export async function sendPrograms(body: unknown): Promise<ProgramData> {
   const r = await fetch('/api/price-programs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   const d = await r.json().catch(() => null);
   if (!r.ok || !d) throw new Error(d?.error || '저장하지 못했어요.');
-  return d.programs as Program[];
+  return asData(d);
 }
+// 설명·맞춤 피부: 글이 있는 것만, 이름표 + 글
+const TextRows = ({ rows }: { rows: [string, string | undefined][] }) => { const has = rows.filter(([, v]) => v?.trim());
+  return has.length ? <dl className="pc-dl">{has.map(([k, v]) => <div key={k}><dt>{k}</dt><dd>{v}</dd></div>)}</dl> : <p className="is-empty">—</p>; };
 export const won = (n: number | null) => (n == null ? '—' : readWon(n));
 const itemText = (it?: ProgramItem) => (!it ? '—' : it.qty != null ? `${it.qty}회` : it.label || '포함');
 
@@ -44,12 +51,13 @@ export function alignRows(a: Program | undefined, b: Program | undefined) {
 }
 
 export function ProgramCompare() {
-  const [programs, setPrograms] = useState<Program[] | null>(null);
+  const [data, setData] = useState<ProgramData | null>(null);
+  const programs = data?.programs ?? null;
   const [error, setError] = useState('');
   const [cat, setCat] = useState(() => { try { return localStorage.getItem('price-compare-cat') || ''; } catch { return ''; } });
   const [pick, setPick] = useState<[string, string]>(['', '']);
   const [onlyDiff, setOnlyDiff] = useState(false);
-  useEffect(() => { loadPrograms().then(setPrograms).catch(e => setError((e as Error).message)); }, []);
+  useEffect(() => { loadPrograms().then(setData).catch(e => setError((e as Error).message)); }, []);
   const cats = useMemo(() => Array.from(new Set((programs ?? []).map(p => p.category))), [programs]);
   const category = cats.includes(cat) ? cat : cats[0] ?? '';
   useEffect(() => { if (category) { try { localStorage.setItem('price-compare-cat', category); } catch { /* 이 기기 편의 */ } } }, [category]);
@@ -59,6 +67,9 @@ export function ProgramCompare() {
   const rows = alignRows(a, b);
   const shown = onlyDiff ? rows.filter(r => !r.same) : rows;
   const gap = a?.price != null && b?.price != null ? Math.abs(a.price - b.price) : null;
+  // 라인 요약은 서로 다른 라인끼리 비교할 때만(2026-11-26 사용자 '다른 라인끼리면 라인 요약도')
+  const lineOf = (p?: Program) => (p?.line ? data?.lines.find(l => l.category === category && l.name === p.line) : undefined);
+  const lineDiff = !!a?.line && !!b?.line && a.line !== b.line;
   const choose = (i: 0 | 1, id: string) => setPick(p => { const n: [string, string] = [a?.id ?? '', b?.id ?? '']; n[i] = id; return n; });
 
   if (error) return <div className="pb-empty">{error}</div>;
@@ -93,11 +104,12 @@ export function ProgramCompare() {
       <div className="pc-right">
       <div className="pc-foot">
         {gap != null && <div className="pc-gap"><span>프로그램 가격 차이</span><b>{gap ? won(gap) : '같음'}</b></div>}
-        {/* 구성 특징(2026-11-26 사용자): 횟수 비교는 시술 구성 표('차이만 보기')에서 — 여기는 프로그램마다 미리 적어 둔 짧은 설명만, 계산·평가 표현 없음 */}
+        {lineDiff && <><p className="pc-cap">라인 차이</p>
+          <div className="pc-two">{([a, b] as const).map((p, i) => { const l = lineOf(p); return <div key={i} className="pc-box pc-feat"><b>{p?.line}</b><TextRows rows={[['특징', l?.feature], ['맞춤 피부', l?.fit]]} /></div>; })}</div></>}
+        {/* 구성 특징(2026-11-26 사용자): 횟수 비교는 시술 구성 표('차이만 보기')에서 — 여기는 프로그램마다 미리 적어 둔 설명·맞춤 피부만, 계산·평가 표현 없음 */}
         <p className="pc-cap">구성 특징</p>
-        <div className="pc-two">{([a, b] as const).map((p, i) => <div key={i} className="pc-box pc-feat"><b>{p?.name}</b>
-          {(p?.note || '').split('\n').map(x => x.trim()).filter(Boolean).map((x, k) => <p key={k}>{x}</p>)}
-          {!(p?.note || '').trim() && <p className="is-empty">—</p>}</div>)}</div>
+        <div className="pc-two">{([a, b] as const).map((p, i) => <div key={i} className="pc-box pc-feat"><b>{p?.name}{p?.line && !lineDiff ? <small>{p.line}</small> : null}</b>
+          <TextRows rows={[['설명', p?.desc], ['맞춤 피부', p?.fit]]} /></div>)}</div>
       </div>
       <p className="pc-note">매 회차 원장님이 피부 상태를 확인한 후 시술을 결정합니다.</p>
       </div>
@@ -105,40 +117,58 @@ export function ProgramCompare() {
   </div>;
 }
 
-// 가격표 [편집] 아래: 고른 탭(이름 = category)의 프로그램 자료 — 추가·수정·삭제
-type Draft = { id?: string; name: string; price: string; note: string; items: { name: string; count: string }[] };
-const toDraft = (p?: Program): Draft => ({ id: p?.id, name: p?.name ?? '', price: p?.price == null ? '' : String(p.price), note: p?.note ?? '', items: p?.items.length ? p.items.map(i => ({ name: i.name, count: i.qty != null ? String(i.qty) : i.label ?? '' })) : [{ name: '', count: '' }] });
-export function ProgramEditor({ category, programs, onChange }: { category: string; programs: Program[]; onChange: (p: Program[]) => void }) {
+// 가격표 [편집] 아래: 고른 탭(이름 = category)의 라인 · 프로그램 자료 — 추가·수정·삭제
+type Draft = { id?: string; name: string; price: string; line: string; desc: string; fit: string; items: { name: string; count: string }[] };
+const toDraft = (p?: Program): Draft => ({ id: p?.id, name: p?.name ?? '', price: p?.price == null ? '' : String(p.price), line: p?.line ?? '', desc: p?.desc ?? '', fit: p?.fit ?? '', items: p?.items.length ? p.items.map(i => ({ name: i.name, count: i.qty != null ? String(i.qty) : i.label ?? '' })) : [{ name: '', count: '' }] });
+type LineDraft = { id?: string; name: string; feature: string; fit: string };
+export function ProgramEditor({ category, data, onChange }: { category: string; data: ProgramData; onChange: (d: ProgramData) => void }) {
   const [draft, setDraft] = useState<Draft | null>(null);
+  const [lineDraft, setLineDraft] = useState<LineDraft | null>(null);
   const [busy, setBusy] = useState(false), [error, setError] = useState('');
-  const list = programs.filter(p => p.category === category);
-  const save = async () => {
-    if (!draft) return; setBusy(true); setError('');
-    try {
-      const items = draft.items.filter(i => i.name.trim()).map(i => { const n = Number(i.count.replace(/회$/, '').trim()); return i.count.trim() && Number.isFinite(n) ? { name: i.name, qty: n } : { name: i.name, qty: null, label: i.count.trim() || '포함' }; });
-      onChange(await sendPrograms({ action: 'save', id: draft.id, category, name: draft.name, price: draft.price.replace(/[^\d]/g, ''), items, note: draft.note })); setDraft(null);
-    } catch (e) { setError((e as Error).message); } finally { setBusy(false); }
-  };
-  const remove = async (p: Program) => {
-    if (!await askConfirm({ title: '삭제하시겠습니까?', message: p.name, kind: 'delete' })) return;
-    try { onChange(await sendPrograms({ action: 'delete', id: p.id })); } catch (e) { setError((e as Error).message); }
-  };
+  const list = data.programs.filter(p => p.category === category), lines = data.lines.filter(l => l.category === category);
+  const run = async (job: () => Promise<ProgramData>, done: () => void) => { setBusy(true); setError(''); try { onChange(await job()); done(); } catch (e) { setError((e as Error).message); } finally { setBusy(false); } };
+  const save = () => draft && run(() => {
+    const items = draft.items.filter(i => i.name.trim()).map(i => { const n = Number(i.count.replace(/회$/, '').trim()); return i.count.trim() && Number.isFinite(n) ? { name: i.name, qty: n } : { name: i.name, qty: null, label: i.count.trim() || '포함' }; });
+    return sendPrograms({ action: 'save', id: draft.id, category, name: draft.name, price: draft.price.replace(/[^\d]/g, ''), items, line: draft.line, desc: draft.desc, fit: draft.fit });
+  }, () => setDraft(null));
+  const saveLine = () => lineDraft && run(() => sendPrograms({ action: 'save-line', id: lineDraft.id, category, ...lineDraft }), () => setLineDraft(null));
+  const remove = async (p: Program) => { if (await askConfirm({ title: '삭제하시겠습니까?', message: p.name, kind: 'delete' })) void run(() => sendPrograms({ action: 'delete', id: p.id }), () => undefined); };
+  const removeLine = async (l: ProgramLine) => { if (await askConfirm({ title: '삭제하시겠습니까?', message: l.name, kind: 'delete' })) void run(() => sendPrograms({ action: 'delete-line', id: l.id }), () => undefined); };
   const setItem = (k: number, f: 'name' | 'count', v: string) => setDraft(d => d && { ...d, items: d.items.map((x, i) => (i === k ? { ...x, [f]: v } : x)) });
+  const foot = (ok: boolean, close: () => void) => <footer className="kitty-dialog-actions"><button type="button" onClick={close} disabled={busy}>취소</button><button type="submit" className="kitty-primary" disabled={busy || !ok}>{busy ? <><SavingMark />저장 중…</> : '저장'}</button></footer>;
   return <section className="pc-edit">
     <h3>프로그램 비교 · {category}</h3>
+    <p className="pc-edit-cap">라인</p>
+    {lines.map(l => <div key={l.id} className="pc-edit-row">
+      <div><b>{l.name}</b><small>{l.feature || '—'}</small></div>
+      <button type="button" aria-label="수정" onClick={() => setLineDraft({ id: l.id, name: l.name, feature: l.feature, fit: l.fit })}><Pencil size={16} /></button>
+      <button type="button" aria-label="삭제" onClick={() => void removeLine(l)}><Trash2 size={16} /></button>
+    </div>)}
+    <button type="button" className="pb-add" onClick={() => setLineDraft({ name: '', feature: '', fit: '' })}><Plus size={16} />라인 추가</button>
+    <p className="pc-edit-cap">프로그램</p>
     {list.map(p => <div key={p.id} className="pc-edit-row">
-      <div><b>{p.name}</b><small>{won(p.price)} · {p.items.map(i => `${i.name} ${itemText(i)}`).join(' · ') || '—'}</small></div>
+      <div><b>{p.name}</b><small>{won(p.price)}{p.line ? ` · ${p.line}` : ''} · {p.items.map(i => `${i.name} ${itemText(i)}`).join(' · ') || '—'}</small></div>
       <button type="button" aria-label="수정" onClick={() => setDraft(toDraft(p))}><Pencil size={16} /></button>
       <button type="button" aria-label="삭제" onClick={() => void remove(p)}><Trash2 size={16} /></button>
     </div>)}
     <button type="button" className="pb-add" onClick={() => setDraft(toDraft())}><Plus size={16} />프로그램 추가</button>
-    {error && !draft && <p className="pb-msg is-error">{error}</p>}
+    {error && !draft && !lineDraft && <p className="pb-msg is-error">{error}</p>}
+    {lineDraft && <KittyDialog title={lineDraft.id ? '라인 수정' : '라인 추가'} onClose={() => !busy && setLineDraft(null)} busy={busy}>
+      <form className="pc-form" onSubmit={e => { e.preventDefault(); void saveLine(); }}>
+        <label className="kitty-field">라인 이름<input required maxLength={100} value={lineDraft.name} onChange={e => setLineDraft({ ...lineDraft, name: e.target.value })} /></label>
+        <label className="kitty-field">특징<textarea className="pc-form-note" rows={3} maxLength={400} value={lineDraft.feature} onChange={e => setLineDraft({ ...lineDraft, feature: e.target.value })} /></label>
+        <label className="kitty-field">맞춤 피부<textarea className="pc-form-note" rows={2} maxLength={400} value={lineDraft.fit} onChange={e => setLineDraft({ ...lineDraft, fit: e.target.value })} /></label>
+        {error && <p className="kitty-error" role="alert">{error}</p>}
+        {foot(!!lineDraft.name.trim(), () => setLineDraft(null))}
+      </form>
+    </KittyDialog>}
     {draft && <KittyDialog title={draft.id ? '프로그램 수정' : '프로그램 추가'} onClose={() => !busy && setDraft(null)} busy={busy}>
       <form className="pc-form" onSubmit={e => { e.preventDefault(); void save(); }}>
         <div className="pc-form-two">
           <label className="kitty-field">프로그램 이름<input required maxLength={100} value={draft.name} onChange={e => setDraft({ ...draft, name: e.target.value })} /></label>
           <label className="kitty-field">총금액(원)<input inputMode="numeric" value={draft.price} onChange={e => setDraft({ ...draft, price: e.target.value })} placeholder="1320000" /></label>
         </div>
+        <label className="kitty-field">라인<select value={draft.line} onChange={e => setDraft({ ...draft, line: e.target.value })}><option value="">—</option>{lines.map(l => <option key={l.id} value={l.name}>{l.name}</option>)}{draft.line && !lines.some(l => l.name === draft.line) && <option value={draft.line}>{draft.line}</option>}</select></label>
         <div className="pc-form-items"><span>시술 · 횟수</span>
           {draft.items.map((it, k) => <div key={k} className="pc-form-item">
             <input value={it.name} aria-label="시술" placeholder="시술" onChange={e => setItem(k, 'name', e.target.value)} />
@@ -147,9 +177,10 @@ export function ProgramEditor({ category, programs, onChange }: { category: stri
           </div>)}
           <button type="button" className="pc-form-add" onClick={() => setDraft({ ...draft, items: [...draft.items, { name: '', count: '' }] })}><Plus size={14} />줄 추가</button>
         </div>
-        <label className="kitty-field">구성 특징<textarea className="pc-form-note" rows={3} maxLength={600} value={draft.note} onChange={e => setDraft({ ...draft, note: e.target.value })} /></label>
+        <label className="kitty-field">설명<textarea className="pc-form-note" rows={3} maxLength={400} value={draft.desc} onChange={e => setDraft({ ...draft, desc: e.target.value })} /></label>
+        <label className="kitty-field">맞춤 피부<textarea className="pc-form-note" rows={2} maxLength={400} value={draft.fit} onChange={e => setDraft({ ...draft, fit: e.target.value })} /></label>
         {error && <p className="kitty-error" role="alert">{error}</p>}
-        <footer className="kitty-dialog-actions"><button type="button" onClick={() => setDraft(null)} disabled={busy}>취소</button><button type="submit" className="kitty-primary" disabled={busy || !draft.name.trim()}>{busy ? <><SavingMark />저장 중…</> : '저장'}</button></footer>
+        {foot(!!draft.name.trim(), () => setDraft(null))}
       </form>
     </KittyDialog>}
   </section>;
