@@ -3170,3 +3170,69 @@ button.iv-pinv { cursor: zoom-in; }
 .lv2-adj { display: flex; align-items: center; gap: 8px; border: 0; background: none; font: inherit; font-size: 15px; font-weight: 700; color: #44617c; cursor: pointer; padding: 6px 0; }
 .sf-btn.lv2-close { background: #557591; border-color: #557591; color: #fff; min-width: 120px; height: 44px; font-weight: 700; border-radius: 10px; }
 @container sfw (max-width: 520px) { .lv2-head, .lv2-row { grid-template-columns: 48px minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr) 22px; } .lv2-act { padding-left: 8px; } }
+
+/* ───── 물품 추가 배치(2026-11-26 사용자 그림, 색은 청회색 그대로) ───── */
+.iv-split.iv-ie { display: grid; grid-template-columns: minmax(220px, 300px) minmax(0, 1fr); gap: 20px; align-items: start; }
+.iv-ie-side { background: #fff; border: 1px solid #e0e6ed; border-radius: 16px; padding: 16px; display: flex; flex-direction: column; gap: 12px; position: sticky; top: 16px; max-height: calc(100dvh - 132px); overflow: hidden; }
+.iv-ie-new { height: 44px; border: 1px solid #c9d6e3; border-radius: 999px; background: #ecf1f6; color: #44617c; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; flex: none; }
+.iv-ie-new:hover { background: #e3eaf2; }
+.iv-ie-search { display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 12px; border: 1px solid #e0e6ed; border-radius: 10px; color: #8d9197; flex: none; }
+.iv-ie-search input { flex: 1; min-width: 0; border: 0; outline: 0; background: none; font: inherit; font-size: 14px; color: var(--app-ink); padding: 0; height: 100%; }
+.iv-ie-search:focus-within { border-color: #557591; }
+.iv-ie-list { list-style: none; margin: 0 -4px; padding: 0 4px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
+.iv-ie-list button { width: 100%; min-height: 56px; display: flex; align-items: center; gap: 8px; padding: 8px 10px 8px 14px; border: 1px solid transparent; border-radius: 10px; background: none; font: inherit; text-align: left; color: var(--app-ink); cursor: pointer; }
+.iv-ie-list button > span { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.iv-ie-list b { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.iv-ie-list small { font-size: 12px; color: #8d9197; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.iv-ie-list button > svg { flex: none; color: #b4bcc6; }
+.iv-ie-list button:hover { background: #f3f6f9; }
+.iv-ie-list button[aria-pressed="true"] { background: #ecf1f6; border-color: #c9d6e3; }
+.iv-ie-list button[aria-pressed="true"] b { color: #44617c; }
+.iv-ie-list button[aria-pressed="true"] > svg { color: #557591; }
+.iv-ie-empty { padding: 20px 8px; text-align: center; font-size: 13px; color: #8d9197; }
+
+.sf-wrap .iv-main > .iv-ie-form, .iv-ie-form { background: #fff; border: 1px solid #e0e6ed; border-radius: 16px; padding: 24px 28px; display: flex; flex-direction: column; gap: 0; }
+.iv-ie-head { display: flex; align-items: flex-start; gap: 12px; padding-bottom: 16px; }
+.iv-ie-title { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.iv-ie-name { border: 0; border-bottom: 1px solid transparent; background: none; font: inherit; font-size: 22px; font-weight: 700; color: var(--app-ink); padding: 2px 0; width: 100%; min-width: 0; outline: 0; }
+.iv-ie-name:hover { border-bottom-color: #e0e6ed; }
+.iv-ie-name:focus { border-bottom-color: #557591; }
+.iv-ie-vendor { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #8d9197; }
+.iv-ie-vendor select { appearance: none; -webkit-appearance: none; border: 0; border-bottom: 1px solid #e0e6ed; background: none; font: inherit; font-size: 14px; font-weight: 600; color: #44617c; padding: 2px 16px 2px 0; min-width: 0; max-width: 100%; cursor: pointer;
+  background-image: linear-gradient(45deg, transparent 50%, #8d9197 50%), linear-gradient(135deg, #8d9197 50%, transparent 50%); background-position: right 4px center, right 0 center; background-size: 4px 4px; background-repeat: no-repeat; }
+.iv-ie-info { flex: none; display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 14px; border: 1px solid #c9d6e3; border-radius: 999px; background: #fff; color: #44617c; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.iv-ie-info[aria-pressed="true"], .iv-ie-info:hover { background: #ecf1f6; }
+.iv-ie-form > .iv-vbox, .iv-ie-form > .iv-vedit { margin-bottom: 16px; }
+.iv-ie-form > .iv-vline { margin: 0; padding: 14px 0; border-top: 1px solid #e6ebf1; }
+.iv-ie-sec { border-top: 1px solid #e6ebf1; padding: 18px 0; display: flex; flex-direction: column; gap: 16px; }
+.iv-ie-g2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px 24px; align-items: start; }
+.iv-ie-g2 > .sf-input { min-width: 0; }
+.iv-ie-pack { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 20px; }
+.iv-ie-pack .iv-check, .iv-ie-checks .iv-check { margin: 0; }
+.iv-ie-pack .iv-packrow { margin: 0; }
+.iv-ie-checks { display: flex; flex-direction: column; gap: 12px; padding-top: 4px; }
+.iv-ie-band { margin: 0 0 8px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-top: 1px solid #e6ebf1; border-bottom: 1px solid #e6ebf1; padding: 16px 0; }
+.iv-ie-band > div { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.iv-ie-band > div + div { border-left: 1px solid #e6ebf1; }
+.iv-ie-band dt { font-size: 12px; color: #8d9197; }
+.iv-ie-band dd { margin: 0; font-size: 18px; font-weight: 700; color: var(--app-ink); white-space: nowrap; }
+.iv-ie-form > .iv-sec.iv-opts { border-top: 0; padding: 12px 0 0; }
+.iv-ie-form .iv-opt-table th { font-size: 12px; font-weight: 600; color: #8d9197; background: none; border-bottom: 1px solid #e6ebf1; }
+.iv-ie-form .iv-opt-table td { vertical-align: middle; padding-top: 12px; padding-bottom: 12px; }
+.iv-ie-chip { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 12px; border-radius: 999px; background: #ecf1f6; color: #44617c; font-size: 13px; white-space: nowrap; }
+.iv-ie-chip b { font-weight: 700; }
+.iv-ie-chip i { font-style: normal; color: #9fb2c4; }
+.iv-ie-chip .iv-period { font-size: 12px; color: #557591; }
+.iv-ie-form .iv-opt-table td.num b { font-weight: 700; }
+.iv-ie-foot { border-top: 1px solid #e6ebf1; padding-top: 18px; margin-top: 18px; }
+@container sfw (max-width: 760px) {
+  .iv-split.iv-ie { grid-template-columns: minmax(200px, 36%) minmax(0, 1fr); gap: 12px; }
+  .iv-ie-form, .sf-wrap .iv-main > .iv-ie-form { padding: 18px 16px; }
+  .iv-ie-g2 { grid-template-columns: minmax(0, 1fr); }
+}
+@container sfw (max-width: 520px) {
+  .iv-split.iv-ie { grid-template-columns: minmax(0, 1fr); }
+  .iv-ie-side { position: static; max-height: 300px; }
+  .iv-ie-band dd { font-size: 15px; }
+}
+.sf-wrap .iv-ie-g2 .iv-unitrow select { flex: 0 1 120px; min-width: 0; }

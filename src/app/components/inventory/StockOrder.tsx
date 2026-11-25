@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Pencil, Trash2 } from 'lucide-react';
+import { ChevronRight, Info, Pencil, Search, Trash2 } from 'lucide-react';
 import { LoadingBox, SavingMark } from '../Feedback';
 import { askConfirm } from '../AlertDialog';
 import { readWon } from '../../koreanAmount';
@@ -337,10 +337,16 @@ export function ItemEditor({ state, notify, onChange }: { state: InvState; notif
   const [sel, setSel] = useState<number | 'new' | null>(null);
   const item = typeof sel === 'number' ? state.items.find(i => i.id === sel) || null : null;
   const stopped = (it: InvItem) => state.vendors.find(v => v.id === it.vendor_id)?.active === 0;
-  return <div className="iv-split">
-    <div className="iv-side">
-      <button type="button" className="sf-btn" onClick={() => setSel('new')}>+ 새 품목</button>
-      <ul className="iv-ilist">{state.items.map(it => <li key={it.id}><button type="button" aria-pressed={sel === it.id} onClick={() => setSel(it.id)}><b>{it.name}</b><small>{it.vendor_name || '—'}{stopped(it) ? ' · 거래 중단' : ''} · 옵션 {it.options.length}개{it.price == null && !it.prepaid ? ' · 단가 미확인' : ''}</small></button></li>)}</ul>
+  // 물품 추가 화면 배치(2026-11-26 사용자 그림): 왼쪽 카드 = 새 품목 · 품목 검색 · 목록(›), 오른쪽 카드 = 품목 머리 → 칸들 → 숫자 띠 → 옵션 표
+  const [q, setQ] = useState('');
+  const key = q.trim().toLowerCase();
+  const list = key ? state.items.filter(it => `${it.name} ${it.vendor_name || ''}`.toLowerCase().includes(key)) : state.items;
+  return <div className="iv-split iv-ie">
+    <div className="iv-ie-side">
+      <button type="button" className="iv-ie-new" onClick={() => setSel('new')}>+ 새 품목</button>
+      <label className="iv-ie-search"><Search size={16} strokeWidth={1.8} aria-hidden /><input value={q} onChange={e => setQ(e.target.value)} placeholder="품목 검색" aria-label="품목 검색" /></label>
+      <ul className="iv-ie-list">{list.map(it => <li key={it.id}><button type="button" aria-pressed={sel === it.id} onClick={() => setSel(it.id)}><span><b>{it.name}</b><small>{it.vendor_name || '—'}{stopped(it) ? ' · 거래 중단' : ''} · 옵션 {it.options.length}개{it.price == null && !it.prepaid ? ' · 단가 미확인' : ''}</small></span><ChevronRight size={16} strokeWidth={1.8} aria-hidden /></button></li>)}
+        {!list.length && <li className="iv-ie-empty">기록 없음</li>}</ul>
     </div>
     <div className="iv-main">{sel == null ? <p className="sf-hint">왼쪽에서 품목을 고르세요.</p>
       : <ItemForm key={`${sel}-${item ? 1 : 0}`} item={item} state={state} notify={notify} onSaved={id => { if (id && sel === 'new') setSel(id); onChange(); announceInventory(); }} onDeleted={() => { setSel(null); onChange(); announceInventory(); }} />}</div>
@@ -408,42 +414,51 @@ export function ItemForm({ item, state, notify, onSaved, onDeleted }: { item: In
   };
   const ready = !!f.name.trim() && (!isNew || vendorReady(nv)) && (!f.pack || Number(f.pack_qty) > 0);
   const vendors = state.vendors.filter(v => v.active !== 0 || String(v.id) === f.vendor_id);
-  return <div className="iv-form">
-    <div className="iv-fgrid iv-two">
-      <label className="sf-input iv-wide"><span>품목 이름</span><input value={f.name} onChange={set('name')} /></label>
-      <label className="sf-input iv-wide"><span>거래처</span><select value={f.vendor_id} onChange={e => { setVinfo(false); set('vendor_id')(e); }}><option value="">—</option>{vendors.map(v => <option key={v.id} value={v.id}>{v.name}{v.active === 0 ? ' (거래 중단)' : ''}</option>)}<option value="new">+ 새 업체</option></select></label>
+  const daily = (k: 'use' | 'close', label: string) => { const use = f.daily_mode === 'usage' || f.daily_mode === 'usage_only', close = f.daily_mode === 'usage' || f.daily_mode === 'count';
+    const on = k === 'use' ? use : close; // 2026-11-25 사용자 '당일 사용량·마감재고 둘 다 체크'
+    return <label className="iv-check"><input type="checkbox" checked={on} onChange={e => { const u = k === 'use' ? e.target.checked : use, c = k === 'close' ? e.target.checked : close; setF(x => ({ ...x, daily_mode: u && c ? 'usage' : u ? 'usage_only' : c ? 'count' : '' })); }} /> {label}</label>; };
+  return <div className="iv-form iv-ie-form">
+    <div className="iv-ie-head">
+      <div className="iv-ie-title">
+        <input className="iv-ie-name" value={f.name} onChange={set('name')} placeholder="품목 이름" aria-label="품목 이름" />
+        <label className="iv-ie-vendor"><span>거래처</span><select value={f.vendor_id} onChange={e => { setVinfo(false); set('vendor_id')(e); }}><option value="">—</option>{vendors.map(v => <option key={v.id} value={v.id}>{v.name}{v.active === 0 ? ' (거래 중단)' : ''}</option>)}<option value="new">+ 새 업체</option></select></label>
+      </div>
+      {vendor && <button type="button" className="iv-ie-info" aria-pressed={vinfo} onClick={() => setVinfo(!vinfo)}><Info size={15} strokeWidth={1.8} aria-hidden />업체 정보</button>}
     </div>
     {isNew && <VendorFields f={nv} setF={setNv} title="새 업체" />}
-    {vendor && <VendorLine key={vendor.id} vendor={vendor} open={vinfo} setOpen={setVinfo} state={state} notify={notify} onSaved={() => onSaved()} />}
-    <div className="iv-fgrid iv-two">
-      <label className="sf-input iv-wide"><span>분류</span><input value={f.category} onChange={set('category')} placeholder="관리제품" /></label>
-      <div className="sf-input"><span>주문단위 (살 때)</span><span className="iv-unitrow"><input value="1" disabled aria-label="주문단위 수량" /><select value={f.order_unit} onChange={set('order_unit')} aria-label="주문단위">{unitOpts(f.order_unit).map(x => <option key={x} value={x}>{x}</option>)}</select></span></div>
+    {vendor && <VendorLine key={vendor.id} vendor={vendor} open={vinfo} state={state} notify={notify} onSaved={() => onSaved()} />}
+    <div className="iv-ie-sec">
+      <div className="iv-ie-g2">
+        <label className="sf-input"><span>분류</span><input value={f.category} onChange={set('category')} placeholder="관리제품" /></label>
+        <div className="sf-input"><span>주문단위 (살 때)</span><span className="iv-unitrow"><input value="1" disabled aria-label="주문단위 수량" /><select value={f.order_unit} onChange={set('order_unit')} aria-label="주문단위">{unitOpts(f.order_unit).map(x => <option key={x} value={x}>{x}</option>)}</select></span></div>
+      </div>
+      <div className="iv-ie-pack">
+        <label className="iv-check"><input type="checkbox" checked={f.pack} onChange={e => { const c = e.target.checked; setF(x => ({ ...x, pack: c, pack_qty: c ? x.pack_qty : '', stock_unit: c ? (x.stock_unit === x.order_unit ? 'ea' : x.stock_unit) : x.order_unit })); }} /> 구성수량</label>
+        {f.pack && <div className="iv-packrow"><span>1 {f.order_unit} =</span><input type="number" min={0} inputMode="decimal" value={f.pack_qty} onChange={set('pack_qty')} aria-label="구성수량" /><select value={f.stock_unit} onChange={set('stock_unit')} aria-label="재고단위">{unitOpts(f.stock_unit).map(x => <option key={x} value={x}>{x}</option>)}</select></div>}
+      </div>
     </div>
-    <label className="iv-check"><input type="checkbox" checked={f.pack} onChange={e => { const c = e.target.checked; setF(x => ({ ...x, pack: c, pack_qty: c ? x.pack_qty : '', stock_unit: c ? (x.stock_unit === x.order_unit ? 'ea' : x.stock_unit) : x.order_unit })); }} /> 구성수량 — 안에 든 낱개로 셀 때</label>
-    {f.pack && <div className="iv-packrow"><span>1 {f.order_unit} =</span><input type="number" min={0} inputMode="decimal" value={f.pack_qty} onChange={set('pack_qty')} aria-label="구성수량" /><select value={f.stock_unit} onChange={set('stock_unit')} aria-label="재고단위">{unitOpts(f.stock_unit).map(x => <option key={x} value={x}>{x}</option>)}</select></div>}
-    <div className="iv-fgrid iv-two">
-      <label className={`sf-input${f.prepaid ? ' is-off' : ''}`}><span>주문단위 가격(원)</span><input type="number" min={0} value={f.prepaid ? '' : f.price} disabled={f.prepaid} placeholder={f.prepaid ? '선결제 옵션으로 대신' : ''} onChange={set('price')} /><small>1 {f.order_unit} 가격</small></label>
-      <label className="sf-input"><span>위험 기준</span><input type="number" min={0} value={f.min_stock} onChange={set('min_stock')} /><small>{su} 기준</small></label>
+    <div className="iv-ie-sec">
+      <div className="iv-ie-g2">
+        <label className={`sf-input${f.prepaid ? ' is-off' : ''}`}><span>주문단위 가격(원)</span><input type="number" min={0} value={f.prepaid ? '' : f.price} disabled={f.prepaid} placeholder={f.prepaid ? '선결제 옵션으로 대신' : ''} onChange={set('price')} /><small>1 {f.order_unit} 가격</small></label>
+        <label className="sf-input"><span>위험 기준 ({su})</span><input type="number" min={0} value={f.min_stock} onChange={set('min_stock')} /></label>
+      </div>
+      <div className="iv-ie-g2">
+        <div className="iv-ie-checks">{daily('use', '당일 사용량')}{daily('close', '마감재고')}<label className="iv-check"><input type="checkbox" checked={f.prepaid} onChange={set('prepaid')} /> 선결제 품목</label></div>
+        <label className="sf-input"><span>메모</span><input value={f.memo} onChange={set('memo')} /></label>
+      </div>
     </div>
-    <div className="iv-fgrid iv-two">
-      <div className="sf-input"><span>일일 마감</span><div className="iv-dmode">{/* 2026-11-25 사용자 '당일 사용량·마감재고 둘 다 체크' */}
-        {([['use', '당일 사용량'], ['close', '마감재고']] as const).map(([k, label]) => { const use = f.daily_mode === 'usage' || f.daily_mode === 'usage_only', close = f.daily_mode === 'usage' || f.daily_mode === 'count';
-          const on = k === 'use' ? use : close;
-          return <label key={k} className="iv-check"><input type="checkbox" checked={on} onChange={e => { const u = k === 'use' ? e.target.checked : use, c = k === 'close' ? e.target.checked : close; setF(x => ({ ...x, daily_mode: u && c ? 'usage' : u ? 'usage_only' : c ? 'count' : '' })); }} /> {label}</label>; })}
-      </div></div>
-      <label className="sf-input"><span>메모</span><input value={f.memo} onChange={set('memo')} /></label>
-    </div>
-    <label className="iv-check"><input type="checkbox" checked={f.prepaid} onChange={set('prepaid')} /> 선결제 품목</label>
+    {item && <dl className="iv-ie-band"><div><dt>병원재고</dt><dd>{withUnit(item.hospital_stock, item.stock_unit)}</dd></div><div><dt>업체 보관 잔량</dt><dd>{withUnit(item.vendor_stock, item.stock_unit)}</dd></div><div><dt>위험 기준</dt><dd>{withUnit(item.min_stock, item.stock_unit)}</dd></div></dl>}
     {item && !!item.prepaid === f.prepaid && <Options item={item} today={state.today} notify={notify} onSaved={() => onSaved()} />}
     {item && !!item.prepaid !== f.prepaid && <p className="sf-hint">저장하면 {f.prepaid ? '선결제 옵션' : '구매조건'}을 적을 수 있어요.</p>}
-    <div className="sf-modal-foot">{item && <button type="button" className="sf-btn" onClick={async () => { if (!await askConfirm({ title: '이 품목을 목록에서 뺄까요?', message: `${item.name} · 기록은 남아요.`, kind: 'ask' })) return; try { await invSend('DELETE', `/items/${item.id}`); notify('품목을 뺐어요.'); onDeleted(); } catch (e) { notify(errText(e)); } }}>품목 빼기</button>}
+    <div className="sf-modal-foot iv-ie-foot">{item && <button type="button" className="sf-btn" onClick={async () => { if (!await askConfirm({ title: '이 품목을 목록에서 뺄까요?', message: `${item.name} · 기록은 남아요.`, kind: 'ask' })) return; try { await invSend('DELETE', `/items/${item.id}`); notify('품목을 뺐어요.'); onDeleted(); } catch (e) { notify(errText(e)); } }}>품목 빼기</button>}
       <button type="button" className="sf-btn is-primary" disabled={busy || !ready} onClick={() => void save()}>{busy && <SavingMark />}저장</button></div>
   </div>;
 }
 
 // 있는 업체: '결제 [방법] [시점]' 한 줄 + '업체 정보'(결제 방법·시점·계좌 수정, 거래 중단·재개 — 같은 업체 품목 모두에 적용)
-function VendorLine({ vendor, open, setOpen, state, notify, onSaved }: { vendor: InvVendor; open: boolean; setOpen: (v: boolean) => void; state: InvState; notify: (m: string) => void; onSaved: () => void }) {
+function VendorLine({ vendor, open, state, notify, onSaved }: { vendor: InvVendor; open: boolean; state: InvState; notify: (m: string) => void; onSaved: () => void }) {
   const [f, setF] = useState<VendorF>(vendorF(vendor));
+  useEffect(() => { if (open) setF(vendorF(vendor)); }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
   const [busy, setBusy] = useState(false);
   const t = timingOf(vendor);
   const kept = state.items.filter(i => i.vendor_id === vendor.id && i.vendor_stock > 0);
@@ -452,8 +467,7 @@ function VendorLine({ vendor, open, setOpen, state, notify, onSaved }: { vendor:
     <div className="iv-vline"><span>결제</span>
       <span className="iv-ptag is-method">{vendor.payment_method || '결제 방법 —'}</span>
       {vendor.pay_timing === 'leader' ? <span className="iv-ptag is-leader">팀장 결제</span> : autoOrder(vendor.payment_method || '') ? <span className="iv-ptag is-paid">결제 완료</span> : <span className={`iv-ptag${t ? '' : ' is-none'}`}>{t ? TIMING_LABEL[t] : '결제 시점 미정'}</span>}
-      {vendor.active === 0 && <span className="iv-ptag is-stop">거래 중단</span>}
-      <button type="button" className={`sf-btn iv-vbtn${open ? ' is-on' : ''}`} onClick={() => { setOpen(!open); setF(vendorF(vendor)); }}>업체 정보</button></div>
+      {vendor.active === 0 && <span className="iv-ptag is-stop">거래 중단</span>}</div>
     {open && <div className="iv-vedit">
       <VendorFields f={f} setF={setF} title={`업체 정보 · ${vendor.name}`} />
       <div className="sf-modal-foot">
@@ -484,11 +498,9 @@ export function Options({ item, today, notify, onSaved }: { item: InvItem; today
   const per = amount != null && qty + bonus > 0 ? Math.round(amount / (qty + bonus)) : null;
   const ST = { always: '늘', on: '진행 중', soon: '예정', ended: '끝남' } as const;
   return <section className={`iv-sec iv-opts${pp ? ' is-pp' : ''}`}><h3>{pp ? '선결제 옵션' : '구매조건'}</h3>
-    {pp && <dl className="iv-d-stats iv-opt-stats"><div><dt>병원재고</dt><dd>{withUnit(item.hospital_stock, item.stock_unit)}</dd></div><div><dt>업체 보관 잔량</dt><dd>{withUnit(item.vendor_stock, item.stock_unit)}</dd></div><div><dt>위험 기준</dt><dd>{withUnit(item.min_stock, item.stock_unit)}</dd></div></dl>}
     <div className="iv-scroll"><table className="sf-table iv-opt-table"><thead><tr><th>옵션 · 기간</th><th className="num">수량</th><th className="num">결제금액</th><th aria-label="수정·삭제" /></tr></thead>
       <tbody>{item.options.map(o => { const st = optState(o, today); return <tr key={o.id} className={st === 'ended' ? 'is-ended' : ''}>
-        <td><b>{o.label || '—'}</b>{st !== 'always' && <span className="iv-tag is-event">행사</span>}
-          <small className="iv-period">{st === 'always' ? '늘' : <>{o.start_date ? md(o.start_date) : ''} ~ {o.end_date ? md(o.end_date) : ''} <b className={`is-${st}`}>{ST[st]}</b></>}</small></td><td className="num">{fmtQty(o.qty)}{o.bonus_qty ? ` + 증정 ${fmtQty(o.bonus_qty)}` : ''} {item.stock_unit}</td><td className="num">{fmtWon(o.amount)}</td>
+        <td><span className="iv-ie-chip"><b>{o.label || '—'}</b><i>/</i><span className="iv-period">{st === 'always' ? '늘' : <>{o.start_date ? md(o.start_date) : ''} ~ {o.end_date ? md(o.end_date) : ''} <b className={`is-${st}`}>{ST[st]}</b></>}</span></span>{st !== 'always' && <span className="iv-tag is-event">행사</span>}</td><td className="num">{fmtQty(o.qty)}{o.bonus_qty ? ` + 증정 ${fmtQty(o.bonus_qty)}` : ''} {item.stock_unit}</td><td className="num"><b>{fmtWon(o.amount)}</b></td>
         <td className="num iv-row-btns"><button type="button" className="iv-icon-btn" aria-label="수정" title="수정" onClick={() => setF({ id: o.id, count: String(o.qty), unit: 'stock', amount: o.amount == null ? '' : String(o.amount), bonus: o.bonus_qty ? String(o.bonus_qty) : '', start: o.start_date || '', end: o.end_date || '', open: true })}><Pencil size={16} strokeWidth={1.8} /></button>
           <button type="button" className="iv-icon-btn is-danger" aria-label="삭제" title="삭제" onClick={async () => { if (!await askConfirm({ title: '이 옵션을 지울까요?', message: o.label || undefined, kind: 'delete' })) return; try { await invSend('DELETE', `/options/${o.id}`); notify('옵션을 지웠어요.'); onSaved(); } catch (e) { notify(errText(e)); } }}><Trash2 size={16} strokeWidth={1.8} /></button></td></tr>; })}
         {!item.options.length && <tr><td colSpan={4}><small>기록 없음</small></td></tr>}</tbody></table></div>
