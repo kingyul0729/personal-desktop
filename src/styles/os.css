@@ -3246,8 +3246,8 @@ button.iv-pinv { cursor: zoom-in; }
 .pb-modes { flex: none; display: flex; gap: 4px; margin-bottom: 9px; }
 .pb-modes button { height: 38px; padding: 0 14px; border-radius: 999px; border: 1px solid transparent; background: none; font: inherit; font-size: 14px; color: #7D838B; cursor: pointer; white-space: nowrap; }
 .pb-modes button[aria-pressed="true"] { background: #ecf1f6; border-color: #c9d6e3; color: #44617c; font-weight: 700; }
-.pc-wrap { flex: 1; min-height: 0; overflow-y: auto; padding: 24px 20px 40px; }
-.pc-inner { max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+.pc-wrap { flex: 1; min-height: 0; overflow-y: auto; padding: 16px 20px 28px; }
+.pc-inner { max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
 .pc-head { display: flex; align-items: center; gap: 10px; }
 .pc-head h3 { margin: 0; flex: 1; font-size: 20px; font-weight: 700; color: #2D3136; }
 .pc-cat select, .pc-pick { appearance: none; -webkit-appearance: none; height: 44px; min-width: 0; padding: 0 40px 0 18px; border: 1px solid #c9d6e3; border-radius: 999px; background: #fff; font: inherit; font-size: 16px; font-weight: 700; color: #2D3136; cursor: pointer;
@@ -3255,28 +3255,32 @@ button.iv-pinv { cursor: zoom-in; }
 .pc-cat select { color: #44617c; }
 .pc-swap { width: 44px; height: 44px; border: 1px solid #c9d6e3; border-radius: 50%; background: #fff; color: #44617c; display: grid; place-items: center; cursor: pointer; }
 .pc-two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
-.pc-card { background: #fff; border: 1px solid #E1E4E8; border-radius: 16px; padding: 22px 16px; display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; }
+.pc-card { background: #fff; border: 1px solid #E1E4E8; border-radius: 16px; padding: 14px 16px; display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; }
 .pc-card b { font-size: 20px; font-weight: 700; color: #2D3136; word-break: keep-all; }
 .pc-card strong { font-size: 32px; font-weight: 800; color: #44617c; letter-spacing: -.5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .pc-card small { font-size: 13px; color: #7D838B; }
-.pc-sec { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; }
+.pc-sec { display: flex; align-items: center; justify-content: space-between; margin-top: 2px; }
 .pc-sec h4 { margin: 0; font-size: 18px; font-weight: 700; }
 .pc-only { display: inline-flex; align-items: center; gap: 8px; font-size: 15px; color: #2D3136; cursor: pointer; }
 .pc-only input { width: 20px; height: 20px; accent-color: #557591; }
 .pc-table { background: #fff; border: 1px solid #E1E4E8; border-radius: 16px; padding: 4px 16px; }
-.pc-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr) minmax(0, 1fr); align-items: center; gap: 8px; min-height: 64px; border-top: 1px solid #edf0f3; }
+.pc-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr) minmax(0, 1fr); align-items: center; gap: 8px; min-height: 50px; border-top: 1px solid #edf0f3; }
 .pc-row:first-child { border-top: 0; }
-.pc-row > span { text-align: center; font-size: 18px; color: #2D3136; padding: 10px 4px; border-radius: 12px; font-variant-numeric: tabular-nums; }
+.pc-row > span { text-align: center; font-size: 17px; color: #2D3136; padding: 7px 4px; border-radius: 12px; font-variant-numeric: tabular-nums; }
 .pc-row > span.pc-name { font-size: 16px; color: #5d646d; word-break: keep-all; }
-.pc-row > span.is-more { background: #ecf1f6; color: #44617c; font-weight: 700; }
-.pc-row.is-head { min-height: 48px; }
+.pc-row > span.is-diff { background: #ecf1f6; color: #44617c; font-weight: 700; }
+.pc-row.is-head { min-height: 38px; }
 .pc-row.is-head > span { font-size: 13px; color: #7D838B; word-break: keep-all; }
 .pc-row.is-empty { grid-template-columns: 1fr; } .pc-row.is-empty > span { color: #7D838B; font-size: 14px; }
-.pc-foot { display: flex; flex-direction: column; gap: 12px; }
-.pc-gap { display: flex; align-items: baseline; justify-content: space-between; padding: 6px 4px; border-top: 1px solid #E1E4E8; padding-top: 18px; }
+.pc-foot { display: flex; flex-direction: column; gap: 10px; }
+.pc-gap { display: flex; align-items: baseline; justify-content: space-between; padding: 12px 4px 2px; border-top: 1px solid #E1E4E8; }
 .pc-gap span { font-size: 15px; color: #7D838B; } .pc-gap b { font-size: 24px; font-weight: 800; color: #2D3136; }
-.pc-diff { background: #fff; border: 1px solid #E1E4E8; border-radius: 16px; padding: 16px 20px; display: flex; flex-direction: column; gap: 6px; font-size: 15px; color: #2D3136; }
-.pc-diff b { font-size: 15px; margin-bottom: 2px; }
+.pc-box { background: #fff; border: 1px solid #E1E4E8; border-radius: 16px; padding: 10px 16px; display: flex; flex-direction: column; min-width: 0; }
+.pc-box > b { font-size: 14px; font-weight: 700; color: #44617c; padding: 2px 0 6px; border-bottom: 1px solid #edf0f3; word-break: keep-all; }
+.pc-li { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 34px; border-top: 1px solid #f2f4f6; font-size: 15px; color: #2D3136; }
+.pc-box > b + .pc-li, .pc-box > .pc-li:first-child { border-top: 0; }
+.pc-cap { margin: 4px 2px -4px; font-size: 14px; font-weight: 700; color: #2D3136; }
+.pc-li span { min-width: 0; word-break: keep-all; } .pc-li em { font-style: normal; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .pc-note { margin: 0; font-size: 13px; color: #7D838B; text-align: center; }
 .pc-edit { margin-top: 18px; padding-top: 16px; border-top: 1px solid #E1E4E8; display: flex; flex-direction: column; gap: 8px; }
 .pc-edit h3 { margin: 0 0 4px; font-size: 15px; font-weight: 700; color: #44617c; }
@@ -3295,4 +3299,11 @@ button.iv-pinv { cursor: zoom-in; }
   .pc-card strong { font-size: 24px; } .pc-card b { font-size: 16px; }
   .pc-row > span { font-size: 15px; } .pc-row > span.pc-name { font-size: 14px; }
   .pc-cat select, .pc-pick { font-size: 14px; padding-left: 14px; }
+}
+/* 아이패드 가로: 왼쪽 = 선택·카드·시술 구성 / 오른쪽 = 가격 차이·공통 구성·달라지는 구성 — 한 화면에 */
+.pc-left, .pc-right { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+@container pb (min-width: 1000px) {
+  .pc-inner { max-width: 1120px; display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+  .pc-right { padding-top: 132px; }
+  .pc-right .pc-gap { border-top: 0; padding-top: 0; }
 }

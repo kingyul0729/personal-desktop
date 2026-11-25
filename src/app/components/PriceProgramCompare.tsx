@@ -39,9 +39,7 @@ export function alignRows(a: Program | undefined, b: Program | undefined) {
   return names.map(name => {
     const x = a?.items.find(i => i.name === name), y = b?.items.find(i => i.name === name);
     const same = itemText(x) === itemText(y);
-    // 강조는 더 많이 들어간 쪽(없음 vs 있음이면 있는 쪽, 횟수가 다르면 큰 쪽, 글자만 다르면 둘 다)
-    const more = same ? null : !x ? 'b' : !y ? 'a' : x.qty != null && y.qty != null ? (x.qty > y.qty ? 'a' : 'b') : 'both';
-    return { name, x, y, same, more };
+    return { name, x, y, same };
   });
 }
 
@@ -60,22 +58,16 @@ export function ProgramCompare() {
   const b = list.find(p => p.id === pick[1]) ?? list[1] ?? list[0];
   const rows = alignRows(a, b);
   const shown = onlyDiff ? rows.filter(r => !r.same) : rows;
-  const diffs = rows.filter(r => !r.same);
+  const diffs = rows.filter(r => !r.same), common = rows.filter(r => r.same);
   const gap = a?.price != null && b?.price != null ? Math.abs(a.price - b.price) : null;
   const choose = (i: 0 | 1, id: string) => setPick(p => { const n: [string, string] = [a?.id ?? '', b?.id ?? '']; n[i] = id; return n; });
 
   if (error) return <div className="pb-empty">{error}</div>;
   if (!programs) return <div className="pb-empty"><SavingMark /></div>;
   if (!list.length) return <div className="pb-empty">기록 없음</div>;
-  const diffLine = (r: typeof rows[number]) => {
-    const an = a?.name ?? '', bn = b?.name ?? '';
-    if (!r.x) return `${r.name} · ${bn} ${itemText(r.y)} 더 포함`;
-    if (!r.y) return `${r.name} · ${an} ${itemText(r.x)} 더 포함`;
-    if (r.x.qty != null && r.y.qty != null) { const d = Math.round(Math.abs(r.x.qty - r.y.qty) * 100) / 100; return `${r.name} · ${r.x.qty > r.y.qty ? an : bn} ${d}회 더 포함`; }
-    return `${r.name} · ${an} ${itemText(r.x)} / ${bn} ${itemText(r.y)}`;
-  };
   return <div className="pc-wrap">
     <div className="pc-inner">
+      <div className="pc-left">
       <div className="pc-head">
         <label className="pc-cat"><select value={category} aria-label="탭" onChange={e => { setCat(e.target.value); setPick(['', '']); }}>{cats.map(c => <option key={c} value={c}>{c}</option>)}</select></label>
         <h3>프로그램 비교</h3>
@@ -92,17 +84,24 @@ export function ProgramCompare() {
       <div className="pc-table" role="table">
         <div className="pc-row is-head" role="row"><span>{a?.name}</span><span>시술 항목</span><span>{b?.name}</span></div>
         {shown.map(r => <div key={r.name} className="pc-row" role="row">
-          <span className={r.more === 'a' || r.more === 'both' ? 'is-more' : ''}>{itemText(r.x)}</span>
+          <span className={r.same ? '' : 'is-diff'}>{itemText(r.x)}</span>
           <span className="pc-name">{r.name}</span>
-          <span className={r.more === 'b' || r.more === 'both' ? 'is-more' : ''}>{itemText(r.y)}</span>
+          <span className={r.same ? '' : 'is-diff'}>{itemText(r.y)}</span>
         </div>)}
         {!shown.length && <div className="pc-row is-empty"><span>구성 같음</span></div>}
       </div>
-      {(gap != null || diffs.length > 0) && <div className="pc-foot">
+      </div>
+      <div className="pc-right">
+      <div className="pc-foot">
         {gap != null && <div className="pc-gap"><span>프로그램 가격 차이</span><b>{gap ? won(gap) : '같음'}</b></div>}
-        {diffs.length > 0 && <div className="pc-diff"><b>구성 차이</b>{diffs.map(r => <span key={r.name}>{diffLine(r)}</span>)}</div>}
-      </div>}
+        {/* 구성 차이(2026-11-26 사용자): 공통 구성 한 장 + 프로그램별 달라지는 구성 좌우 두 장 — 시술명 왼쪽 · 횟수 오른쪽, 평가 표현 없이 */}
+        {common.length > 0 && <><p className="pc-cap">공통 구성</p><div className="pc-box">{common.map(r => <div key={r.name} className="pc-li"><span>{r.name}</span><em>{itemText(r.x)}</em></div>)}</div></>}
+        {diffs.length > 0 && <p className="pc-cap">달라지는 구성</p>}
+        {diffs.length > 0 && <div className="pc-two">{([['x', a], ['y', b]] as const).map(([k, p]) => { const own = diffs.filter(r => r[k]); return <div key={k} className="pc-box"><b>{p?.name}</b>
+          {own.length ? own.map(r => <div key={r.name} className="pc-li"><span>{r.name}</span><em>{itemText(r[k])}</em></div>) : <div className="pc-li"><span>—</span></div>}</div>; })}</div>}
+      </div>
       <p className="pc-note">매 회차 원장님이 피부 상태를 확인한 후 시술을 결정합니다.</p>
+      </div>
     </div>
   </div>;
 }
