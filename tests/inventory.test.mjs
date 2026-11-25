@@ -1122,3 +1122,14 @@ test('user 11-20: 팀장 결제 vendors show in report but stay out of totals; �
   assert.equal((await call(e, '/report?month=2026-11')).data.payments.find(p => p.vendor_id === mv.id).status, '결제 예정');
   assert.equal((await call(e, '/paid', 'POST', { vendor_id: mv.id, month: '11월' })).status, 400);
 });
+
+test('user 11-25: 일일 마감 체크 두 개(usage_only) · 샘플(0원) 일일재고 품목은 월말 재고 확인에서 빠짐', async () => {
+  const e = env(); await call(e, '/state');
+  const a = await call(e, '/items', 'POST', { name: '샘플마스크', stock_unit: 'ea', price: 0, daily_mode: 'usage_only' });
+  const b = await call(e, '/items', 'POST', { name: '유료마스크', stock_unit: 'ea', price: 1000, daily_mode: 'usage_only' });
+  const s = a.data.items.find(i => i.name === '샘플마스크'), p = b.data.items.find(i => i.name === '유료마스크');
+  assert.equal(s.daily_mode, 'usage_only');
+  const stock = (await call(e, '/report?month=2026-11')).data.stock.map(x => x.name);
+  assert.ok(!stock.includes('샘플마스크')); assert.ok(stock.includes('유료마스크'));
+  assert.ok(p);
+});

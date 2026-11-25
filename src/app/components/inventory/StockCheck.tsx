@@ -56,7 +56,7 @@ export function AdjustDialog({ item, today, onClose, onDone }: { item: InvItem; 
   </Modal>;
 }
 
-export type DailyItem = { id: number; name: string; stock_unit: string; hospital_stock: number; stock_at: number; daily_mode: 'usage' | 'count'; vendor_name?: string | null; used: number | null; open_fix?: number | null; used15: number };
+export type DailyItem = { id: number; name: string; stock_unit: string; hospital_stock: number; stock_at: number; daily_mode: 'usage' | 'usage_only' | 'count'; vendor_name?: string | null; used: number | null; open_fix?: number | null; used15: number };
 // 일일재고(2026-11-08 사용자 지정): 언제든 기록·수정. 팀장이 출근한 날은 품목 방식대로(당일 사용량 또는 마감재고),
 // 팀장이 출근하지 않은 날(미입력·휴무·연차·상담·휴일)은 당일 사용량·모델링 사용 인원은 닫고 모든 품목 마감재고만 적는다.
 // 총 피부관리 인원·메모는 늘 열림. 못 센 날 생긴 차이는 따로 표시하지 않는다.
@@ -90,7 +90,8 @@ export function DailyClose({ today, notify, onSaved }: { items: InvItem[]; today
   // 일일재고 카드 = 적는 칸 두 개(2026-11-10 사용자 '작성칸은 마감재고·당일 사용량'): 마감재고 | 당일 사용량.
   //  하나만 적으면 다른 하나는 장부(마감 전 재고)로 계산해 흐리게 보여 주고, 둘 다 적으면 마감 전 재고 = 마감재고 + 사용량으로 고쳐 저장(월말 사용량 정확).
   const r3 = (n: number) => Math.round(n * 1000) / 1000;
-  const usageCard = (it: DailyItem) => it.daily_mode === 'usage' && !off;
+  const usageCard = (it: DailyItem) => it.daily_mode.startsWith('usage') && !off;
+  const closeField = (it: DailyItem) => it.daily_mode !== 'usage_only' || off; // 당일 사용량만 품목은 마감재고 칸 없음(팀장이 안 나온 날은 마감재고만)
   const num = (v: string | undefined) => (v === '' || v == null ? null : Number(v));
   const ledgerOf = (it: DailyItem) => r3(it.stock_at + (it.used || 0)); // 남은 수량(그날 마감 전 장부)
   const diffOf = (it: DailyItem) => { const left = num(vals[it.id]), use = usageCard(it) ? num(uses[it.id]) : null; return left != null && use != null ? r3(left - (ledgerOf(it) - use)) : 0; };
@@ -141,7 +142,7 @@ export function DailyClose({ today, notify, onSaved }: { items: InvItem[]; today
         {usageCard(it) && <div className="iv-drow is-text"><span>남은 수량</span><b>{fmtQty(ledgerOf(it))}</b><em>{u}</em></div>}
         {it.name.includes('모델링') && !off && field('사용 인원', people, setPeople, '모델링팩 사용 인원', '명', 'numeric')}
         {usageCard(it) && field('당일 사용량', uses[it.id] ?? '', v => setUses(x => ({ ...x, [it.id]: v })), `${it.name} 당일 사용량`)}
-        {field(<>마감재고{d ? <i className="iv-ddiff"> ({d > 0 ? '+' : ''}{fmtQty(d)})</i> : null}</>, vals[it.id] ?? '', v => setVals(x => ({ ...x, [it.id]: v })), `${it.name} 마감재고`)}
+        {closeField(it) && field(<>마감재고{d ? <i className="iv-ddiff"> ({d > 0 ? '+' : ''}{fmtQty(d)})</i> : null}</>, vals[it.id] ?? '', v => setVals(x => ({ ...x, [it.id]: v })), `${it.name} 마감재고`)}
         <p className="iv-d15">15일 사용 {withUnit(it.used15, u)}</p>
       </div>;
     })}</div>

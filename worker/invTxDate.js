@@ -36,9 +36,10 @@ export async function keepCountStmts(db, itemId, date, change, user, strict = fa
   if (!next) return [];
   const now = Date.now(), out = [db.prepare('UPDATE inv_items SET hospital_stock = round(hospital_stock - ?, 3), updated_at = ? WHERE id = ?').bind(change, now, item.id)];
   out.kept = next.d;
-  if (item.daily_mode === 'usage' || asDiff) {
+  const usageMode = String(item.daily_mode || '').startsWith('usage'); // usage · usage_only(2026-11-25) 둘 다 사용량 품목
+  if (usageMode || asDiff) {
     // 마감재고 품목의 입고 취소 차이는 따로 한 줄('입고 취소' 메모)로 — 일일재고를 다시 저장해도 사용량으로 바뀌지 않게 알아볼 수 있도록
-    const fix = await db.prepare(`SELECT id FROM inv_tx WHERE deleted_at IS NULL AND item_id = ? AND daily_date = ? AND kind = 'adjust' AND ${item.daily_mode === 'usage' ? "(memo LIKE '마감 전 재고 고침%' OR memo LIKE '일일 마감재고 확인%')" : "memo LIKE '%입고 취소%'"} ORDER BY id LIMIT 1`).bind(item.id, next.d).first();
+    const fix = await db.prepare(`SELECT id FROM inv_tx WHERE deleted_at IS NULL AND item_id = ? AND daily_date = ? AND kind = 'adjust' AND ${usageMode ? "(memo LIKE '마감 전 재고 고침%' OR memo LIKE '일일 마감재고 확인%')" : "memo LIKE '%입고 취소%'"} ORDER BY id LIMIT 1`).bind(item.id, next.d).first();
     out.push(fix ? db.prepare('UPDATE inv_tx SET hospital_delta = round(hospital_delta - ?, 3), qty = abs(round(hospital_delta - ?, 3)) WHERE id = ?').bind(change, change, fix.id)
       : db.prepare(`INSERT INTO inv_tx (item_id, kind, date, qty, hospital_delta, vendor_delta, memo, daily_date, created_by, created_at) VALUES (?, 'adjust', ?, ?, ?, 0, ?, ?, ?, ?)`).bind(item.id, next.d, Math.abs(change), -change, asDiff ? '마감 전 재고 고침 · 입고 취소 · 마감재고' : '마감 전 재고 고침 · 마감재고', next.d, user || null, now));
     return out;

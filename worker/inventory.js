@@ -297,7 +297,7 @@ async function inventoryRoute(request, env, url, user, db, path, m) {
       const f = {
         name, vendor_id: num(body.vendor_id), category: body.category || null, stock_unit: String(body.stock_unit || 'ea').trim(),
         order_unit: body.order_unit ? String(body.order_unit).trim() : null, pack_qty: num(body.pack_qty), price: num(body.price),
-        min_stock: num(body.min_stock) ?? 0, daily_mode: ['usage', 'count'].includes(body.daily_mode) ? body.daily_mode : null,
+        min_stock: num(body.min_stock) ?? 0, daily_mode: ['usage', 'usage_only', 'count'].includes(body.daily_mode) ? body.daily_mode : null, // usage = 당일 사용량+마감재고 · usage_only = 당일 사용량만 · count = 마감재고만(2026-11-25 체크 두 개)
         prepaid: body.prepaid ? 1 : 0, is_pack: body.is_pack ? 1 : 0, memo: body.memo || null,
       };
       if (f.pack_qty != null && !(f.pack_qty > 0)) return bad('구성수량은 0보다 커야 해요.');
@@ -934,7 +934,7 @@ async function monthReport(db, month, brief = false) {
     FROM inv_tx WHERE deleted_at IS NULL AND date BETWEEN ? AND ?`, from, to);
   const days = await one(db, `SELECT coalesce(sum(patients), 0) AS patients, sum(CASE WHEN patients > 0 THEN 1 ELSE 0 END) AS open_days, count(*) AS record_days FROM inv_daily WHERE date BETWEEN ? AND ?`, from, to);
   const usage = await all(db, `SELECT i.id, i.name, i.stock_unit, sum(t.qty) AS used FROM inv_tx t JOIN inv_items i ON i.id = t.item_id
-    WHERE t.deleted_at IS NULL AND t.kind = 'out' AND i.daily_mode IS NOT NULL AND t.date BETWEEN ? AND ? GROUP BY i.id ORDER BY i.sort, i.id`, from, to); // 재고 확인 = 일일재고 품목만(2026-11-20 사용자)
+    WHERE t.deleted_at IS NULL AND t.kind = 'out' AND i.daily_mode IS NOT NULL AND (i.price IS NULL OR i.price <> 0) AND t.date BETWEEN ? AND ? GROUP BY i.id ORDER BY i.sort, i.id`, from, to); // 재고 확인 = 일일재고 품목만(2026-11-20 사용자), 가격 0원 샘플은 뺌(2026-11-25 사용자 '샘플은 보고서에서 빼기')
   // 영업일 = 피부관리 인원이 있는 날. 인원을 안 적은 달(성과 미입력)은 일일재고를 적은 날로(사용량이 있는데 '기록 없음'으로 보이지 않게)
   const openDays = days.open_days || days.record_days || 0;
   const out = {
@@ -994,6 +994,6 @@ async function monthReport(db, month, brief = false) {
   const afterV = `round(vendor_stock - coalesce((SELECT sum(t.vendor_delta) FROM inv_tx t WHERE t.item_id = inv_items.id AND t.deleted_at IS NULL AND t.date > ?), 0), 3)`;
   out.as_of = to < kstToday() ? to : null;
   out.prepaid = await all(db, `SELECT id, name, stock_unit, ${afterV} AS vendor_stock, ${after} AS hospital_stock FROM inv_items WHERE active = 1 AND prepaid = 1 ORDER BY sort, id`, to, to);
-  out.stock = await all(db, `SELECT id, name, stock_unit, ${after} AS hospital_stock, min_stock, price, pack_qty, order_unit FROM inv_items WHERE active = 1 AND daily_mode IS NOT NULL ORDER BY sort, id`, to);
+  out.stock = await all(db, `SELECT id, name, stock_unit, ${after} AS hospital_stock, min_stock, price, pack_qty, order_unit FROM inv_items WHERE active = 1 AND daily_mode IS NOT NULL AND (price IS NULL OR price <> 0) ORDER BY sort, id`, to); // 샘플(0원) 뺌
   return out;
 }

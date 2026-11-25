@@ -3112,3 +3112,7 @@ button.iv-pinv { cursor: zoom-in; }
 .pb-full-bar button:disabled { opacity: .35; }
 .pb-full-bar .pb-full-close { width: auto; padding: 0 18px; border-radius: 999px; background: #fff; color: #2D3136; font: inherit; font-size: 14px; font-weight: 600; }
 .pb-full .pb-nav.is-prev { left: calc(14px + env(safe-area-inset-left)); } .pb-full .pb-nav.is-next { right: calc(14px + env(safe-area-inset-right)); }
+
+/* 물품 추가 '일일 마감' 체크 두 개(2026-11-25) */
+.iv-dmode { display: flex; flex-wrap: wrap; gap: 4px 16px; min-height: 40px; align-items: center; }
+.iv-dmode .iv-check { margin: 0; }

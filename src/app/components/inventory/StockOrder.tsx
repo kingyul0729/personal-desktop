@@ -426,7 +426,11 @@ export function ItemForm({ item, state, notify, onSaved, onDeleted }: { item: In
       <label className="sf-input"><span>위험 기준</span><input type="number" min={0} value={f.min_stock} onChange={set('min_stock')} /><small>{su} 기준</small></label>
     </div>
     <div className="iv-fgrid iv-two">
-      <label className="sf-input"><span>일일 마감</span><select value={f.daily_mode} onChange={set('daily_mode')}><option value="">안 함</option><option value="usage">사용량 입력</option><option value="count">마감재고 입력</option></select></label>
+      <div className="sf-input"><span>일일 마감</span><div className="iv-dmode">{/* 2026-11-25 사용자 '당일 사용량·마감재고 둘 다 체크' */}
+        {([['use', '당일 사용량'], ['close', '마감재고']] as const).map(([k, label]) => { const use = f.daily_mode === 'usage' || f.daily_mode === 'usage_only', close = f.daily_mode === 'usage' || f.daily_mode === 'count';
+          const on = k === 'use' ? use : close;
+          return <label key={k} className="iv-check"><input type="checkbox" checked={on} onChange={e => { const u = k === 'use' ? e.target.checked : use, c = k === 'close' ? e.target.checked : close; setF(x => ({ ...x, daily_mode: u && c ? 'usage' : u ? 'usage_only' : c ? 'count' : '' })); }} /> {label}</label>; })}
+      </div></div>
       <label className="sf-input"><span>메모</span><input value={f.memo} onChange={set('memo')} /></label>
     </div>
     <label className="iv-check"><input type="checkbox" checked={f.prepaid} onChange={set('prepaid')} /> 선결제 품목</label>
