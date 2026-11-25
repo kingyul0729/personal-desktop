@@ -400,17 +400,27 @@ export function ItemForm({ item, state, notify, onSaved, onDeleted }: { item: In
   const isNew = f.vendor_id === 'new';
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => { const t = e.target as HTMLInputElement; const v = t.type === 'checkbox' ? t.checked : t.value; setF(x => ({ ...x, [k]: v })); };
   const su = f.pack ? f.stock_unit : f.order_unit; // 재고단위: 구성수량을 안 쓰면 주문단위 그대로
-  const save = async () => {
+  const save = async (ppOver?: boolean) => {
+    const pp = ppOver ?? f.prepaid;
     setBusy(true);
     try {
-      const r = await invSend('POST', '/items', { id: item?.id, name: f.name, category: f.category, memo: f.memo, is_pack: item?.is_pack, prepaid: f.prepaid,
+      const r = await invSend('POST', '/items', { id: item?.id, name: f.name, category: f.category, memo: f.memo, is_pack: item?.is_pack, prepaid: pp,
         vendor_id: isNew ? null : f.vendor_id || null, ...(isNew ? { new_vendor: vendorBody(nv) } : {}),
         order_unit: f.order_unit, stock_unit: su, pack_qty: f.pack ? Number(f.pack_qty) || null : 1,
-        price: f.prepaid || f.price === '' ? (f.prepaid ? item?.price ?? null : null) : Number(f.price), min_stock: Number(f.min_stock) || 0, daily_mode: f.daily_mode || null }) as { vendor_id?: number; item_id?: number };
-      notify(isNew ? '업체와 품목을 저장했어요.' : '품목을 저장했어요.');
+        price: pp || f.price === '' ? (pp ? item?.price ?? null : null) : Number(f.price), min_stock: Number(f.min_stock) || 0, daily_mode: f.daily_mode || null }) as { vendor_id?: number; item_id?: number };
+      if (ppOver !== undefined) setF(x => ({ ...x, prepaid: ppOver }));
+      notify(ppOver !== undefined ? (ppOver ? '선결제 품목으로 바꿨어요.' : '일반 품목으로 바꿨어요.') : isNew ? '업체와 품목을 저장했어요.' : '품목을 저장했어요.');
       if (isNew && r?.vendor_id) { setF(x => ({ ...x, vendor_id: String(r.vendor_id) })); setNv(vendorF()); }
       onSaved(r?.item_id);
     } catch (e) { notify(errText(e)); } finally { setBusy(false); }
+  };
+  // 선결제 품목 체크 = 확인 한 번 묻고 바로 저장 → 옵션 칸이 바로 선결제 옵션/구매조건으로 바뀜(2026-11-26 사용자). 새 품목은 저장 때 같이.
+  const togglePp = async (c: boolean) => {
+    if (!item) { setF(x => ({ ...x, prepaid: c })); return; }
+    const keep = !c && item.vendor_stock > 0 ? ` · 업체 보관 잔량 ${fmtQty(item.vendor_stock)} ${item.stock_unit}` : '';
+    if (!await askConfirm({ title: c ? '선결제 품목으로 바꿀까요?' : '일반 품목으로 바꿀까요?', message: `${item.name}${keep}`, kind: 'ask' })) return;
+    if (!ready) { setF(x => ({ ...x, prepaid: c })); return; }
+    await save(c);
   };
   const ready = !!f.name.trim() && (!isNew || vendorReady(nv)) && (!f.pack || Number(f.pack_qty) > 0);
   const vendors = state.vendors.filter(v => v.active !== 0 || String(v.id) === f.vendor_id);
@@ -442,7 +452,7 @@ export function ItemForm({ item, state, notify, onSaved, onDeleted }: { item: In
         <label className="sf-input"><span>위험 기준 ({su})</span><input type="number" min={0} value={f.min_stock} onChange={set('min_stock')} /></label>
       </div>
       <div className="iv-ie-g2">
-        <div className="iv-ie-checks">{daily('use', '당일 사용량')}{daily('close', '마감재고')}<label className="iv-check"><input type="checkbox" checked={f.prepaid} onChange={set('prepaid')} /> 선결제 품목</label></div>
+        <div className="iv-ie-checks">{daily('use', '당일 사용량')}{daily('close', '마감재고')}<label className="iv-check"><input type="checkbox" checked={f.prepaid} disabled={busy} onChange={e => void togglePp(e.target.checked)} /> 선결제 품목</label></div>
         <label className="sf-input"><span>메모</span><input value={f.memo} onChange={set('memo')} /></label>
       </div>
     </div>
