@@ -3228,7 +3228,7 @@ button.iv-pinv { cursor: zoom-in; }
 @container sfw (max-width: 760px) {
   .iv-split.iv-ie { grid-template-columns: minmax(200px, 36%) minmax(0, 1fr); gap: 12px; }
   .iv-ie-form, .sf-wrap .iv-main > .iv-ie-form { padding: 18px 16px; }
-  .iv-ie-g2 { grid-template-columns: minmax(0, 1fr); }
+  .iv-ie-g2 { gap: 14px 16px; }
 }
 @container sfw (max-width: 520px) {
   .iv-split.iv-ie { grid-template-columns: minmax(0, 1fr); }
@@ -3236,3 +3236,6 @@ button.iv-pinv { cursor: zoom-in; }
   .iv-ie-band dd { font-size: 15px; }
 }
 .sf-wrap .iv-ie-g2 .iv-unitrow select { flex: 0 1 120px; min-width: 0; }
+/* 아이패드 세로에서도 좌우 두 칸 유지(2026-11-26 사용자 '가로로 긴 레이아웃 싫어') */
+.iv-ie-pack .iv-packrow input { width: 72px; min-width: 0; }
+.iv-ie-pack .iv-packrow select { width: 96px; min-width: 0; }
