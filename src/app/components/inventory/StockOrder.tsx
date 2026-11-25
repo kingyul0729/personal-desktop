@@ -94,7 +94,7 @@ function ItemDetail({ item, state, notify, stopped, tag, onPickOpt }: { item: In
   const inTabs: [RecvMode, string][] = item.prepaid ? [['orders', '주문한 것 받기'], ['fix', '잔량 고치기']] : [['orders', '주문한 것 받기'], ['gift', '증정·행사로 받기'], ...(item.vendor_stock > 0 ? [['keep', '업체 보관에서 입고'] as [RecvMode, string]] : [])];
   return <>
     <header className="iv-d-head iv-hub-head">
-      <div><h3>{item.name}<span className={`iv-kind${item.prepaid ? ' is-pp' : ''}`}>{item.prepaid ? '선결제' : '일반'}</span>{tag}</h3><p>{item.vendor_name || '거래처 없음'}{item.category ? ` · ${item.category}` : ''}{stopped ? ' · 거래 중단' : ''}</p></div>
+      <div><h3>{item.name}<span className={`iv-kind${item.prepaid ? ' is-pp' : ''}`}>{item.prepaid ? '선결제' : '일반'}</span>{tag}</h3><p>{item.vendor_name || '거래처 없음'}{stopped ? ' · 거래 중단' : ''}</p></div>
       <div className="iv-hub-btns">
         <button type="button" className="sf-btn" onClick={() => setDlg({ k: 'out' })}>출고</button>
         <button type="button" className="sf-btn" onClick={() => setDlg({ k: 'adj' })}>재고 맞추기</button>
@@ -429,7 +429,6 @@ export function ItemForm({ item, state, notify, onSaved, onDeleted }: { item: In
     {vendor && <VendorLine key={vendor.id} vendor={vendor} open={vinfo} state={state} notify={notify} onSaved={() => onSaved()} />}
     <div className="iv-ie-sec">
       <div className="iv-ie-g2">
-        <label className="sf-input"><span>분류</span><input value={f.category} onChange={set('category')} placeholder="관리제품" /></label>
         <div className="sf-input"><span>주문단위 (살 때)</span><span className="iv-unitrow"><input value="1" disabled aria-label="주문단위 수량" /><select value={f.order_unit} onChange={set('order_unit')} aria-label="주문단위">{unitOpts(f.order_unit).map(x => <option key={x} value={x}>{x}</option>)}</select></span></div>
       </div>
       <div className="iv-ie-pack">

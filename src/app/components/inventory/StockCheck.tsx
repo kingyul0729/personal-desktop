@@ -27,10 +27,15 @@ export function StockCheck() {
 export function AllStock({ state, notify }: { state: InvState; notify: (m: string) => void }) {
   const [cat, setCat] = useState('전체');
   const [adj, setAdj] = useState<InvItem | null>(null);
-  const cats = ['전체', ...Array.from(new Set(state.items.map(i => i.category || '기타')))];
-  const rows = state.items.filter(i => cat === '전체' || (i.category || '기타') === cat);
+  // 업체별 탭(2026-11-26 사용자 '분류 없애고 전체 재고 회사별로'): 품목이 1개 이상 있는 업체만 탭이 저절로 생김, 거래처 없는 품목은 맨 끝 '거래처 없음'
+  const NONE = '거래처 없음';
+  const vname = (i: InvItem) => i.vendor_name || NONE;
+  const names = Array.from(new Set(state.items.map(vname))).sort((a, b) => (a === NONE ? 1 : b === NONE ? -1 : a.localeCompare(b, 'ko')));
+  const cats = ['전체', ...names];
+  const cur = cats.includes(cat) ? cat : '전체';
+  const rows = state.items.filter(i => cur === '전체' || vname(i) === cur);
   return <>
-    <div className="sf-pills">{cats.map(c => <button key={c} type="button" aria-pressed={cat === c} onClick={() => setCat(c)}>{c}</button>)}</div>
+    <div className="sf-pills">{cats.map(c => <button key={c} type="button" aria-pressed={cur === c} onClick={() => setCat(c)}>{c}</button>)}</div>
     <table className="sf-table">
       <thead><tr><th>품목</th><th>거래처</th><th className="num">병원재고</th><th className="num">업체 보관 잔량</th><th className="num">위험 기준</th><th /></tr></thead>
       <tbody>{rows.map(it => { const fl = flagOf(it, state.orders); return <tr key={it.id} className={fl === 'low' ? 'is-low' : ''}>
