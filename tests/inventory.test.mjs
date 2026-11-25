@@ -1083,10 +1083,14 @@ test('dupfix1: splitfix1 run twice (two first requests at once) — extra 10/22 
 
 test('stopvend1: 간호팀·셀퓨전씨·에스트라·쿠팡 stopped — gone from the report payments, items and records stay', async () => {
   const e = env(); const st = (await call(e, '/state')).data;
-  for (const n of ['간호팀', '셀퓨전씨', '에스트라', '쿠팡']) assert.equal(st.vendors.find(v => v.name === n).active, 0, n);
+  for (const n of ['간호팀', '셀퓨전씨', '쿠팡']) assert.equal(st.vendors.find(v => v.name === n).active, 0, n);
+  // 에스트라는 2026-11-25 세라마이드 시트마스크(샘플 0원)로 다시 거래 중(estra1)
+  assert.equal(st.vendors.find(v => v.name === '에스트라').active, 1);
+  const cm = st.items.find(i => i.name === '세라마이드 시트마스크');
+  assert.deepEqual([cm.vendor_name, cm.price, cm.hospital_stock], ['에스트라', 0, 0]);
   assert.equal(st.vendors.find(v => v.name === '닥터슈라클').active, 1);
   const names = (await call(e, '/report?month=2026-10')).data.payments.map(p => p.name);
-  for (const n of ['간호팀', '셀퓨전씨', '에스트라', '쿠팡']) assert.ok(!names.includes(n), n);
+  for (const n of ['간호팀', '셀퓨전씨', '쿠팡']) assert.ok(!names.includes(n), n);
   assert.ok(st.items.some(i => i.vendor_name === '쿠팡'));
 });
 

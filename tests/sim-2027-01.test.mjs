@@ -256,7 +256,7 @@ test('2027-01 가상 운영', async t => {
     assert.deepEqual(pay('하라셀').pay_dates, ['2027-01-31']);
     assert.equal(rep.pay_done + rep.pay_due + rep.payments.filter(x => x.status === '—').reduce((a, x) => a + x.amount, 0), rep.spend_total);
     assert.ok(rep.payments.every(x => (x.lines || []).every(l => l.date >= '2027-01-01' && l.date <= '2027-01-31')));
-    assert.equal(rep.payments.length, 12); // 거래 중인 업체 모두 표시(간호팀·셀퓨전씨·에스트라·쿠팡은 거래 중단 — 2026-11-12 사용자)
+    assert.equal(rep.payments.length, 13); // 거래 중인 업체 모두 표시(간호팀·셀퓨전씨·쿠팡은 거래 중단 — 2026-11-12 사용자, 에스트라는 2026-11-25 다시 거래)
     assert.ok(!('account' in pay('더마소드')));
     assert.equal(pay('피부미소').amount, 45000); // 입고를 취소해도 결제는 그대로
     // 카드 주문 물건이 2/2에 와도 2월에 다시 세지 않음

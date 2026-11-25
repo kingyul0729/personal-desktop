@@ -1,4 +1,4 @@
-// 일일 예약표(2026-11-13 사용자 지정): 그날 피부팀 예약 줄(시간·고객명·레이저)에 관리담당·관리 종류(S·M·더마·히알·X)·취소를 표시하고,
+// 일일 예약표(2026-11-13 사용자 지정): 그날 피부팀 예약 줄(시간·고객명·레이저)에 관리담당·관리 종류(S·아토S·M·더마·히알·X, 2026-11-25 아토S 추가)·취소를 표시하고,
 // 당일예약·신환은 화면에서 직접 더한다. 월말·연말 보고에는 예약 / 당일예약 / 신환을 각각 따로 센다.
 // 성과표의 '당일 관리 수'·'지정 환자 수'와는 연결하지 않는다(사용자 선택 '따로 둠') — 여기 숫자는 성과 계산에 쓰이지 않는다.
 // 고객 이름은 로그인 뒤에만 열리는 팀 DB에만 있고 저장소에는 넣지 않는다.
@@ -8,7 +8,7 @@ export const BOOK_SCHEMA = [
   `CREATE INDEX IF NOT EXISTS staff_book_date ON staff_book (date)`,
 ];
 export const BOOK_KINDS = ['book', 'day_book', 'day_care']; // 예약 · 당일예약 · 신환
-export const BOOK_CARE = ['S', 'M', '더마', '히알', 'X']; // X = 팩 같은 진료 뒷관리 없음
+export const BOOK_CARE = ['S', '아토S', 'M', '더마', '히알', 'X']; // X = 팩 같은 진료 뒷관리 없음
 const WORKING = `(a.attendance = '정상근무' OR (a.attendance = '기타' AND a.etc_type = 'time'))`;
 
 const json = (body, status = 200) => Response.json(body, { status, headers: { 'cache-control': 'no-store' } });

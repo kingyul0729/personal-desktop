@@ -7,13 +7,13 @@ import { dayLabelKo, todayLocal } from '../staffRules';
 
 // 일일 예약표(2026-11-13 사용자 지정): Claude가 예약표 사진을 옮겨 만든 파일
 // { format: 'dachaeum-booking', date, rows: [{ time, name, laser }] } 을 올리면 줄이 생기고,
-// 줄마다 관리담당(그날 출근한 사람 위주)·관리(S·M·더마·히알·X, 여러 개)·취소(줄긋기)를 표시한다.
+// 줄마다 관리담당(그날 출근한 사람 위주)·관리(S·아토S·M·더마·히알·X, 여러 개)·취소(줄긋기)를 표시한다.
 // 당일예약·신환은 아래 칸에서 직접 더한다. 월말·연말 보고에 예약 / 당일예약 / 신환가 각각 따로 나온다.
 export type BookKind = 'book' | 'day_book' | 'day_care';
 export type BookRow = { id: number; date: string; kind: BookKind; time: string; customer: string; laser: string; staff_id: number | null; care: string[]; cancelled: boolean };
 type BookStaff = { id: number; name: string; is_leader?: number };
 type BookDay = { date: string; rows: BookRow[]; staff: BookStaff[]; working: number[] };
-export const BOOK_CARE = ['S', 'M', '더마', '히알', 'X'];
+export const BOOK_CARE = ['S', '아토S', 'M', '더마', '히알', 'X'];
 export const BOOK_KIND_LABEL: Record<BookKind, string> = { book: '예약', day_book: '당일예약', day_care: '신환' };
 const short = (name: string) => (name.length >= 3 ? name.slice(1) : name);
 const shiftDay = (date: string, by: number) => { const d = new Date(`${date}T00:00:00`); d.setDate(d.getDate() + by); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };

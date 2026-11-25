@@ -469,6 +469,22 @@ export async function ensureInvSchema(db) {
         fixes = `${fixes} leaderpay1`.trim();
       } catch (e) { console.error('leaderpay1', e); }
     }
+    if (!fixes.includes('estra1') && await claimFix(db, 'estra1')) {
+      // 2026-11-25 사용자 '회사는 에스트라, 품목은 세라마이드 시트마스크, 가격은 0원(샘플)': 품목만 더함(재고 0 — 받은 수량은 사용자가 입고로),
+      // 에스트라(11)는 stopvend1로 거래 중단이던 것을 다시 거래 중으로. 같은 이름 품목이 이미 있으면 새로 만들지 않음.
+      try {
+        const v = await db.prepare(`SELECT id FROM inv_vendors WHERE id = 11 AND name = '에스트라'`).first();
+        const has = await db.prepare(`SELECT 1 FROM inv_items WHERE replace(name, ' ', '') = '세라마이드시트마스크'`).first();
+        const sort = (await db.prepare(`SELECT coalesce(max(sort), 0) + 1 AS s FROM inv_items`).first())?.s || 0;
+        const qs = [];
+        if (v) qs.push(db.prepare(`UPDATE inv_vendors SET active = 1 WHERE id = 11`));
+        if (!has) qs.push(db.prepare(`INSERT INTO inv_items (name, vendor_id, category, stock_unit, order_unit, price, min_stock, hospital_stock, vendor_stock, sort, active, created_at, updated_at)
+          VALUES ('세라마이드 시트마스크', ?, '지원물품', 'ea', 'ea', 0, 0, 0, 0, ?, 1, ?, ?)`).bind(v ? 11 : null, sort, Date.now(), Date.now()));
+        qs.push(db.prepare(`INSERT OR REPLACE INTO inv_meta (key, value) VALUES ('fixes', ?)`).bind(`${fixes} estra1`.trim()));
+        await db.batch(qs);
+        fixes = `${fixes} estra1`.trim();
+      } catch (e) { console.error('estra1', e); }
+    }
     if (!fixes.includes('leavelog1')) {
       // 2026-11-20 사용자: 연차 기록 수정·취소 — 기록은 지우지 않고 취소 표시(취소일·사유)와 정정 줄 연결(ref_id)만 더함. 있는 기록·숫자는 그대로.
       for (const col of ['cancelled_at TEXT', 'cancel_reason TEXT', 'ref_id INTEGER']) {
