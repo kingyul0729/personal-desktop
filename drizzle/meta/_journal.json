@@ -92,6 +92,13 @@
       "when": 1794640000000,
       "tag": "0012_price_image_pair",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "6",
+      "when": 1794720000000,
+      "tag": "0013_price_programs",
+      "breakpoints": true
     }
   ]
 }

@@ -3,6 +3,7 @@ import { handleWork } from './work.js';
 import { handleStaff } from './staff.js';
 import { handleInventory } from './inventory.js';
 import { handleEdu } from './edu.js';
+import { handlePrograms } from './pricePrograms.js';
 
 const defaults = [
   ['toning', '색소·토닝', 'heart'], ['acne', '여드름·흉터', 'kitty'],
@@ -690,6 +691,7 @@ export async function handleApi(request, env) {
     const response = await handleMemos(request, env, owner, url);
     if (response) return response;
   }
+  if (url.pathname === '/api/price-programs') return handlePrograms(request, env, owner);
   if (url.pathname === '/api/price-files' && request.method === 'GET') return json(await list(env, owner));
 
   const imageMatch = url.pathname.match(/^\/api\/price-images\/([^/]+)$/);

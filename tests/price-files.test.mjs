@@ -244,3 +244,22 @@ test('deleting a folder hides it and sends its price lists to the trash; restori
   assert.equal(back.folders.length, before.folders.length);
   assert.equal(back.images.filter(item => item.folderId === folder.id).length, 1);
 });
+
+test('user 11-26: 프로그램 비교 자료 — 파일로 넣기는 두 번 올려도 안 겹치고, 같은 탭·이름은 금액·구성만 바뀜, 사람마다 따로', async () => {
+  const env = environment();
+  const file = { action: 'import', format: 'dachaeum-programs', programs: [
+    { category: '색소', name: '가 프로그램', price: 1000000, items: [{ name: '장비A', qty: 1 }, { name: '장비B', qty: 5 }] },
+    { category: '색소', name: '나 프로그램', price: 1200000, items: [{ name: '장비A', qty: 1 }, { name: '점 제거', label: '기본 포함' }] },
+  ] };
+  await handleApi(request('/api/price-programs', file), env);
+  let res = await (await handleApi(request('/api/price-programs', { ...file, programs: [{ ...file.programs[0], price: 1100000 }, file.programs[1]] }), env)).json();
+  assert.equal(res.programs.length, 2);
+  assert.equal(res.programs[0].price, 1100000);
+  assert.deepEqual(res.programs[1].items, [{ name: '장비A', qty: 1 }, { name: '점 제거', qty: null, label: '기본 포함' }]);
+  res = await (await handleApi(request('/api/price-programs', { action: 'save', id: res.programs[0].id, category: '색소', name: '가 프로그램', price: '990000', items: [{ name: '장비A', qty: 2 }] }), env)).json();
+  assert.equal(res.programs[0].price, 990000);
+  assert.equal((await (await handleApi(request('/api/price-programs', null, 'owner-two'), env)).json()).programs.length, 0);
+  res = await (await handleApi(request('/api/price-programs', { action: 'delete', id: res.programs[1].id }), env)).json();
+  assert.equal(res.programs.length, 1);
+  assert.equal((await handleApi(request('/api/price-programs', { action: 'import', format: 'x', programs: [] }), env)).status, 400);
+});
