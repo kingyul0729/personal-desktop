@@ -3307,3 +3307,9 @@ button.iv-pinv { cursor: zoom-in; }
   .pc-right { padding-top: 132px; }
   .pc-right .pc-gap { border-top: 0; padding-top: 0; }
 }
+/* 구성 특징(프로그램마다 미리 적은 짧은 설명) */
+.pc-feat > b { margin-bottom: 4px; }
+.pc-feat p { margin: 0; padding: 6px 0; font-size: 15px; line-height: 1.5; color: #2D3136; word-break: keep-all; border-top: 1px solid #f2f4f6; }
+.pc-feat > b + p { border-top: 0; }
+.pc-feat p.is-empty { color: #a3a6ab; }
+.pc-form-note { width: 100%; min-height: 72px; padding: 8px 10px; border: 1px solid #c9d6e3; border-radius: 8px; font: inherit; font-size: 14px; resize: vertical; box-sizing: border-box; }

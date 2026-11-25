@@ -9,7 +9,7 @@ import { readWon } from '../koreanAmount';
 // 아래 = 가격 차이 · 구성 차이 · 안내 한 줄. 서로 다른 구성만 연한 색으로 강조, '차이만 보기'는 같은 줄을 숨김.
 // 추천 순위·우수 표시·할인율은 넣지 않는다. 숫자는 가격표 그림이 아니라 price_programs(앱에서 적거나 파일로 넣음).
 export type ProgramItem = { name: string; qty: number | null; label?: string };
-export type Program = { id: string; category: string; name: string; price: number | null; items: ProgramItem[] };
+export type Program = { id: string; category: string; name: string; price: number | null; items: ProgramItem[]; note?: string };
 
 export async function loadPrograms(): Promise<Program[]> {
   const r = await fetch('/api/price-programs', { cache: 'no-store' });
@@ -58,7 +58,6 @@ export function ProgramCompare() {
   const b = list.find(p => p.id === pick[1]) ?? list[1] ?? list[0];
   const rows = alignRows(a, b);
   const shown = onlyDiff ? rows.filter(r => !r.same) : rows;
-  const diffs = rows.filter(r => !r.same), common = rows.filter(r => r.same);
   const gap = a?.price != null && b?.price != null ? Math.abs(a.price - b.price) : null;
   const choose = (i: 0 | 1, id: string) => setPick(p => { const n: [string, string] = [a?.id ?? '', b?.id ?? '']; n[i] = id; return n; });
 
@@ -94,11 +93,11 @@ export function ProgramCompare() {
       <div className="pc-right">
       <div className="pc-foot">
         {gap != null && <div className="pc-gap"><span>프로그램 가격 차이</span><b>{gap ? won(gap) : '같음'}</b></div>}
-        {/* 구성 차이(2026-11-26 사용자): 공통 구성 한 장 + 프로그램별 달라지는 구성 좌우 두 장 — 시술명 왼쪽 · 횟수 오른쪽, 평가 표현 없이 */}
-        {common.length > 0 && <><p className="pc-cap">공통 구성</p><div className="pc-box">{common.map(r => <div key={r.name} className="pc-li"><span>{r.name}</span><em>{itemText(r.x)}</em></div>)}</div></>}
-        {diffs.length > 0 && <p className="pc-cap">달라지는 구성</p>}
-        {diffs.length > 0 && <div className="pc-two">{([['x', a], ['y', b]] as const).map(([k, p]) => { const own = diffs.filter(r => r[k]); return <div key={k} className="pc-box"><b>{p?.name}</b>
-          {own.length ? own.map(r => <div key={r.name} className="pc-li"><span>{r.name}</span><em>{itemText(r[k])}</em></div>) : <div className="pc-li"><span>—</span></div>}</div>; })}</div>}
+        {/* 구성 특징(2026-11-26 사용자): 횟수 비교는 시술 구성 표('차이만 보기')에서 — 여기는 프로그램마다 미리 적어 둔 짧은 설명만, 계산·평가 표현 없음 */}
+        <p className="pc-cap">구성 특징</p>
+        <div className="pc-two">{([a, b] as const).map((p, i) => <div key={i} className="pc-box pc-feat"><b>{p?.name}</b>
+          {(p?.note || '').split('\n').map(x => x.trim()).filter(Boolean).map((x, k) => <p key={k}>{x}</p>)}
+          {!(p?.note || '').trim() && <p className="is-empty">—</p>}</div>)}</div>
       </div>
       <p className="pc-note">매 회차 원장님이 피부 상태를 확인한 후 시술을 결정합니다.</p>
       </div>
@@ -107,8 +106,8 @@ export function ProgramCompare() {
 }
 
 // 가격표 [편집] 아래: 고른 탭(이름 = category)의 프로그램 자료 — 추가·수정·삭제
-type Draft = { id?: string; name: string; price: string; items: { name: string; count: string }[] };
-const toDraft = (p?: Program): Draft => ({ id: p?.id, name: p?.name ?? '', price: p?.price == null ? '' : String(p.price), items: p?.items.length ? p.items.map(i => ({ name: i.name, count: i.qty != null ? String(i.qty) : i.label ?? '' })) : [{ name: '', count: '' }] });
+type Draft = { id?: string; name: string; price: string; note: string; items: { name: string; count: string }[] };
+const toDraft = (p?: Program): Draft => ({ id: p?.id, name: p?.name ?? '', price: p?.price == null ? '' : String(p.price), note: p?.note ?? '', items: p?.items.length ? p.items.map(i => ({ name: i.name, count: i.qty != null ? String(i.qty) : i.label ?? '' })) : [{ name: '', count: '' }] });
 export function ProgramEditor({ category, programs, onChange }: { category: string; programs: Program[]; onChange: (p: Program[]) => void }) {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [busy, setBusy] = useState(false), [error, setError] = useState('');
@@ -117,7 +116,7 @@ export function ProgramEditor({ category, programs, onChange }: { category: stri
     if (!draft) return; setBusy(true); setError('');
     try {
       const items = draft.items.filter(i => i.name.trim()).map(i => { const n = Number(i.count.replace(/회$/, '').trim()); return i.count.trim() && Number.isFinite(n) ? { name: i.name, qty: n } : { name: i.name, qty: null, label: i.count.trim() || '포함' }; });
-      onChange(await sendPrograms({ action: 'save', id: draft.id, category, name: draft.name, price: draft.price.replace(/[^\d]/g, ''), items })); setDraft(null);
+      onChange(await sendPrograms({ action: 'save', id: draft.id, category, name: draft.name, price: draft.price.replace(/[^\d]/g, ''), items, note: draft.note })); setDraft(null);
     } catch (e) { setError((e as Error).message); } finally { setBusy(false); }
   };
   const remove = async (p: Program) => {
@@ -148,6 +147,7 @@ export function ProgramEditor({ category, programs, onChange }: { category: stri
           </div>)}
           <button type="button" className="pc-form-add" onClick={() => setDraft({ ...draft, items: [...draft.items, { name: '', count: '' }] })}><Plus size={14} />줄 추가</button>
         </div>
+        <label className="kitty-field">구성 특징<textarea className="pc-form-note" rows={3} maxLength={600} value={draft.note} onChange={e => setDraft({ ...draft, note: e.target.value })} /></label>
         {error && <p className="kitty-error" role="alert">{error}</p>}
         <footer className="kitty-dialog-actions"><button type="button" onClick={() => setDraft(null)} disabled={busy}>취소</button><button type="submit" className="kitty-primary" disabled={busy || !draft.name.trim()}>{busy ? <><SavingMark />저장 중…</> : '저장'}</button></footer>
       </form>

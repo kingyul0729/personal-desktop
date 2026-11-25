@@ -106,7 +106,7 @@ export default [
  {
   "name": "0013_price_programs",
   "statements": [
-   "CREATE TABLE `price_programs` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`owner` text NOT NULL,\n\t`category` text NOT NULL,\n\t`name` text NOT NULL,\n\t`price` integer,\n\t`items` text DEFAULT '[]' NOT NULL,\n\t`sort` integer DEFAULT 0 NOT NULL,\n\t`updated_at` integer NOT NULL\n);",
+   "CREATE TABLE `price_programs` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`owner` text NOT NULL,\n\t`category` text NOT NULL,\n\t`name` text NOT NULL,\n\t`price` integer,\n\t`items` text DEFAULT '[]' NOT NULL,\n\t`note` text DEFAULT '' NOT NULL,\n\t`sort` integer DEFAULT 0 NOT NULL,\n\t`updated_at` integer NOT NULL\n);",
    "CREATE INDEX `idx_price_programs_owner` ON `price_programs` (`owner`,`category`);"
   ]
  }

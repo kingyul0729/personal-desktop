@@ -18,7 +18,7 @@ export const priceImages = sqliteTable('price_images', {
 // 2026-11-26 프로그램 비교(상담용): 탭 이름(category)별 프로그램 · 총금액(원, 부가세 포함) · 시술 구성 JSON [{name, qty|null, label?}]
 export const pricePrograms = sqliteTable('price_programs', {
   id: text('id').primaryKey(), owner: text('owner').notNull(), category: text('category').notNull(),
-  name: text('name').notNull(), price: integer('price'), items: text('items').notNull().default('[]'),
+  name: text('name').notNull(), price: integer('price'), items: text('items').notNull().default('[]'), note: text('note').notNull().default(''),
   sort: integer('sort').notNull().default(0), updatedAt: integer('updated_at').notNull(),
 }, (t) => [index('idx_price_programs_owner').on(t.owner, t.category)]);
 

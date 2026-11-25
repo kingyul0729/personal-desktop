@@ -5,6 +5,7 @@ CREATE TABLE `price_programs` (
 	`name` text NOT NULL,
 	`price` integer,
 	`items` text DEFAULT '[]' NOT NULL,
+	`note` text DEFAULT '' NOT NULL,
 	`sort` integer DEFAULT 0 NOT NULL,
 	`updated_at` integer NOT NULL
 );--> statement-breakpoint
