@@ -2732,15 +2732,15 @@ button.iv-pinv { cursor: zoom-in; }
 .bk-table th { text-align: left; font-weight: 500; font-size: 12px; color: var(--ui-sub); padding: 6px 8px; border-bottom: 1px solid var(--ui-line-strong); }
 .bk-table td { padding: 8px; border-bottom: 1px solid var(--ui-line); vertical-align: middle; }
 .bk-table tbody tr:last-child td { border-bottom: 0; }
-.bk-table th:nth-child(1) { width: 64px; } .bk-table th:nth-child(2) { width: 84px; } .bk-table th:nth-child(3) { width: 92px; }
-.bk-table th:nth-child(4) { width: 216px; } .bk-table th:nth-child(6) { width: 96px; }
+.bk-table th:nth-child(1) { width: 56px; } .bk-table th:nth-child(2) { width: 76px; } .bk-table th:nth-child(3) { width: 84px; }
+.bk-table th:nth-child(4) { width: 240px; } .bk-table th:nth-child(6) { width: 96px; }
 .bk-time { font-variant-numeric: tabular-nums; color: var(--ui-sub); }
 .bk-name { font-weight: 600; }
-.bk-laser { color: var(--ui-ink); word-break: break-all; }
+.bk-laser { color: var(--ui-ink); word-break: keep-all; overflow-wrap: anywhere; }
 .bk-table select, .bk-table input { width: 100%; min-width: 0; height: 34px; padding: 0 8px; border: 1px solid var(--ui-line); border-radius: var(--ui-r); background: #fff; font: inherit; font-size: 13px; color: var(--ui-ink); appearance: none; }
 .bk-table select:focus, .bk-table input:focus { outline: 2px solid var(--sage-ink); outline-offset: -1px; }
-.bk-care { display: inline-flex; gap: 4px; }
-.bk-care button { min-width: 34px; height: 30px; padding: 0 8px; border: 1px solid var(--ui-line); border-radius: 999px; background: #fff; font: inherit; font-size: 12px; color: var(--ui-sub); cursor: pointer; }
+.bk-care { display: inline-flex; flex-wrap: nowrap; gap: 3px; } /* 2026-11-25 아토S 추가로 6개 — 줄바꿈·글자 세로 밀림 없이 한 줄 */
+.bk-care button { flex: none; white-space: nowrap; min-width: 30px; height: 30px; padding: 0 6px; border: 1px solid var(--ui-line); border-radius: 999px; background: #fff; font: inherit; font-size: 12px; color: var(--ui-sub); cursor: pointer; }
 .bk-care button[aria-pressed="true"] { background: var(--sage-bg); border-color: var(--sage); color: var(--sage-ink); font-weight: 600; }
 .bk-act { text-align: right; white-space: nowrap; }
 .bk-cancel { height: 30px; padding: 0 10px; border: 1px solid var(--ui-line); border-radius: var(--ui-r); background: #fff; font: inherit; font-size: 12px; color: var(--ui-sub); cursor: pointer; }
