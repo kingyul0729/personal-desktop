@@ -3300,10 +3300,5 @@ button.iv-pinv { cursor: zoom-in; }
   .pc-row > span { font-size: 15px; } .pc-row > span.pc-name { font-size: 14px; }
   .pc-cat select, .pc-pick { font-size: 14px; padding-left: 14px; }
 }
-/* 아이패드 가로: 왼쪽 = 선택·카드·시술 구성 / 오른쪽 = 가격 차이·공통 구성·달라지는 구성 — 한 화면에 */
+/* 아이패드 가로도 세로와 같은 한 줄(가운데 760px) — 넘치면 위아래로 밀어 봄(2026-11-26 사용자 '가로로 긴 레이아웃 싫어') */
 .pc-left, .pc-right { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
-@container pb (min-width: 1000px) {
-  .pc-inner { max-width: 1120px; display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 20px; align-items: start; }
-  .pc-right { padding-top: 132px; }
-  .pc-right .pc-gap { border-top: 0; padding-top: 0; }
-}
