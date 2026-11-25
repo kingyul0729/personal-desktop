@@ -184,6 +184,45 @@ async function backfillDueLeave(env, staff2) {
   const used = Number(fresh?.used_leave || 0);
   return used;
 }
+
+// ── 기준일 리셋(2026-11-25 사용자 '재계약 날짜가 되면 그 날 이후로 자동 리셋', 근속연수표 그림, '올해부터') ──
+// 기준일은 직원마다 앱에서 한 번 적는다(연차 이력 창의 기준일 칸, 저장 = staff_leave_log 'base' 줄 — 공개 저장소라 코드에 날짜를 적지 않음).
+// 해마다 기준일(월·일)에: 남은 연차 없어짐 · 사용연차 = 그 날부터 쓴 연차 날짜 수(다음 달 이후 예정은 그 달이 되면 더해짐) · 지급연차 = 근속연수표.
+// 년차 = 기준일부터 꽉 채운 햇수(이람 22.07.01 → 26.07.01부터 4년차 — 사용자 확인). 1~2년차 15 … 21년차 이상 25, 첫 해(0년)는 리셋 안 함.
+export const leaveByYears = (y) => Math.min(25, 15 + Math.floor((Math.max(1, y) - 1) / 2));
+export function leavePeriodStart(base, day) {
+  if (!base || !/^\d{4}-\d{2}-\d{2}$/.test(base)) return null;
+  const md = base.slice(5) === '02-29' ? '02-28' : base.slice(5);
+  let y = Number(day.slice(0, 4));
+  if (`${y}-${md}` > day) y -= 1;
+  return y < Number(base.slice(0, 4)) ? base : `${y}-${md}`;
+}
+async function leaveBaseOf(env, staffId) {
+  const r = await env.DB.prepare(`SELECT log_date FROM staff_leave_log WHERE staff_id=? AND log_type='base' AND cancelled_at IS NULL ORDER BY id DESC LIMIT 1`).bind(staffId).first();
+  return r?.log_date || null;
+}
+async function applyLeaveReset(env, s) {
+  const base = await leaveBaseOf(env, s.id);
+  if (!base) return null;
+  const today = new Date(Date.now() + 9 * 3600 * 1e3).toISOString().slice(0, 10);
+  const ps = leavePeriodStart(base, today);
+  const years = Number(ps.slice(0, 4)) - Number(base.slice(0, 4));
+  if (years < 1) return base;
+  const done = await env.DB.prepare(`SELECT 1 FROM staff_leave_log WHERE staff_id=? AND log_type='reset' AND log_date=? AND cancelled_at IS NULL`).bind(s.id, ps).first();
+  if (done) return base;
+  const monthEnd = kstCurrentMonth() + '-31';
+  const cnt = await env.DB.prepare(`SELECT count(*) AS n FROM staff_attendance WHERE staff_id=? AND attendance='\uC5F0\uCC28' AND work_date BETWEEN ? AND ?`).bind(s.id, ps, monthEnd).first();
+  const cur = await env.DB.prepare(`SELECT total_leave, used_leave FROM staff WHERE id=?`).bind(s.id).first();
+  const total = leaveByYears(years), used = Number(cnt?.n || 0);
+  const ins = await env.DB.prepare(`INSERT INTO staff_leave_log (staff_id, log_type, log_date, amount, before_total, after_total, before_used, after_used, after_remain, reason, editor)
+    SELECT ?, 'reset', ?, NULL, ?, ?, ?, ?, ?, ?, '\uC2DC\uC2A4\uD15C' WHERE NOT EXISTS (SELECT 1 FROM staff_leave_log WHERE staff_id=? AND log_type='reset' AND log_date=? AND cancelled_at IS NULL)`)
+    .bind(s.id, ps, Number(cur?.total_leave || 0), total, Number(cur?.used_leave || 0), used, total - used, `\uAE30\uC900\uC77C \uB9AC\uC14B \u00B7 ${years}\uB144\uCC28`, s.id, ps).run();
+  if (ins.meta?.changes) {
+    await env.DB.prepare(`UPDATE staff SET total_leave=?, used_leave=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`).bind(total, used, s.id).run();
+    s.total_leave = total; s.used_leave = used;
+  }
+  return base;
+}
 staff.get("/list", async (c) => {
   const includeRetired = c.req.query("include_retired") === "1";
   const rows = (await c.env.DB.prepare(`SELECT * FROM staff`).all()).results;
@@ -191,6 +230,8 @@ staff.get("/list", async (c) => {
   for (const s of filtered) {
     const newUsed = await backfillDueLeave(c.env, s);
     s.used_leave = newUsed;
+    s.leave_base = await applyLeaveReset(c.env, s);
+    if (s.leave_base) { const t = new Date(Date.now() + 9 * 3600 * 1e3).toISOString().slice(0, 10); s.leave_period = leavePeriodStart(s.leave_base, t); }
   }
   const sorted = sortStaff(filtered).map((s) => ({
     ...s,
@@ -200,7 +241,7 @@ staff.get("/list", async (c) => {
 });
 staff.get("/leave-dates", async (c) => {
   const year = String(c.req.query("year") || "").match(/^\d{4}$/) ? c.req.query("year") : String((/* @__PURE__ */ new Date()).getFullYear());
-  const from = `${year}-01-01`, to = `${year}-12-31`;
+  const from = `${Number(year) - 1}-01-01`, to = `${year}-12-31`; // 기준일 기간이 앞 해에서 시작할 수 있어 앞 해도 같이(화면이 기간으로 순번을 셈)
   const rows = (await c.env.DB.prepare(
     `SELECT staff_id, work_date, memo FROM staff_attendance WHERE attendance='\uC5F0\uCC28' AND work_date BETWEEN ? AND ? ORDER BY staff_id, work_date`
   ).bind(from, to).all()).results;
@@ -210,7 +251,9 @@ staff.get("/leave-dates", async (c) => {
     // 직원연차 화면용: 예전 앱 순번 표기(memo '예전 앱 표기 7/17')를 함께 준다
     (marks[r.staff_id] = marks[r.staff_id] || []).push({ date: r.work_date, memo: r.memo || null });
   }
-  return c.json({ year, leave_dates: byStaff, leave_marks: marks });
+  const bases = {};
+  for (const r of (await c.env.DB.prepare(`SELECT staff_id, log_date FROM staff_leave_log WHERE log_type='base' AND cancelled_at IS NULL ORDER BY id`).all()).results || []) bases[r.staff_id] = r.log_date;
+  return c.json({ year, leave_dates: byStaff, leave_marks: marks, leave_bases: bases });
 });
 staff.get("/month", async (c) => {
   const staffId = Number(c.req.query("staff_id"));
@@ -687,6 +730,23 @@ staff.post("/leave-fix/:log_id", async (c) => {
 });
 // 연차 이력: 줄마다 지금 기준 잔여연차(remain_now = 지금 잔여 − 그 뒤 기록들의 증감)와 고칠 수 있는지(can_fix)를 붙여 보낸다.
 // 앞 기록을 고치면 뒤 줄 잔여연차도 이 계산으로 함께 바뀐다.
+staff.post("/leave-base/:id", async (c) => {
+  const id = Number(c.req.param("id")), b = await c.req.json();
+  const date = String(b.date || "");
+  if (!okDay(date)) return c.json({ error: "\uB0A0\uC9DC\uB97C \uACE8\uB77C \uC8FC\uC138\uC694" }, 400);
+  if (date > kstDay()) return c.json({ error: "\uC624\uB298 \uB4A4 \uB0A0\uC9DC\uB294 \uC548 \uB3FC\uC694" }, 400);
+  const s = await c.env.DB.prepare(`SELECT * FROM staff WHERE id=?`).bind(id).first();
+  if (!s) return c.json({ error: "\uC9C1\uC6D0\uC744 \uCC3E\uC744 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4" }, 404);
+  const old = await leaveBaseOf(c.env, id);
+  if (old === date) return c.json({ ok: true, base: date });
+  // 기준일을 바꾸면 그 기준으로 다시 리셋(예전 기준의 리셋 줄은 취소 표시만, 지우지 않음)
+  await c.env.DB.batch([
+    c.env.DB.prepare(`UPDATE staff_leave_log SET cancelled_at=?, cancel_reason='\uAE30\uC900\uC77C \uBCC0\uACBD' WHERE staff_id=? AND log_type IN ('base','reset') AND cancelled_at IS NULL`).bind(kstDay(), id),
+    c.env.DB.prepare(`INSERT INTO staff_leave_log (staff_id, log_type, log_date, reason, editor) VALUES (?, 'base', ?, ?, ?)`).bind(id, date, old ? `\uAE30\uC900\uC77C ${old} \u2192 ${date}` : '\uAE30\uC900\uC77C', b.editor || '\uAD00\uB9AC\uC790'),
+  ]);
+  await applyLeaveReset(c.env, s);
+  return c.json({ ok: true, base: date });
+});
 staff.get("/leave-log/:id", async (c) => {
   const id = Number(c.req.param("id"));
   const logs = (await c.env.DB.prepare(

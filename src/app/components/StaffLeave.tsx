@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { CalendarCheck, CalendarDays, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Layers, Pencil } from 'lucide-react';
 import type React from 'react';
 import { useCallback, useEffect, useState } from 'react';
 import { LoadingBox, SavingMark } from './Feedback';
@@ -7,7 +7,7 @@ import { StaffUnavailable } from './StaffSchedule';
 import { toneOf, vividOf } from './staffTone';
 import { staffGet, staffPost, StaffApiError } from '../staffApi';
 import { runUseFix } from '../leaveFixFlow';
-import { type MonthData, type StaffMember, WEEKDAYS, dateIn, daysInMonth, isRedDay, leaveSeq, monthLabel, optionsFor, shiftMonth, todayLocal, weekdayOf } from '../staffRules';
+import { type MonthData, type StaffMember, WEEKDAYS, dateIn, daysInMonth, isRedDay, leaveCumulative, leavePeriodStart, leaveSeq, monthLabel, optionsFor, payloadFor, shiftMonth, statePatch, todayLocal, weekdayOf } from '../staffRules';
 
 // 직원연차 — 직원마다 자기 달력에 연차 날짜(순번 n/총)를 표시하고, 위에 지급연차 / 사용연차 / 잔여연차(누적, 월별 아님)를 보인다(2026-11-08 사용자 지정).
 // 연차 사용/되돌림은 직원스케줄 달력에서 '연차'를 고르면 서버가 처리한다(예전 앱과 같음).
@@ -20,17 +20,13 @@ export default function StaffLeave({ tabs, hide = false }: { tabs?: React.ReactN
   const year = month.slice(0, 4);
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [dates, setDates] = useState<Record<string, string[]>>({});
-  const [memos, setMemos] = useState<Record<string, string>>({});
+  const [bases, setBases] = useState<Record<string, string>>({});
   const [open, setOpen] = useState<StaffMember | null>(null);
   const [state, setState] = useState({ loading: true, error: '', unavailable: false, detail: '' });
   const load = useCallback(async () => {
     try {
       const [list, ld] = await Promise.all([staffGet('/list', { include_retired: 0 }), staffGet('/leave-dates', { year })]);
-      // 예전 앱 표기(예: 7/17)는 그 날 기록의 메모에 있다
-      const m: Record<string, string> = {};
-      for (const [sid, list2] of Object.entries((ld.leave_marks || {}) as Record<string, { date: string; memo: string | null }[]>))
-        for (const r of list2) { const hit = /표기 (\d+\/\d+)/.exec(r.memo || ''); if (hit) m[`${sid}|${r.date}`] = hit[1]; }
-      setStaff(list); setDates(ld.leave_dates || {}); setMemos(m); setState({ loading: false, error: '', unavailable: false, detail: '' });
+      setStaff(list); setDates(ld.leave_dates || {}); setBases(ld.leave_bases || {}); setState({ loading: false, error: '', unavailable: false, detail: '' });
     } catch (e) { setState({ loading: false, error: e instanceof Error ? e.message : '불러오지 못했어요.', unavailable: e instanceof StaffApiError && e.unavailable, detail: e instanceof StaffApiError ? e.detail : '' }); }
   }, [year]);
   useEffect(() => { void load(); const on = () => void load(); window.addEventListener('staff-data-changed', on); return () => window.removeEventListener('staff-data-changed', on); }, [load]);
@@ -49,9 +45,12 @@ export default function StaffLeave({ tabs, hide = false }: { tabs?: React.ReactN
       </div>
     </div>
     <div className="lv-grid">{staff.map(x => {
-      const all = (dates[String(x.id)] || []).slice().sort();
-      const idx: Record<string, number> = {}; all.forEach((d, i) => { idx[d] = i + 1; });
-      const mine = new Set(all);
+      const base = bases[String(x.id)] || null;
+      const every = (dates[String(x.id)] || []).slice().sort();
+      const idx = leaveCumulative({ [x.id]: every }, { [x.id]: base })[String(x.id)] || {};
+      const key = leavePeriodStart(base, `${month}-01`); // 보고 있는 달의 기간(기준일이 없으면 그 해)
+      const all = every.filter(d => leavePeriodStart(base, d) === key);
+      const mine = new Set(every);
       const remain = x.remain_leave ?? (x.total_leave ?? 0) - (x.used_leave ?? 0);
       const [ink, tint, line] = toneOf(x.id), [vInk, vTint, vLine] = vividOf(x.id);
       return <section key={x.id} className="lv-card" style={{ '--c': ink, '--c-bg': tint, '--c-line': line, '--cv': vInk, '--cv-bg': vTint, '--cv-line': vLine } as React.CSSProperties}>
@@ -74,14 +73,14 @@ export default function StaffLeave({ tabs, hide = false }: { tabs?: React.ReactN
           {Array.from({ length: 42 - lead - n }, (_, i) => <span key={`a${i}`} aria-hidden="true" />)}
         </div>
         <div className="lv-list">
-          <div className="lv-list-head"><p>{month.slice(0, 4)}년 사용 내역 <b>{all.length}일</b></p><button type="button" className="lv-link" onClick={() => setOpen(x)}>이력·수정</button></div>
+          <div className="lv-list-head"><p>{base ? `${Number(key.slice(5, 7))}/${Number(key.slice(8))}부터` : `${month.slice(0, 4)}년`} 사용 내역 <b>{all.length}일</b></p><button type="button" className="lv-link" onClick={() => setOpen(x)}>이력·수정</button></div>
           {all.length ? <ul className="lv-tags">{all.map(d => <li key={d}><button type="button" className={d.slice(0, 7) === month ? 'is-here' : ''} onClick={() => setMonth(d.slice(0, 7))} title="이 달 달력 보기">
             {Number(d.slice(5, 7))}/{Number(d.slice(8))}<small>{WEEKDAYS[weekdayOf(d)]}</small><span className="lv-seq" aria-label={`${`${leaveSeq(x, idx, d)}/${x.total_leave ?? '-'}`.split('/')[0]}번째`}>{`${leaveSeq(x, idx, d)}/${x.total_leave ?? '-'}`.split('/')[0]}</span></button></li>)}</ul>
             : <p className="lv-none">아직 사용한 연차가 없어요</p>}
         </div>
       </section>;
     })}</div>
-    {open && <LeaveDetail staff={open} onClose={() => setOpen(null)} onSaved={async () => { setOpen(null); await load(); }} />}
+    {open && <LeaveDetail staff={open} base={bases[String(open.id)] || null} dates={dates[String(open.id)] || []} onClose={() => setOpen(null)} onSaved={async () => { setOpen(null); await load(); }} />}
   </div>;
 }
 
@@ -102,43 +101,126 @@ function logTitle(l: LeaveLog) {
   return LOG_TYPE[l.log_type] || l.log_type;
 }
 
-function LeaveDetail({ staff, onClose, onSaved }: { staff: StaffMember; onClose: () => void; onSaved: () => Promise<void> }) {
+// 연차 이력 창 v2(2026-11-25 사용자가 그림으로 지정): 위 네 칸(기준일 · 지급 · 사용 · 잔여) → 이번 기간 연차 날짜 줄(순번 · 날짜 · 연차/예정 · 남은 N일 · ›)
+// → 지난 기간(접힘) → 수정 기록(접힘) → 아래 '숫자 직접 고치기' · 닫기. 줄을 누르면 그 줄 아래에 [날짜 바꾸기] [연차 아님].
+// 색은 앱 청회색(2026-11-26 사용자 '색상은 기존 하늘색 계열, 레이아웃만 그림처럼'). 기준일을 적으면 서버가 해마다 리셋(worker/staff.js applyLeaveReset).
+const ymd = (d: string) => `${d.slice(2, 4)}.${d.slice(5, 7)}.${d.slice(8, 10)}`;
+const dayBefore = (d: string) => { const t = new Date(`${d}T00:00:00Z`); t.setUTCDate(t.getUTCDate() - 1); return t.toISOString().slice(0, 10); };
+function nextStart(base: string | null, ps: string) { if (!base) return `${Number(ps.slice(0, 4)) + 1}-01-01`; const md = base.slice(5) === '02-29' ? '02-28' : base.slice(5); return `${Number(ps.slice(0, 4)) + 1}-${md}`; }
+
+function LeaveDetail({ staff, base, dates, onClose, onSaved }: { staff: StaffMember; base: string | null; dates: string[]; onClose: () => void; onSaved: () => Promise<void> }) {
   const [logs, setLogs] = useState<LeaveLog[] | null>(null);
   const [editing, setEditing] = useState(false);
-  const [mode, setMode] = useState<FixMode | null>(null);
+  const [row, setRow] = useState<{ date: string; kind: 'edit' | 'cancel' | null } | null>(null);
+  const [fold, setFold] = useState<'' | 'prev' | 'log'>('');
+  const [baseEdit, setBaseEdit] = useState(false), [baseVal, setBaseVal] = useState(base || ''), [baseErr, setBaseErr] = useState(''), [baseBusy, setBaseBusy] = useState(false);
   const [nums, setNums] = useState({ total: staff.total_leave ?? 0, used: staff.used_leave ?? 0 });
+  const [logMode, setLogMode] = useState<FixMode | null>(null);
   const load = useCallback(async () => {
     try { setLogs(await staffGet(`/leave-log/${staff.id}`)); } catch { setLogs([]); }
     try { const l = await staffGet('/list') as StaffMember[]; const me = (l || []).find(x => x.id === staff.id); if (me) setNums({ total: me.total_leave ?? 0, used: me.used_leave ?? 0 }); } catch { /* 숫자는 다음에 */ }
   }, [staff.id]);
   useEffect(() => { void load(); }, [load]);
   if (editing) return <LeaveAdjust staff={staff} onClose={() => setEditing(false)} onSaved={onSaved} />;
-  // 자동 '사용 되돌림' 중 정정으로 생긴 것(ref_id)은 정정 줄 하나로 보이게 숨김
-  const shown = (logs || []).filter(l => !(l.log_type === 'revert' && l.ref_id));
-  const done = async () => { setMode(null); await load(); await onSaved(); };
+  const today = todayLocal(), ps = leavePeriodStart(base, today), pe = dayBefore(nextStart(base, ps));
+  const years = base ? Number(ps.slice(0, 4)) - Number(base.slice(0, 4)) : null;
+  const sorted = dates.slice().sort();
+  const cur = sorted.filter(d => leavePeriodStart(base, d) === ps);
+  const prevStart = leavePeriodStart(base, dayBefore(ps));
+  const prev = sorted.filter(d => d < ps && leavePeriodStart(base, d) === prevStart);
+  const future = (d: string) => d.slice(0, 7) > today.slice(0, 7);
+  const useLog: Record<string, LeaveLog> = {};
+  for (const l of logs || []) if (l.log_type === 'use' && l.can_fix && l.log_date) useLog[l.log_date] = l;
+  // 남은 연차: 마지막 연차 줄 = 지금 잔여연차, 예정은 그 뒤로 하나씩 줄어듦
+  const R = nums.total - nums.used, k = cur.filter(d => !future(d)).length;
+  const remainAt = (i: number) => R + (k - i);
+  const prevCx = (logs || []).filter(l => l.log_type === 'use' && l.cancelled_at && l.log_date && l.log_date >= prevStart && l.log_date < ps).length;
+  const otherLogs = (logs || []).filter(l => !['use', 'revert', 'pending', 'base'].includes(l.log_type) && !(l.log_type === 'reset' && l.cancelled_at));
+  const done = async () => { setRow(null); setLogMode(null); await load(); await onSaved(); };
+  const saveBase = async () => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(baseVal)) return setBaseErr('날짜를 골라 주세요');
+    setBaseBusy(true); setBaseErr('');
+    try { await staffPost(`/leave-base/${staff.id}`, { date: baseVal }); await done(); } catch (e) { setBaseErr(e instanceof Error ? e.message : '저장하지 못했어요'); setBaseBusy(false); }
+  };
+  const line = (d: string, i: number | null, kind: 'cur' | 'prev') => {
+    const fut = future(d), opened = row?.date === d, log = useLog[d];
+    return <li key={d} className={opened ? 'is-open' : ''}>
+      <button type="button" className="lv2-row" onClick={() => setRow(opened ? null : { date: d, kind: null })} aria-expanded={opened}>
+        <span className="lv2-n">{i ?? '·'}</span>
+        <span className="lv2-d">{mdDay(d)}<small>{WEEKDAYS[weekdayOf(d)]}</small></span>
+        <span className={`lv2-t${fut ? ' is-e' : ''}`}>{fut ? '예정' : '연차'}</span>
+        <span className="lv2-r">{kind === 'cur' && i != null ? `남은 ${remainAt(i)}일` : ''}</span>
+        <ChevronRight size={16} strokeWidth={1.8} className="lv2-c" />
+      </button>
+      {opened && <div className="lv2-act">
+        {row?.kind == null ? <div className="lv2-act-btns">
+          {log && <button type="button" className="sf-btn" onClick={() => setRow({ date: d, kind: 'edit' })}>날짜 바꾸기</button>}
+          <button type="button" className="sf-btn" onClick={() => setRow({ date: d, kind: 'cancel' })}>연차 아님</button></div>
+          : log ? <LeaveFix key={`${d}${row.kind}`} staff={staff} log={log} kind={row.kind} nums={nums} after={0} onClose={() => setRow(null)} onDone={done} />
+            : <LeaveOff staff={staff} date={d} onClose={() => setRow(null)} onDone={done} />}
+      </div>}
+    </li>;
+  };
   return <div className="sf-modal" role="dialog" aria-modal="true" aria-label={`${staff.name} 연차 이력`}>
     <div className="sf-modal-back" onClick={onClose} />
-    <div className="sf-modal-panel lv-hist">
+    <div className="sf-modal-panel lv-hist lv2">
       <div className="sf-modal-head"><strong>{staff.name} · 연차 이력</strong><button type="button" aria-label="닫기" onClick={onClose}>×</button></div>
-      <dl className="lv-hist-sum"><div><dt>지급연차</dt><dd>{nums.total}</dd></div><div><dt>사용연차</dt><dd>{nums.used}</dd></div><div><dt>잔여연차</dt><dd className="is-r">{nums.total - nums.used}</dd></div></dl>
-      {logs == null ? <LoadingBox /> : !shown.length ? <p className="sf-hint">기록 없음</p>
-        : <ul className="lv-hist-list">{shown.map(l => { const [chip, tone] = l.cancelled_at ? ['취소됨', 'c'] : KIND_CHIP[l.log_type] || [l.log_type, 'c'];
-          const open = mode?.id === l.id;
-          const after = shown.slice(0, shown.indexOf(l)).filter(x => !x.cancelled_at && x.log_type !== 'fix').length; // 잔여가 다시 계산되는 뒤 기록(정정·취소 줄은 그때 숫자 그대로)
-          return <li key={l.id} className={`${l.cancelled_at ? 'is-cx' : ''}${l.log_type === 'fix' ? ' is-fix' : ''}`}>
-            <div className="lv-hist-row">
-              <div className="lv-hist-main"><b><span className={`lv-chip is-${tone}`}>{chip}</span><span className="lv-hist-title">{l.cancelled_at ? `${LOG_TYPE[l.log_type] || ''} ${logTitle(l)}` : logTitle(l)}</span></b>
-                <small>{l.cancelled_at ? `사유: ${l.cancel_reason || '—'}`
-                  : l.log_type === 'fix' ? [`지급 ${l.before_total} → ${l.after_total}`, `사용 ${l.before_used} → ${l.after_used}`, `잔여 ${(l.before_total ?? 0) - (l.before_used ?? 0)} → ${l.after_remain ?? '—'}`, l.reason ? `사유: ${l.reason}` : ''].filter(Boolean).join(' · ')
-                  : [l.reason, l.remain_now != null ? `잔여 ${l.remain_now}` : ''].filter(Boolean).join(' · ')}</small></div>
-              {l.can_fix && <div className="lv-hist-acts">
-                <button type="button" className={`sf-btn${open && mode?.kind === 'edit' ? ' is-on' : ''}`} onClick={() => setMode(open && mode?.kind === 'edit' ? null : { id: l.id, kind: 'edit' })}>수정</button>
-                <button type="button" className={`sf-btn${open && mode?.kind === 'cancel' ? ' is-on' : ''}`} onClick={() => setMode(open && mode?.kind === 'cancel' ? null : { id: l.id, kind: 'cancel' })}>취소</button></div>}
-            </div>
-            {open && <LeaveFix key={`${l.id}${mode!.kind}`} staff={staff} log={l} kind={mode!.kind} nums={nums} after={after} onClose={() => setMode(null)} onDone={done} />}
-          </li>; })}</ul>}
-      <div className="sf-modal-foot"><button type="button" className="sf-btn" onClick={onClose}>닫기</button><button type="button" className="sf-btn is-primary" onClick={() => setEditing(true)}>연차 수정</button></div>
+      <div className="lv2-sum">
+        <button type="button" className="lv2-base" onClick={() => { setBaseEdit(v => !v); setBaseVal(base || ''); setBaseErr(''); }}>
+          <span><CalendarDays size={16} strokeWidth={1.7} />기준일</span><b>{base ? ymd(base) : '—'}</b><small>{years != null ? `(${years}년차)` : '눌러서 적기'}</small></button>
+        <div><span><Layers size={16} strokeWidth={1.7} />지급연차</span><b>{nums.total}</b></div>
+        <div><span><CheckCircle2 size={16} strokeWidth={1.7} />사용연차</span><b>{nums.used}</b></div>
+        <div className="lv2-rest"><span><CalendarCheck size={16} strokeWidth={1.7} />잔여연차</span><b>{R}</b></div>
+      </div>
+      {baseEdit && <div className="lv2-baseedit">
+        <label className="sf-input"><span>기준일</span><input type="date" value={baseVal} max={today} onChange={e => setBaseVal(e.target.value)} /></label>
+        <button type="button" className="sf-btn" onClick={() => setBaseEdit(false)}>닫기</button>
+        <button type="button" className="sf-btn is-primary" disabled={baseBusy} onClick={() => void saveBase()}>{baseBusy && <SavingMark />}저장</button>
+        {baseErr && <p className="sf-hint is-warn">{baseErr}</p>}
+      </div>}
+      {logs == null ? <LoadingBox /> : <>
+        <div className="lv2-sec"><b><CalendarDays size={18} strokeWidth={1.7} />이번 기간</b><span>{ymd(ps)} ~ {ymd(pe)}</span></div>
+        <div className="lv2-head" aria-hidden="true"><span>No.</span><span>사용일</span><span>구분</span><span>잔여</span><span /></div>
+        {cur.length ? <ul className="lv2-list">{cur.map((d, i) => line(d, i + 1, 'cur'))}</ul> : <p className="lv2-none">기록 없음</p>}
+        {prev.length > 0 && <>
+          <div className="lv2-sec"><b><CalendarCheck size={18} strokeWidth={1.7} />지난 기간</b><span>{ymd(prevStart)} ~ {ymd(dayBefore(ps))}</span></div>
+          <button type="button" className={`lv2-fold${fold === 'prev' ? ' is-open' : ''}`} onClick={() => setFold(f => (f === 'prev' ? '' : 'prev'))} aria-expanded={fold === 'prev'}><span>연차 {prev.length}일{prevCx ? ` · 취소 ${prevCx}` : ''}</span><span>{fold === 'prev' ? '접기' : '펼치기'}<ChevronDown size={15} strokeWidth={1.8} /></span></button>
+          {fold === 'prev' && <ul className="lv2-list">{prev.map((d, i) => line(d, i + 1, 'prev'))}</ul>}
+        </>}
+        {otherLogs.length > 0 && <>
+          <button type="button" className={`lv2-fold is-log${fold === 'log' ? ' is-open' : ''}`} onClick={() => setFold(f => (f === 'log' ? '' : 'log'))} aria-expanded={fold === 'log'}><span>수정 기록 {otherLogs.length}건</span><span>{fold === 'log' ? '접기' : '펼치기'}<ChevronDown size={15} strokeWidth={1.8} /></span></button>
+          {fold === 'log' && <ul className="lv2-logs">{otherLogs.map(l => { const opened = logMode?.id === l.id;
+            const name = l.log_type === 'reset' ? '리셋' : l.cancelled_at ? '취소됨' : (KIND_CHIP[l.log_type] || [LOG_TYPE[l.log_type] || l.log_type])[0];
+            const text = l.log_type === 'reset' ? `${mdDay(l.log_date)} · ${l.reason || ''} · 지급 ${l.after_total} · 사용 ${l.after_used}` : logTitle(l);
+            return <li key={l.id} className={l.cancelled_at ? 'is-cx' : ''}><div className="lv2-logrow"><span className="lv2-lt">{name}</span><span className="lv2-ltx">{text}</span>
+              {l.can_fix && l.log_type !== 'use' && <button type="button" className="lv2-lb" onClick={() => setLogMode(opened ? null : { id: l.id, kind: 'cancel' })}>취소</button>}</div>
+              {opened && <LeaveFix key={l.id} staff={staff} log={l} kind="cancel" nums={nums} after={0} onClose={() => setLogMode(null)} onDone={done} />}</li>; })}</ul>}
+        </>}
+      </>}
+      <div className="lv2-foot"><button type="button" className="lv2-adj" onClick={() => setEditing(true)}><Pencil size={17} strokeWidth={1.8} />숫자 직접 고치기</button>
+        <button type="button" className="sf-btn lv2-close" onClick={onClose}>닫기</button></div>
     </div>
+  </div>;
+}
+
+// 고칠 '사용' 기록이 없는 연차 날(예정·예전 앱 자료): 그날 근태만 바꾼다(직원스케줄과 같은 길 — 사용연차는 서버가 맞춤)
+function LeaveOff({ staff, date, onClose, onDone }: { staff: StaffMember; date: string; onClose: () => void; onDone: () => Promise<void> }) {
+  const states = optionsFor(staff).filter(s => s !== '연차');
+  const [state, setState] = useState(states.includes('정상근무') ? '정상근무' : states[0]);
+  const [busy, setBusy] = useState(false), [error, setError] = useState('');
+  const save = async () => {
+    setBusy(true); setError('');
+    try {
+      const rec = (((await staffGet('/month', { staff_id: staff.id, month: date.slice(0, 7) })) as MonthData).attendance || []).find(r => r.work_date === date) || null;
+      await staffPost('/attendance', payloadFor(staff, date, rec, statePatch(state, staff, date, rec)));
+      await onDone();
+    } catch (e) { setError(e instanceof Error ? e.message : '저장하지 못했어요'); setBusy(false); }
+  };
+  return <div className="lv-fix">
+    <label className="sf-input"><span>{mdDay(date)} 근태</span><select value={state} onChange={e => setState(e.target.value)}>{states.map(s => <option key={s}>{s}</option>)}</select></label>
+    {error && <p className="sf-hint is-warn">{error}</p>}
+    <div className="lv-fix-foot"><button type="button" className="sf-btn" onClick={onClose}>닫기</button>
+      <button type="button" className="sf-btn is-primary" disabled={busy} onClick={() => void save()}>{busy && <SavingMark />}저장</button></div>
   </div>;
 }
 

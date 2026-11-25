@@ -166,3 +166,33 @@ test('연차 사용 취소: 연결 응답만 끊김 → 다시 보내도 정정 
   assert.equal((await me(e)).used_leave, s0.used_leave - 1);
   assert.equal(await stateOn(e, '2026-11-04'), '정상근무');
 });
+
+test('user 11-25: 기준일 리셋 — 지급 = 근속연수표, 사용 = 기준일부터 연차 날짜 수, 두 번 불러도 한 번, 기준일을 바꾸면 다시', async () => {
+  const { isRedDay } = await import('../worker/redDays.js');
+  const { leaveByYears, leavePeriodStart } = await import('../worker/staff.js');
+  assert.deepEqual([1, 2, 3, 4, 5, 6, 20, 21, 30].map(leaveByYears), [15, 15, 16, 16, 17, 17, 24, 25, 25]);
+  assert.equal(leavePeriodStart('2022-07-01', '2026-11-26'), '2026-07-01');
+  assert.equal(leavePeriodStart('2020-12-23', '2026-11-26'), '2025-12-23');
+  const e = env();
+  const today = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10), Y = Number(today.slice(0, 4)), M = today.slice(5, 7);
+  const ps = `${Y}-${M}-01`;
+  const work = d => { const x = new Date(`${d}T00:00:00Z`); while (isRedDay(x.toISOString().slice(0, 10))) x.setUTCDate(x.getUTCDate() + 1); return x.toISOString().slice(0, 10); };
+  const before = work(`${M === '01' ? Y - 1 : Y}-${M === '01' ? '12' : String(Number(M) - 1).padStart(2, '0')}-10`);
+  const inside = work(ps);
+  for (const d of [before, inside].filter(d => d <= today)) assert.equal((await call(e, '/attendance', att(d, '연차'))).status, 200);
+  const r = await call(e, '/leave-base/2', { date: `${Y - 5}-${M}-01` });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  let s = await me(e);
+  assert.equal(s.total_leave, 17); // 5년차
+  assert.equal(s.used_leave, inside <= today ? 1 : 0); // 기준일 전 연차는 안 셈
+  assert.equal(s.leave_period, ps);
+  await me(e);
+  assert.equal((await logs(e)).filter(l => l.log_type === 'reset' && !l.cancelled_at).length, 1);
+  await call(e, '/leave-base/2', { date: `${Y - 2}-${M}-01` }); // 2년차 → 15
+  s = await me(e);
+  assert.equal(s.total_leave, 15);
+  assert.equal((await logs(e)).filter(l => l.log_type === 'reset' && !l.cancelled_at).length, 1);
+  assert.equal((await call(e, '/leave-base/2', { date: '2999-01-01' })).status, 400);
+  const ld = (await call(e, `/leave-dates?year=${Y}`)).data;
+  assert.equal(ld.leave_bases[2], `${Y - 2}-${M}-01`);
+});

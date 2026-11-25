@@ -4,6 +4,7 @@
 export type StaffMember = {
   id: number; name: string; position?: string; is_leader?: number; hire_date?: string | null; retire_date?: string | null;
   status?: string; total_leave?: number; used_leave?: number; remain_leave?: number; personal_color?: string | null;
+  leave_base?: string | null; leave_period?: string | null; // 기준일·지금 기간 시작(2026-11-25 기준일 리셋)
 };
 export type AttendanceRecord = {
   staff_id?: number; work_date: string; attendance: string; etc_type?: string | null; etc_detail?: string | null;
@@ -87,19 +88,26 @@ export function statePatch(st: string, s: StaffMember, date: string, rec: Attend
 }
 // 관리 인원이 서버 규칙(정상근무·출퇴근 기타만 저장)으로 비워지는지
 
-// 그 해 연차 날짜 → 날마다 누적 순번 (달력 '연차 3/15' 표기)
-export function leaveCumulative(byStaff: Record<string, string[]>) {
+// 연차 기간 시작 = 기준일(월·일)이 가장 최근에 온 날(서버 worker/staff.js leavePeriodStart와 같음). 기준일이 없으면 그 해 1월 1일.
+export function leavePeriodStart(base: string | null | undefined, day: string) {
+  if (!base || !/^\d{4}-\d{2}-\d{2}$/.test(base)) return `${day.slice(0, 4)}-01-01`;
+  const md = base.slice(5) === '02-29' ? '02-28' : base.slice(5);
+  let y = Number(day.slice(0, 4));
+  if (`${y}-${md}` > day) y -= 1;
+  return y < Number(base.slice(0, 4)) ? base : `${y}-${md}`;
+}
+// 연차 날짜 → 순번(기준일 기간마다 1·2·3…, 기준일이 없으면 그 해 1월부터 — 달력 '연차 3/15' 표기)
+export function leaveCumulative(byStaff: Record<string, string[]>, bases: Record<string, string | null | undefined> = {}) {
   const out: Record<string, Record<string, number>> = {};
   for (const sid of Object.keys(byStaff || {})) {
-    const cum: Record<string, number> = {};
-    (byStaff[sid] || []).slice().sort().forEach((d, i) => { cum[d] = i + 1; });
+    const cum: Record<string, number> = {}, n: Record<string, number> = {};
+    for (const d of (byStaff[sid] || []).slice().sort()) { const k = leavePeriodStart(bases[sid], d); n[k] = (n[k] || 0) + 1; cum[d] = n[k]; }
     out[sid] = cum;
   }
   return out;
 }
 
-// 그 해 사용 순번 = 지금 사용 연차 - (이 날 뒤에 쓴 연차 수). 앞 기록이 빠진 해에도 최근 순번이 맞게.
-// 연차 순번 = 그 해 연차 날짜를 날짜순으로 1·2·3…(2026-11-25 사용자 '연차를 순서대로 1.2.3 다시 나열' — 예전 앱 표기·사용연차 기준 순번 대신)
+// 연차 순번 = 기간(기준일부터, 없으면 그 해) 연차 날짜를 날짜순으로 1·2·3…(2026-11-25 사용자 '연차를 순서대로 1.2.3 다시 나열')
 export function leaveSeq(s: StaffMember, idx: Record<string, number> | undefined, date: string) {
   if (!idx || idx[date] == null) return s.used_leave ?? '-';
   return idx[date];

@@ -28,7 +28,7 @@ async function fetchMonth(month: string): Promise<MonthBundle> {
   const rows = await Promise.all(list.map(s => staffGet('/month', { staff_id: s.id, month }) as Promise<MonthData>));
   const months: Record<number, MonthData> = {};
   list.forEach((s, i) => { months[s.id] = rows[i]; });
-  const b = { list, months, cum: leaveCumulative(ld.leave_dates || {}) };
+  const b = { list, months, cum: leaveCumulative(ld.leave_dates || {}, ld.leave_bases || {}) };
   monthCache.set(month, b);
   return b;
 }
