@@ -3239,3 +3239,22 @@ button.iv-pinv { cursor: zoom-in; }
 /* 아이패드 세로에서도 좌우 두 칸 유지(2026-11-26 사용자 '가로로 긴 레이아웃 싫어') */
 .iv-ie-pack .iv-packrow input { width: 72px; min-width: 0; }
 .iv-ie-pack .iv-packrow select { width: 96px; min-width: 0; }
+
+/* ───── 가격표 비교 보기(2026-11-26 사용자: 기존 그림을 두 칸에서 따로, 편집 버튼 숨김) ───── */
+.pb-spacer { flex: 1; }
+.pb-modes { flex: none; display: flex; gap: 4px; margin-bottom: 9px; }
+.pb-modes button { height: 38px; padding: 0 14px; border-radius: 999px; border: 1px solid transparent; background: none; font: inherit; font-size: 14px; color: #7D838B; cursor: pointer; white-space: nowrap; }
+.pb-modes button[aria-pressed="true"] { background: #ecf1f6; border-color: #c9d6e3; color: #44617c; font-weight: 700; }
+.pb-swap { gap: 6px; }
+.pb-compare { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1px; background: #E1E4E8; }
+.pb-compare.is-stack { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) minmax(0, 1fr); }
+.price-board:has(.pb-compare.is-stack) .pb-swap svg { transform: rotate(90deg); }
+.pb-pane { min-width: 0; min-height: 0; display: flex; flex-direction: column; background: var(--app-bg, #FAFAFA); }
+.pb-pane-bar { flex: none; display: flex; gap: 8px; padding: 8px 12px; background: #fff; border-bottom: 1px solid #E1E4E8; }
+.pb-pane-bar select { height: 36px; min-width: 0; padding: 0 30px 0 12px; border: 1px solid #c9d6e3; border-radius: 999px; background: #fff; font: inherit; font-size: 14px; color: #44617c; appearance: none; -webkit-appearance: none; cursor: pointer;
+  background-image: linear-gradient(45deg, transparent 50%, #7D838B 50%), linear-gradient(135deg, #7D838B 50%, transparent 50%); background-position: right 15px center, right 11px center; background-size: 4px 4px; background-repeat: no-repeat; }
+.pb-pane-bar select:first-child { flex: 0 1 140px; font-weight: 700; }
+.pb-pane-bar select:last-child { flex: 0 1 240px; }
+.pb-pane .pb-nav { width: 38px; height: 38px; margin-top: -19px; }
+.pb-pane .pb-nav.is-prev { left: 8px; } .pb-pane .pb-nav.is-next { right: 8px; }
+.pb-pane .pb-dots { bottom: 10px; padding: 6px 12px; gap: 6px; font-size: 12px; }

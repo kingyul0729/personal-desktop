@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as RPointerEvent } from 'react';
-import { ChevronLeft, ChevronRight, FolderInput, GripVertical, Minus, Pencil, Plus, Trash2, X } from 'lucide-react';
+import { ArrowLeftRight, ChevronLeft, ChevronRight, FolderInput, GripVertical, Minus, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { KittyDialog } from './KittyDialog';
 import { askConfirm } from './AlertDialog';
@@ -47,6 +47,11 @@ export function FileExplorer({ onFolders, goto, onLocation }: { onFolders?: (fol
   const [dialog, setDialog] = useState<Dialog | null>(null);
   const [name, setName] = useState('');
   const tall = useTall();
+  // 비교 보기(2026-11-26 사용자): 기존 가격표 그림을 두 칸에서 따로 불러 봄 — 칸마다 탭·가격표 따로 고르고 따로 넘김, 자리 바꾸기, 누르면 크게.
+  // 상담용이라 편집 버튼은 숨김. 아이패드 가로 = 좌우(칸이 세로로 길어 세로 그림), 세로 = 위아래(칸이 가로로 길어 가로 그림). 가격 차액·할인율은 안 씀.
+  const [mode, setMode] = useState<'one' | 'two'>(() => { try { return localStorage.getItem('price-mode') === 'two' ? 'two' : 'one'; } catch { return 'one'; } });
+  const [panes, setPanes] = useState<{ f: string; p: number }[]>([]);
+  useEffect(() => { try { localStorage.setItem('price-mode', mode); } catch { /* 이 기기 편의 */ } }, [mode]);
 
   async function refresh(signal?: AbortSignal) {
     setLoading(true); setError('');
@@ -69,6 +74,14 @@ export function FileExplorer({ onFolders, goto, onLocation }: { onFolders?: (fol
   const images = useMemo(() => files.images.filter(i => i.folderId === current?.id), [files.images, current?.id]);
   const page = Math.min(pages[current?.id ?? ''] ?? 0, Math.max(0, images.length - 1));
   const go = (n: number) => current && setPages(p => ({ ...p, [current.id]: Math.max(0, Math.min(images.length - 1, n)) }));
+  const paneAt = (i: number) => {
+    const s = panes[i];
+    const folder = folders.find(f => f.id === s?.f) ?? (i === 0 ? current : folders.find(f => f.id !== current?.id) ?? current);
+    const list = files.images.filter(x => x.folderId === folder?.id);
+    return { folder, list, page: Math.min(s && s.f === folder?.id ? s.p : 0, Math.max(0, list.length - 1)) };
+  };
+  const setPane = (i: number, f: string, p: number) => setPanes(prev => { const next = [0, 1].map(k => prev[k] ?? { f: paneAt(k).folder?.id ?? '', p: paneAt(k).page }); next[i] = { f, p }; return next; });
+  const swap = () => setPanes([1, 0].map(k => { const x = paneAt(k); return { f: x.folder?.id ?? '', p: x.page }; }));
 
   const run = async (job: () => Promise<PriceFiles>, done = '') => {
     setPending(true); setError(''); setNotice('');
@@ -157,15 +170,29 @@ export function FileExplorer({ onFolders, goto, onLocation }: { onFolders?: (fol
   return <div className={`price-board${editing ? ' is-editing' : ''}`} aria-label="가격표 보관함">
     <header className="pb-top">
       <h2>가격표</h2>
-      <nav className="pb-tabs" aria-label="카테고리">
+      {mode === 'two' ? <span className="pb-spacer" /> : <nav className="pb-tabs" aria-label="카테고리">
         {folders.map(f => { const n = files.images.filter(i => i.folderId === f.id).length; return <button key={f.id} type="button" className={f.id === current?.id ? 'is-on' : ''} onClick={() => setTab(f.id)}>{f.name}<small>{n}</small></button>; })}
         {editing && <button type="button" className="pb-tab-add" onClick={() => openDialog({ type: 'folder' })}><Plus size={15} />탭</button>}
-      </nav>
-      {files.authenticated ? <button type="button" className={`pb-edit${editing ? ' is-on' : ''}`} onClick={() => { setEditing(v => !v); setError(''); setNotice(''); }}>{editing ? '완료' : '편집'}</button>
+      </nav>}
+      {!editing && folders.length > 0 && <div className="pb-modes" role="group" aria-label="보기">
+        <button type="button" aria-pressed={mode === 'one'} onClick={() => setMode('one')}>한 장</button>
+        <button type="button" aria-pressed={mode === 'two'} onClick={() => setMode('two')}>비교</button></div>}
+      {mode === 'two' ? <button type="button" className="pb-edit pb-swap" onClick={swap}><ArrowLeftRight size={16} />자리 바꾸기</button>
+        : files.authenticated ? <button type="button" className={`pb-edit${editing ? ' is-on' : ''}`} onClick={() => { setEditing(v => !v); setError(''); setNotice(''); }}>{editing ? '완료' : '편집'}</button>
         : <a className="pb-edit" href="/signin-with-chatgpt?return_to=%2F" target="_top">로그인</a>}
     </header>
     {(error || notice) && <p className={`pb-msg${error ? ' is-error' : ''}`} role={error ? 'alert' : 'status'}>{error || notice}{pending && <SavingMark />}</p>}
-    {editing ? <div className="pb-edit-list">
+    {mode === 'two' && !editing ? <div className={`pb-compare${tall ? ' is-stack' : ''}`}>
+      {[0, 1].map(i => { const { folder, list, page: pg } = paneAt(i); return <section key={i} className="pb-pane" aria-label={`가격표 ${i + 1}`}>
+        <div className="pb-pane-bar">
+          <select value={folder?.id ?? ''} aria-label="탭" onChange={e => setPane(i, e.target.value, 0)}>{folders.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}</select>
+          <select value={list[pg]?.id ?? ''} aria-label="가격표" onChange={e => setPane(i, folder?.id ?? '', Math.max(0, list.findIndex(x => x.id === e.target.value)))}>{list.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}</select>
+        </div>
+        {list.length ? <Pager key={folder?.id} images={list} page={pg} tall={!tall} fullTall={tall} keys={false} onPage={n => setPane(i, folder?.id ?? '', Math.max(0, Math.min(list.length - 1, n)))} label={folder?.name ?? ''} />
+          : <div className="pb-empty">가격표 없음</div>}
+      </section>; })}
+    </div>
+      : editing ? <div className="pb-edit-list">
       {current && <div className="pb-folder-tools">
         <button type="button" onClick={() => openDialog({ type: 'folder', folder: current })}><Pencil size={14} />탭 이름</button>
         <button type="button" disabled={pending} onClick={() => void removeFolder(current)}><Trash2 size={14} />탭 삭제</button>
@@ -198,8 +225,9 @@ export function FileExplorer({ onFolders, goto, onLocation }: { onFolders?: (fol
 
 // 넘겨 보기(2026-11-22 사용자 화면대로, 가격표 색은 손대지 않고 틀만): 탭 아래에 한 장씩(비율 유지), 좌우로 밀거나 ‹ › 로 넘김, 아래 점 + 'N / M'.
 // 그림을 한 번 누르면 꽉 찬 화면(왼쪽 메뉴·탭 없이) — 위 오른쪽 '탭 N / M · − · + · 닫기', 양옆 ‹ ›, 한 번 탭 = 버튼 숨기기/보이기, 두 번 탭 = 2.5배.
-function Pager({ images, page, tall, onPage, label }: { images: PriceImage[]; page: number; tall: boolean; onPage: (n: number) => void; label: string }) {
+function Pager({ images, page, tall: inTall, fullTall, keys = true, onPage, label }: { images: PriceImage[]; page: number; tall: boolean; fullTall?: boolean; keys?: boolean; onPage: (n: number) => void; label: string }) {
   const [full, setFull] = useState(false);
+  const tall = full ? fullTall ?? inTall : inTall; // 비교 칸은 칸 모양에 맞는 그림, 크게 보기는 화면 모양에 맞는 그림
   const [controls, setControls] = useState(true);
   const [zoom, setZoom] = useState(1);
   const stage = useRef<HTMLDivElement>(null);
@@ -213,12 +241,13 @@ function Pager({ images, page, tall, onPage, label }: { images: PriceImage[]; pa
     for (const n of [page - 1, page + 1]) if (images[n]) { const img = new Image(); img.src = sideOf(images[n], tall); }
   }, [page, tall, images]);
   useEffect(() => {
+    if (!keys && !full) return; // 비교 보기: 화살표는 크게 본 칸에서만(한쪽을 넘겨도 다른 쪽은 그대로)
     const on = (e: KeyboardEvent) => {
-      if ((e.target as HTMLElement)?.closest('input,textarea,dialog')) return;
+      if ((e.target as HTMLElement)?.closest('input,textarea,select,dialog')) return;
       if (e.key === 'ArrowRight') onPage(page + 1); if (e.key === 'ArrowLeft') onPage(page - 1); if (e.key === 'Escape') setFull(false);
     };
     window.addEventListener('keydown', on); return () => window.removeEventListener('keydown', on);
-  }, [page, onPage]);
+  }, [page, onPage, keys, full]);
   const zoomAt = (to: number, x?: number, y?: number) => {
     const el = stage.current; setZoom(to);
     if (!el || to === 1) return;
