@@ -10,14 +10,14 @@ export function StockCheck() {
   const [tab, setTab] = useState<'daily' | 'all'>('daily');
   if (error) return <Problem error={error} />;
   if (!state) return <LoadingBox />;
-  const prepaid = state.items.filter(it => it.prepaid || it.vendor_stock > 0); // 업체 보관 잔량이 있는 품목(선결제 + 일반 품목 업체 보관)
+  const prepaid = state.items.filter(it => it.prepaid || it.vendor_stock > 0); // 업체 보관 잔량이 있는 품목(선결제 + 일반 품목 업체 보관) — 카드는 병원재고 크게 · 업체 보관 잔량 작게(2026-11-26 사용자 위아래 바꿈), 부족 품목 카드는 개수만
   const low = state.items.filter(it => flagOf(it, state.orders) === 'low');
   const bring = state.items.filter(it => flagOf(it, state.orders) === 'bring');
   return <Shell toast={toast}>
     {!state.imported && <OldDataImport onDone={() => { announceInventory(); void reload(); }} />}
     <div className="iv-cards">
-      {prepaid.map(it => <div key={it.id} className="iv-card"><span>업체 보관 잔량</span><b>{it.name}</b><strong>{withUnit(it.vendor_stock, it.stock_unit)}</strong><small>병원재고 {withUnit(it.hospital_stock, it.stock_unit)}{it.unit_cost != null ? ` · 개당원가 ${it.unit_cost.toLocaleString('ko-KR')}원` : ''}{it.paid_unit_cost != null ? ` · 유상단가 ${it.paid_unit_cost.toLocaleString('ko-KR')}원` : ''}</small></div>)}
-      <div className={`iv-card${low.length ? ' is-warn' : ''}`}><span>위험 기준 이하</span><b>부족 품목</b><strong>{low.length}개</strong><small>{low.slice(0, 3).map(i => i.name).join(', ') || '없음'}{bring.length > 0 && ` · 입고 필요 ${bring.length}개`}</small></div>
+      {prepaid.map(it => <div key={it.id} className="iv-card"><span>병원재고</span><b>{it.name}</b><strong>{withUnit(it.hospital_stock, it.stock_unit)}</strong><small>업체 보관 잔량 {withUnit(it.vendor_stock, it.stock_unit)}{it.unit_cost != null ? ` · 개당원가 ${it.unit_cost.toLocaleString('ko-KR')}원` : ''}{it.paid_unit_cost != null ? ` · 유상단가 ${it.paid_unit_cost.toLocaleString('ko-KR')}원` : ''}</small></div>)}
+      <div className={`iv-card${low.length ? ' is-warn' : ''}`}><span>위험 기준 이하</span><b>부족 품목</b><strong>{low.length}개</strong>{bring.length > 0 && <small>입고 필요 {bring.length}개</small>}</div>
     </div>
     <div className="sf-bar"><Seg label="보기" value={tab} onChange={setTab} options={[['daily', '일일 재고'], ['all', '전체 재고']]} /></div>
     {tab === 'daily' ? <DailyClose key={state.imported || 'none'} items={state.items} today={state.today} notify={setToast} onSaved={reload} /> : <AllStock state={state} notify={setToast} />}
