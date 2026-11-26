@@ -100,3 +100,24 @@ export function compareRows(aItems?: CompareItem[], bItems?: CompareItem[]): Com
   const ordered = [...rows.filter(r => !isCare(r)), ...rows.filter(isCare)];
   return ordered.map(({ name, a, b }) => ({ name, a, b, same: cellText(a) === cellText(b) }));
 }
+
+// 핵심 차이 요약(2026-11-26 밤 사용자 구성안): 표의 줄에서만 뽑음 — 한쪽에만 있는 시술 'N회'/'포함', 횟수가 늘면 'a회 → b회', 한쪽에만 더한 시술 '이름 + X',
+// 같은 줄은 '공통 구성'. 글을 지어내지 않고 표와 같은 숫자만.
+export type DiffSummary = { aPlus: string[]; bPlus: string[]; common: string[] };
+const num = (c: Cell) => (/^\d+회$/.test(c.count) ? parseInt(c.count, 10) : null);
+export function diffSummary(rows: CompareRow[]): DiffSummary {
+  const out: DiffSummary = { aPlus: [], bPlus: [], common: [] };
+  for (const r of rows) {
+    if (r.same) { if (r.a) out.common.push(`${r.name} ${r.a.count}`); continue; }
+    if (!r.a && r.b) { out.bPlus.push(`${r.name} ${r.b.count}`); continue; }
+    if (r.a && !r.b) { out.aPlus.push(`${r.name} ${r.a.count}`); continue; }
+    if (!r.a || !r.b) continue;
+    const na = num(r.a), nb = num(r.b);
+    if (na != null && nb != null && na !== nb) (nb > na ? out.bPlus : out.aPlus).push(`${r.name} ${Math.min(na, nb)}회 → ${Math.max(na, nb)}회`);
+    const plus = (c: Cell) => c.subs.filter(s => s.startsWith('+ ')).map(s => s.slice(2));
+    const pa = plus(r.a), pb = plus(r.b);
+    for (const x of pb.filter(x => !pa.includes(x))) out.bPlus.push(`${r.name} + ${x}`);
+    for (const x of pa.filter(x => !pb.includes(x))) out.aPlus.push(`${r.name} + ${x}`);
+  }
+  return out;
+}

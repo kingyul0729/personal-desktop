@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ChevronDown, CircleCheck, Pencil, Plus, Trash2, X } from 'lucide-react';
+import { ChevronDown, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { KittyDialog } from './KittyDialog';
 import { askConfirm } from './AlertDialog';
 import { SavingMark } from './Feedback';
 import { readWon } from '../koreanAmount';
-import { compareRows, type Cell } from '../programCompare';
+import { compareRows, diffSummary, type Cell } from '../programCompare';
 
 // 프로그램 비교(2026-11-26 사용자 그림·밤 공통 기준, 상담용): 탭 고르기 → 가운데 제목 → 프로그램 카드 둘(이름 = 고르기, 가격 알약, 라인이 다르면 라인 이름표 —
 // 두 카드 같은 층 높이·같은 색) → 시술 구성(A 횟수 | 시술 항목 | B 횟수, 줄 만들기는 programCompare.ts) → 안내 한 줄 → 맨 아래 '프로그램 특징'(desc) 좌우.
@@ -54,32 +54,48 @@ export function ProgramCompare() {
   const pair = [a, b] as const;
   const allRows = compareRows(a?.items, b?.items);
   const rows = onlyDiff ? allRows.filter(r => !r.same) : allRows;
-  const cell = (c: Cell | null, same: boolean) => <span className={same ? '' : 'is-d'}>{c ? <><b>{c.count}</b>{c.subs.map((t, k) => <small key={k}>{t}</small>)}</> : '—'}</span>;
+  const cell = (c: Cell | null, same: boolean) => <span className={`pcw-n${same ? '' : ' is-d'}`} role="cell">{c ? <><b>{c.count}</b>{c.subs.map((t, k) => <small key={k}>{t}</small>)}</> : '—'}</span>;
+  const sum = diffSummary(allRows);
+  const short = (n: number | null) => (n == null ? '' : n % 10000 === 0 ? `${n / 10000}만` : won(n));
   const eng = CAT_EN[category];
+  const plusBlock = (p: Program | undefined, lines: string[]) => lines.length ? <div className="pcw-plus"><h5>{p?.name} 추가·확장 구성</h5><ul>{lines.map((t, k) => <li key={k}>{t}</li>)}</ul></div> : null;
   return <div className="pc-wrap">
-    <div className="pcz">
-      <div className="pcz-top">
+    <div className="pcw">
+      <div className="pcw-top">
         <label className="pc-cat"><select value={category} aria-label="탭" onChange={e => { setCat(e.target.value); setPick(['', '']); }}>{cats.map(c => <option key={c} value={c}>{c}</option>)}</select></label>
+        <label className="pc-only"><input type="checkbox" checked={onlyDiff} onChange={e => setOnlyDiff(e.target.checked)} /> 차이만 보기</label>
       </div>
       <header className="pcz-title">{eng && <small>{eng} PROGRAM</small>}<h3><i />{category} 프로그램 비교<i /></h3></header>
-      <div className="pcz-two">
-        {pair.map((p, i) => <div key={i} className="pcz-card">
-          <label className="pcz-pick"><b>{p?.name}</b><ChevronDown size={18} /><select value={p?.id ?? ''} aria-label={`프로그램 ${i + 1}`} onChange={e => choose(i as 0 | 1, e.target.value)}>{list.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}</select></label>
-          <div className="pcz-price"><strong>{won(p?.price ?? null)}</strong><small>(부가세 포함)</small></div>
-          <div className="pcz-feat">{lineDiff && p?.line ? <span className="pcz-tag">{p.line}</span> : null}</div>
-        </div>)}
-      </div>
-      <section className="pcz-box">
-        <div className="pcz-head"><h4>시술 구성</h4>
-          <label className="pc-only"><input type="checkbox" checked={onlyDiff} onChange={e => setOnlyDiff(e.target.checked)} /> 차이만 보기</label></div>
-        <div className="pcz-rows" role="table">
-          {rows.map((r, k) => <div key={k} className="pcz-row" role="row">{cell(r.a, r.same)}<span className="pcz-name">{r.name}</span>{cell(r.b, r.same)}</div>)}
-          {!rows.length && <div className="pcz-row is-empty"><span>구성 같음</span></div>}
+      <div className="pcw-body">
+        <div className="pcw-side">
+          <div className="pcw-cards">
+            {pair.map((p, i) => <div key={i} className="pcw-card">
+              <label className="pcw-pick"><b>{p?.name}</b><ChevronDown size={16} /><select value={p?.id ?? ''} aria-label={`프로그램 ${i + 1}`} onChange={e => choose(i as 0 | 1, e.target.value)}>{list.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}</select></label>
+              <div className="pcw-price"><strong>{won(p?.price ?? null)}</strong><small>부가세 포함</small></div>
+              {lineDiff && p?.line ? <span className="pcz-tag">{p.line}</span> : null}
+              {p?.desc ? <p className="pcw-desc-in">{p.desc}</p> : null}
+            </div>)}
+          </div>
+          {(sum.aPlus.length || sum.bPlus.length || sum.common.length) ? <section className="pcw-sum">
+            {plusBlock(b, sum.bPlus)}
+            {plusBlock(a, sum.aPlus)}
+            {sum.common.length ? <div className="pcw-plus is-common"><h5>공통 구성</h5><ul>{sum.common.map((t, k) => <li key={k}>{t}</li>)}</ul></div> : null}
+          </section> : null}
         </div>
-      </section>
-      {pair.some(p => p?.desc) && <section className="pcz-box pcz-desc">
-        {pair.map((p, i) => <ul key={i}>{p?.desc ? <li><CircleCheck size={20} />{p.desc}</li> : <li className="is-empty">—</li>}</ul>)}
-      </section>}
+        <div className="pcw-main">
+          <section className="pcw-table" role="table">
+            <div className="pcw-row pcw-head" role="row">
+              <span role="columnheader">시술 항목</span>
+              {pair.map((p, i) => <span key={i} className="pcw-n" role="columnheader"><b>{p?.name}</b>{p?.price != null && <small>{short(p.price)}</small>}</span>)}
+            </div>
+            {rows.map((r, k) => <div key={k} className="pcw-row" role="row"><span className="pcw-name" role="cell">{r.name}</span>{cell(r.a, r.same)}{cell(r.b, r.same)}</div>)}
+            {!rows.length && <div className="pcw-row is-empty"><span>구성 같음</span></div>}
+          </section>
+          {pair.some(p => p?.desc) && <section className="pcw-desc">
+            {pair.map((p, i) => <div key={i}><h5>{p?.name}</h5><p>{p?.desc || '—'}</p></div>)}
+          </section>}
+        </div>
+      </div>
     </div>
   </div>;
 }
