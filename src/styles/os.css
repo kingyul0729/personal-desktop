@@ -3541,3 +3541,5 @@ button.iv-pinv { cursor: zoom-in; }
 }
 /* 같은 날 밤 사용자 '시술구성 하늘색 칸 흰색으로': 표 머리 줄 흰 바탕 */
 .pct thead th { background: #fff; }
+/* 같은 날 밤 사용자 '각 박스 색으로': 머리 줄 양쪽 이름 칸은 위 가격 카드와 같은 색(왼쪽 파랑 · 오른쪽 모래색), 가운데는 흰색 */
+.pct thead th.is-a { background: #ebf1f8; } .pct thead th.is-b { background: #f6efe7; }
