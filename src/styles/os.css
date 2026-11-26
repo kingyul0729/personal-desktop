@@ -3500,3 +3500,20 @@ button.iv-pinv { cursor: zoom-in; }
   .pcw-desc { grid-template-columns: 1fr; gap: 12px; } .pcw-desc > div + div { border-left: 0; border-top: 1px solid #E1E4E8; padding-top: 12px; }
   .pcw-name { font-size: 14px; } .pcw-n { font-size: 15px; }
 }
+/* 구성안 다듬기(같은 날 밤 사용자 2차 문서): 횟수·부가 표기 줄 맞춤(모든 칸 위 기준, 부가 표기는 늘 횟수 바로 아래), 가로에서도 카드 두 장 나란히 ·
+   설명은 표 아래(한 화면에 이름·가격 → 핵심 차이 → 표 → 설명), 세로 여백 줄임 */
+.pcw { gap: 12px; }
+.pcw .pcz-title { margin: -6px 0 2px; }
+.pcw .pcz-title h3 { font-size: 26px; }
+.pcw-row { align-items: start; padding: 14px 0 12px; min-height: 0; }
+.pcw-head { align-items: end; padding: 10px 0; }
+.pcw-name, .pcw-n b { line-height: 24px; }
+.pcw-n { justify-content: flex-start; gap: 0; }
+.pcw-n small { line-height: 18px; }
+.pcw-card { padding: 12px 14px; gap: 4px; }
+.pcw-price strong { font-size: 18px; }
+@container pcw (min-width: 900px) {
+  .pcw-cards { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .pcw-desc-in { display: none; }
+  .pcw-desc { display: grid; }
+}
