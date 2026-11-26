@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeftRight, Pencil, Plus, Trash2, X } from 'lucide-react';
+import { ChevronDown, CircleCheck, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { KittyDialog } from './KittyDialog';
 import { askConfirm } from './AlertDialog';
 import { SavingMark } from './Feedback';
 import { readWon } from '../koreanAmount';
 
-// 프로그램 비교(2026-11-26 사용자 설계 기준·그림, 상담용): 프로그램마다 흰 카드 한 장(고르기 · 총금액 + 부가세 포함, 라인이 다르면 라인 이름표 + 한 줄 요약)
-// 두 카드 아래쪽에 걸쳐 시술 구성 표(A 횟수 | 시술 항목 | B 횟수, 다른 줄은 양쪽 강조, '차이만 보기'는 같은 줄 숨김) → 안내 한 줄 → 설명 불릿 2개(맞춤 피부 · 설명). 가격 차이 상자·추천 순위·우수 표시·할인율은 넣지 않는다.
+// 프로그램 비교(2026-11-26 사용자 그림, 상담용): 탭 고르기 → 가운데 제목 '탭 프로그램 비교' → 프로그램 카드 둘(이름 = 고르기, 가격 알약, 라인이 다르면 라인 이름표 + 한 줄 요약)
+// → 시술 구성 카드(표)(A 횟수 | 시술 항목 | B 횟수, 다른 줄은 양쪽 강조, '차이만 보기'는 같은 줄 숨김) → 안내 한 줄 → 설명 불릿 2개(맞춤 피부 · 설명). 가격 차이 상자·추천 순위·우수 표시·할인율은 넣지 않는다.
 // 숫자는 가격표 그림이 아니라 price_programs(앱에서 적거나 파일로 넣음).
 export type ProgramItem = { name: string; qty: number | null; label?: string };
 export type Program = { id: string; category: string; name: string; price: number | null; items: ProgramItem[]; line?: string; desc?: string; fit?: string };
@@ -72,40 +72,40 @@ export function ProgramCompare() {
   const pair = [a, b] as const;
   const rows = alignRows(a, b);
   const shown = onlyDiff ? rows.filter(r => !r.same) : rows;
+  const eng = CAT_EN[category];
   return <div className="pc-wrap">
-    <div className="pcx">
-      <div className="pc-head">
+    <div className="pcz">
+      <div className="pcz-top">
         <label className="pc-cat"><select value={category} aria-label="탭" onChange={e => { setCat(e.target.value); setPick(['', '']); }}>{cats.map(c => <option key={c} value={c}>{c}</option>)}</select></label>
-        <h3>프로그램 비교</h3>
-        <button type="button" className="pc-swap" aria-label="자리 바꾸기" title="자리 바꾸기" onClick={() => setPick([b?.id ?? '', a?.id ?? ''])}><ArrowLeftRight size={20} /></button>
       </div>
-      <div className="pcy">
-        {[1, 2].map(c => <div key={c} className="pcy-bg" style={{ gridColumn: c, gridRow: `1 / ${lineDiff ? 4 : 3}` }} />)}
-        {pair.map((p, i) => <div key={'h' + i} className="pcy-cell" style={{ gridColumn: i + 1, gridRow: 1 }}>
-          <select className="pc-pick" value={p?.id ?? ''} aria-label={`프로그램 ${i + 1}`} onChange={e => choose(i as 0 | 1, e.target.value)}>{list.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}</select>
-          <div className="pcx-pr"><strong className="pcx-price">{won(p?.price ?? null)}</strong><small>부가세 포함</small></div>
-        </div>)}
-        {lineDiff && pair.map((p, i) => { const l = lineOf(p); return <div key={'l' + i} className="pcy-cell is-line" style={{ gridColumn: i + 1, gridRow: 2 }}><span className="pcx-tag">{p?.line}</span>{l?.feature ? <p className="pcx-sum">{l.feature}</p> : null}</div>; })}
-        <div className="pcy-table" style={{ gridColumn: '1 / -1', gridRow: lineDiff ? 3 : 2 }}>
-          <div className="pc-sec"><h4>시술 구성</h4>
-            <label className="pc-only"><input type="checkbox" checked={onlyDiff} onChange={e => setOnlyDiff(e.target.checked)} /> 차이만 보기</label></div>
-          <div className="pc-table" role="table">
-            {shown.map(r => <div key={r.name} className="pc-row" role="row">
-              <span className={r.same ? '' : 'is-diff'}>{itemText(r.x)}</span>
-              <span className="pc-name">{r.name}</span>
-              <span className={r.same ? '' : 'is-diff'}>{itemText(r.y)}</span>
-            </div>)}
-            {!shown.length && <div className="pc-row is-empty"><span>구성 같음</span></div>}
-          </div>
+      <header className="pcz-title">{eng && <small>{eng} PROGRAM</small>}<h3><i />{category} 프로그램 비교<i /></h3></header>
+      <div className="pcz-two">
+        {pair.map((p, i) => { const l = lineDiff ? lineOf(p) : undefined; return <div key={i} className={`pcz-card is-${i ? 'b' : 'a'}`}>
+          <label className="pcz-pick"><b>{p?.name}</b><ChevronDown size={18} /><select value={p?.id ?? ''} aria-label={`프로그램 ${i + 1}`} onChange={e => choose(i as 0 | 1, e.target.value)}>{list.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}</select></label>
+          <div className="pcz-price"><strong>{won(p?.price ?? null)}</strong><small>(부가세 포함)</small></div>
+          {lineDiff && <><span className="pcz-tag">{p?.line}</span>{l?.feature ? <p className="pcz-sum">{l.feature}</p> : null}</>}
+        </div>; })}
+      </div>
+      <section className="pcz-box">
+        <div className="pcz-head"><h4>시술 구성</h4>
+          <label className="pc-only"><input type="checkbox" checked={onlyDiff} onChange={e => setOnlyDiff(e.target.checked)} /> 차이만 보기</label></div>
+        <div className="pcz-rows" role="table">
+          {shown.map(r => <div key={r.name} className="pcz-row" role="row">
+            <span className={r.same ? '' : 'is-a'}>{itemText(r.x)}</span>
+            <span className="pcz-name">{r.name}</span>
+            <span className={r.same ? '' : 'is-b'}>{itemText(r.y)}</span>
+          </div>)}
+          {!shown.length && <div className="pcz-row is-empty"><span>구성 같음</span></div>}
         </div>
-      </div>
+      </section>
       <p className="pc-note">매 회차 원장님이 피부 상태를 확인한 후 시술을 결정합니다.</p>
-      {pair.some(p => p?.fit || p?.desc) && <div className="pc-two">
-        {pair.map((p, i) => <div key={i} className="pcx-c is-top is-bottom"><ul className="pcx-desc">{[p?.fit, p?.desc].filter(t => t?.trim()).map((t, k) => <li key={k}>{t}</li>)}</ul></div>)}
-      </div>}
+      {pair.some(p => p?.fit || p?.desc) && <section className="pcz-box pcz-desc">
+        {pair.map((p, i) => <ul key={i}>{[p?.fit, p?.desc].filter(t => t?.trim()).map((t, k) => <li key={k}><CircleCheck size={20} />{t}</li>)}</ul>)}
+      </section>}
     </div>
   </div>;
 }
+const CAT_EN: Record<string, string> = { 색소: 'PIGMENT', 홍조: 'REDNESS', 여드름: 'ACNE', 흉터: 'SCAR', 모공: 'PORE', 리프팅: 'LIFTING', 스킨부스터: 'SKIN BOOSTER', 보톡스: 'BOTOX', 필러: 'FILLER' };
 
 // 가격표 [편집] 아래: 고른 탭(이름 = category)의 라인 · 프로그램 자료 — 추가·수정·삭제
 type Draft = { id?: string; name: string; price: string; line: string; desc: string; fit: string; items: { name: string; count: string }[] };
