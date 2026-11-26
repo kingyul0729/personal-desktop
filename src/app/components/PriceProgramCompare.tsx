@@ -73,7 +73,7 @@ export function ProgramCompare() {
         <div className="pcz-head"><h4>시술 구성</h4>
           <label className="pc-only"><input type="checkbox" checked={onlyDiff} onChange={e => setOnlyDiff(e.target.checked)} /> 차이만 보기</label></div>
         <div className="pcz-rows" role="table">
-          <div className="pcz-row pcz-thead" role="row"><span role="columnheader">{a?.name}</span><span role="columnheader" className="pcz-name">시술 항목</span><span role="columnheader">{b?.name}</span></div>
+          <div className="pcz-row pcz-thead" role="row"><span role="columnheader" className="is-a">{a?.name}</span><span role="columnheader" className="pcz-name">시술 항목</span><span role="columnheader" className="is-b">{b?.name}</span></div>
           {rows.map((r, k) => <div key={k} className="pcz-row" role="row">{cell(r.a, r.same)}<span className="pcz-name">{r.name}</span>{cell(r.b, r.same)}</div>)}
           {!rows.length && <div className="pcz-row is-empty"><span>구성 같음</span></div>}
         </div>

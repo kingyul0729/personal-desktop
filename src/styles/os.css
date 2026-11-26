@@ -3495,3 +3495,10 @@ button.iv-pinv { cursor: zoom-in; }
 .pcz-card.is-b { background: #eaf1f8; border-color: #bccddf; }
 .pcz-desc2 > .is-a h5 { color: #4f565e; }
 .pcz-desc2 > .is-b h5 { color: #44617c; }
+/* 같은 날 밤 사용자 '완전 다른 색으로, 한쪽이 좋아 보이면 안 됨': 밝기·진하기는 같게, 색만 다르게 — 왼쪽 차분한 파랑 · 오른쪽 차분한 모래색
+   (카드 · 표 머리 줄 이름 글자 · 설명 소제목) */
+.pcz-card.is-a { background: #ebf1f8; border-color: #bccbdd; }
+.pcz-card.is-b { background: #f6efe7; border-color: #dccab6; }
+.pcz .pcz-row.pcz-thead > span.is-a, .pcz-desc2 > .is-a h5 { color: #3f5f86; }
+.pcz .pcz-row.pcz-thead > span.is-b, .pcz-desc2 > .is-b h5 { color: #86603e; }
+.pcz .pcz-row.pcz-thead > span.is-a, .pcz .pcz-row.pcz-thead > span.is-b { background: none; }
