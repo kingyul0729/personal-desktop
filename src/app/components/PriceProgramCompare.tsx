@@ -78,7 +78,6 @@ export function ProgramCompare() {
         </div>
       </section>
       {pair.some(p => p?.desc) && <section className="pcz-box pcz-desc">
-        <h4 className="pcz-desc-h">프로그램 특징</h4>
         {pair.map((p, i) => <ul key={i}>{p?.desc ? <li><CircleCheck size={20} />{p.desc}</li> : <li className="is-empty">—</li>}</ul>)}
       </section>}
     </div>
