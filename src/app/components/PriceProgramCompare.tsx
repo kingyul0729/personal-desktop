@@ -76,7 +76,6 @@ export function ProgramCompare() {
           {rows.map((r, k) => <div key={k} className="pcz-row" role="row">{cell(r.a, r.same)}<span className="pcz-name">{r.name}</span>{cell(r.b, r.same)}</div>)}
           {!rows.length && <div className="pcz-row is-empty"><span>구성 같음</span></div>}
         </div>
-        <p className="pc-note pcz-note">매 회차 원장님이 피부 상태를 확인한 후 시술을 결정합니다.</p>
       </section>
       {pair.some(p => p?.desc) && <section className="pcz-box pcz-desc">
         <h4 className="pcz-desc-h">프로그램 특징</h4>
