@@ -3520,3 +3520,22 @@ button.iv-pinv { cursor: zoom-in; }
 @container pb (max-width: 520px) {
   .pct thead th { font-size: 14px; } .pct tbody th { font-size: 15px; } .pct td { font-size: 16px; } .pct th, .pct td { padding: 10px 6px; }
 }
+/* 같은 날 밤 사용자 '글자가 잘 보였으면': 글자색 더 진하게(#1f2328), 크기·굵기 한 단계씩 */
+.pct thead th { font-size: 18px; font-weight: 800; color: #1f2328; padding: 14px 8px; }
+.pct thead th.is-a { color: #34547a; } .pct thead th.is-b { color: #7a5433; }
+.pct tbody th { font-size: 19px; font-weight: 500; color: #1f2328; }
+.pct td { font-size: 21px; color: #1f2328; padding: 14px 8px; }
+.pct td b { font-weight: 500; }
+.pct td.is-d b { font-weight: 800; }
+.pct td small { font-size: 15px; font-weight: 700; color: #3f5f86; }
+.pct th, .pct td { border-color: #d3dae3; }
+.pcz-pick b { font-size: 22px; color: #1f2328; }
+.pcz-price strong { color: #1f2328; }
+.pcz-price small { font-size: 14px; color: #5b6168; }
+.pcz-desc2 h5 { font-size: 22px; }
+.pcz-desc2 > .is-a h5 { color: #34547a; } .pcz-desc2 > .is-b h5 { color: #7a5433; }
+.pcz-desc2 p { font-size: 17px; line-height: 1.65; color: #1f2328; }
+@container pb (max-width: 520px) {
+  .pct thead th { font-size: 15px; } .pct tbody th { font-size: 16px; } .pct td { font-size: 17px; }
+  .pcz-desc2 p { font-size: 15.5px; }
+}
