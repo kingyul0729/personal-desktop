@@ -3547,3 +3547,10 @@ button.iv-pinv { cursor: zoom-in; }
 .pct thead th:not(.is-a):not(.is-b) { background: #f7f8f9; }
 .pcz-price strong { font-size: 30px; }
 @container pb (max-width: 520px) { .pcz-price strong { font-size: 24px; } }
+/* 같은 날 새벽 사용자 '색이 너무 많나?' → 두 프로그램 색(파랑·모래색)은 가격 카드·표 머리 이름 칸 바탕에만, 글자·장식은 회색 */
+.pcz-title small { color: #7D838B; }
+.pcz-title h3 i { background: #d6d9de; }
+.pcz-head h4 { border-left-color: #9aa0a6; }
+.pct thead th.is-a, .pct thead th.is-b { color: #1f2328; }
+.pct td small { color: #5b6168; }
+.pcz-desc2 > .is-a h5, .pcz-desc2 > .is-b h5 { color: #1f2328; }
