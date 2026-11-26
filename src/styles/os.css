@@ -3559,3 +3559,7 @@ button.iv-pinv { cursor: zoom-in; }
 .pct tbody tr.is-d > * { background: #f1f4f8; }
 /* 같은 날 사용자 '연한 그레이니까 같이 보인다': 다른 줄 바탕은 회색 머리 줄과 구분되게 아주 연한 노랑(형광펜 느낌) */
 .pct tbody tr.is-d > * { background: #fff8e1; }
+/* 같은 날 사용자 '색이 또 많아져, 시술 항목 줄은 흰색, 다른 것만 다른 색': 머리 줄 흰 바탕(아래 선만 조금 진하게), 다른 줄만 아주 연한 회색 */
+.pct thead th, .pct thead th.is-a, .pct thead th.is-b { background: #fff; border-bottom: 1.5px solid #c8cfd8; }
+.pct tbody tr.is-d > * { background: #f2f4f7; }
+.pct thead th:not(.is-a):not(.is-b) { background: #fff; }
