@@ -3436,3 +3436,8 @@ button.iv-pinv { cursor: zoom-in; }
 .pcz-desc li.is-empty { color: #a3a6ab; }
 @container pb (max-width: 520px) { .pcz-desc-h { margin: 0 16px 10px; } }
 @container pb (max-width: 520px) { .pcz-desc { grid-template-columns: 1fr; } }
+/* 프로그램 비교 공통 기준(2026-11-26 밤): 횟수 칸 = 굵은 횟수 + 아래 작은 줄('+ 시술' · '서비스' · '○○ 병행 5 · 단독 5') */
+.pcz-row > span:not(.pcz-name) { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; line-height: 1.3; }
+.pcz-row > span:not(.pcz-name) b { font-weight: inherit; }
+.pcz-row > span:not(.pcz-name) small { font-size: 12.5px; font-weight: 600; color: #557591; word-break: keep-all; }
+.pcz-row > span.is-d small { color: #44617c; }

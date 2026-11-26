@@ -4,9 +4,11 @@ import { KittyDialog } from './KittyDialog';
 import { askConfirm } from './AlertDialog';
 import { SavingMark } from './Feedback';
 import { readWon } from '../koreanAmount';
+import { compareRows, type Cell } from '../programCompare';
 
-// 프로그램 비교(2026-11-26 사용자 그림, 상담용): 탭 고르기 → 가운데 제목 '탭 프로그램 비교' → 프로그램 카드 둘(이름 = 고르기, 가격 알약, 핵심 특징 = 설명 한 줄,
-// 라인이 다르면 라인 이름표 — 두 카드 같은 층 높이 맞춤, 좌우 같은 색) → 시술 구성(낱개 시술 한 줄씩) + 병행 관리 → 맨 아래 맞춤 피부(A 횟수 | 시술 항목 | B 횟수, 다른 줄은 양쪽 강조, '차이만 보기'는 같은 줄 숨김) → 안내 한 줄 → 설명 불릿 2개(맞춤 피부 · 설명). 가격 차이 상자·추천 순위·우수 표시·할인율은 넣지 않는다.
+// 프로그램 비교(2026-11-26 사용자 그림·밤 공통 기준, 상담용): 탭 고르기 → 가운데 제목 → 프로그램 카드 둘(이름 = 고르기, 가격 알약, 라인이 다르면 라인 이름표 —
+// 두 카드 같은 층 높이·같은 색) → 시술 구성(A 횟수 | 시술 항목 | B 횟수, 줄 만들기는 programCompare.ts) → 안내 한 줄 → 맨 아래 '프로그램 특징'(desc) 좌우.
+// 가격 차이 상자·추천 순위·우수 표시·할인율은 넣지 않는다.
 // 숫자는 가격표 그림이 아니라 price_programs(앱에서 적거나 파일로 넣음).
 export type ProgramItem = { name: string; qty: number | null; label?: string };
 export type Program = { id: string; category: string; name: string; price: number | null; items: ProgramItem[]; line?: string; desc?: string; fit?: string };
@@ -28,49 +30,6 @@ export async function sendPrograms(body: unknown): Promise<ProgramData> {
   return asData(d);
 }
 export const won = (n: number | null) => (n == null ? '—' : readWon(n));
-// 비교 화면 표시용 분해(2026-11-26 사용자, 저장 자료는 그대로): ' + '로 묶인 시술을 낱개로 나눠 같은 시술은 한 줄,
-// 레이저와 함께 하는 LDM 트리플·비타민 관리는 '병행 관리' 줄로, LDM만 하는 것은 'LDM 트리플 단독 관리'(시술 방식이 다름),
-// '스타룩스 1540 S.V'는 같은 시술 + 서비스 표시. 같은 장비라도 이름이 다르면(MAX-G · 알렉스 / MAX-G · PICO 1064) 따로.
-const itemText = (it?: ProgramItem) => (!it ? '—' : it.qty != null ? `${it.qty}회` : it.label || '포함');
-export type Part = { name: string; qty: number | null; label?: string; service?: boolean };
-const PAIRED = /^(LDM 트리플|비타민|비타민 관리)$/;
-const SOLO_LDM = /^LDM 트리플( 단독)?( 관리)?$/;
-export function splitProgram(p?: Program) {
-  const main: Part[] = [], side: Part[] = [];
-  const add = (to: Part[], x: Part) => {
-    const has = to.find(y => y.name === x.name && !!y.service === !!x.service);
-    if (!has) { to.push({ ...x }); return; }
-    if (has.qty != null && x.qty != null) has.qty += x.qty; else if (has.qty == null && x.qty != null) { has.qty = x.qty; delete has.label; }
-  };
-  for (const it of p?.items ?? []) {
-    const parts = it.name.split(/\s*\+\s*/).map(t => t.trim()).filter(Boolean);
-    const base = { qty: it.qty, ...(it.qty == null ? { label: it.label || '포함' } : {}) };
-    for (const raw of parts) {
-      let name = raw, service = false;
-      if (/\s+S\.?\s?V\.?$/i.test(name)) { name = name.replace(/\s+S\.?\s?V\.?$/i, ''); service = true; }
-      if (parts.length > 1 && PAIRED.test(name)) { add(side, { name: name === '비타민' ? '비타민 관리' : name, ...base }); continue; }
-      if (parts.length === 1 && SOLO_LDM.test(name)) name = 'LDM 트리플 단독 관리';
-      add(main, { name, ...base, ...(service ? { service } : {}) });
-    }
-  }
-  return { main, side };
-}
-const partText = (x?: Part) => (!x ? '—' : (x.qty != null ? `${x.qty}회` : x.label || '포함') + (x.service ? ' · 서비스' : ''));
-// 같은 시술 이름끼리 한 줄: A 순서대로, B에만 있는 것은 B 순서 자리에 끼워 넣음
-export function alignParts(ai: Part[], bi: Part[]) {
-  const names: string[] = [];
-  for (const it of ai) if (!names.includes(it.name)) names.push(it.name);
-  bi.forEach((it, j) => {
-    if (names.includes(it.name)) return;
-    let at = 0; for (let k = j - 1; k >= 0; k--) { const i = names.indexOf(bi[k].name); if (i >= 0) { at = i + 1; break; } }
-    names.splice(at, 0, it.name);
-  });
-  return names.map(name => {
-    const x = ai.find(i => i.name === name), y = bi.find(i => i.name === name);
-    return { name, x, y, same: partText(x) === partText(y) };
-  });
-}
-
 export function ProgramCompare() {
   const [data, setData] = useState<ProgramData | null>(null);
   const programs = data?.programs ?? null;
@@ -93,13 +52,9 @@ export function ProgramCompare() {
   if (!programs) return <div className="pb-empty"><SavingMark /></div>;
   if (!list.length) return <div className="pb-empty">기록 없음</div>;
   const pair = [a, b] as const;
-  const sa = splitProgram(a), sb = splitProgram(b);
-  const keep = (rs: ReturnType<typeof alignParts>) => (onlyDiff ? rs.filter(r => !r.same) : rs);
-  const rows = keep(alignParts(sa.main, sb.main)), side = keep(alignParts(sa.side, sb.side));
-  const hasSide = sa.side.length + sb.side.length > 0;
-  const sideTitle = category === '색소' ? '토닝 병행 관리' : '병행 관리';
-  const row = (r: ReturnType<typeof alignParts>[number]) => <div key={r.name} className="pcz-row" role="row">
-    <span className={r.same ? '' : 'is-d'}>{partText(r.x)}</span><span className="pcz-name">{r.name}</span><span className={r.same ? '' : 'is-d'}>{partText(r.y)}</span></div>;
+  const allRows = compareRows(a?.items, b?.items);
+  const rows = onlyDiff ? allRows.filter(r => !r.same) : allRows;
+  const cell = (c: Cell | null, same: boolean) => <span className={same ? '' : 'is-d'}>{c ? <><b>{c.count}</b>{c.subs.map((t, k) => <small key={k}>{t}</small>)}</> : '—'}</span>;
   const eng = CAT_EN[category];
   return <div className="pc-wrap">
     <div className="pcz">
@@ -111,26 +66,21 @@ export function ProgramCompare() {
         {pair.map((p, i) => <div key={i} className="pcz-card">
           <label className="pcz-pick"><b>{p?.name}</b><ChevronDown size={18} /><select value={p?.id ?? ''} aria-label={`프로그램 ${i + 1}`} onChange={e => choose(i as 0 | 1, e.target.value)}>{list.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}</select></label>
           <div className="pcz-price"><strong>{won(p?.price ?? null)}</strong><small>(부가세 포함)</small></div>
-          <div className="pcz-feat">{lineDiff && p?.line ? <span className="pcz-tag">{p.line}</span> : null}{p?.desc ? <p className="pcz-sum">{p.desc}</p> : null}</div>
+          <div className="pcz-feat">{lineDiff && p?.line ? <span className="pcz-tag">{p.line}</span> : null}</div>
         </div>)}
       </div>
       <section className="pcz-box">
         <div className="pcz-head"><h4>시술 구성</h4>
           <label className="pc-only"><input type="checkbox" checked={onlyDiff} onChange={e => setOnlyDiff(e.target.checked)} /> 차이만 보기</label></div>
         <div className="pcz-rows" role="table">
-          {rows.map(r => row(r))}
+          {rows.map((r, k) => <div key={k} className="pcz-row" role="row">{cell(r.a, r.same)}<span className="pcz-name">{r.name}</span>{cell(r.b, r.same)}</div>)}
           {!rows.length && <div className="pcz-row is-empty"><span>구성 같음</span></div>}
         </div>
-        {hasSide && <><h5 className="pcz-sub">{sideTitle}</h5>
-          <div className="pcz-rows" role="table">
-            {side.map(r => row(r))}
-            {!side.length && <div className="pcz-row is-empty"><span>병행 관리 같음</span></div>}
-          </div></>}
         <p className="pc-note pcz-note">매 회차 원장님이 피부 상태를 확인한 후 시술을 결정합니다.</p>
       </section>
-      {pair.some(p => p?.fit) && <section className="pcz-box pcz-desc">
-        <h4 className="pcz-desc-h">맞춤 피부</h4>
-        {pair.map((p, i) => <ul key={i}>{p?.fit ? <li><CircleCheck size={20} />{p.fit}</li> : <li className="is-empty">—</li>}</ul>)}
+      {pair.some(p => p?.desc) && <section className="pcz-box pcz-desc">
+        <h4 className="pcz-desc-h">프로그램 특징</h4>
+        {pair.map((p, i) => <ul key={i}>{p?.desc ? <li><CircleCheck size={20} />{p.desc}</li> : <li className="is-empty">—</li>}</ul>)}
       </section>}
     </div>
   </div>;
@@ -197,8 +147,7 @@ export function ProgramEditor({ category, data, onChange }: { category: string; 
           </div>)}
           <button type="button" className="pc-form-add" onClick={() => setDraft({ ...draft, items: [...draft.items, { name: '', count: '' }] })}><Plus size={14} />줄 추가</button>
         </div>
-        <label className="kitty-field">설명<textarea className="pc-form-note" rows={3} maxLength={400} value={draft.desc} onChange={e => setDraft({ ...draft, desc: e.target.value })} /></label>
-        <label className="kitty-field">맞춤 피부<textarea className="pc-form-note" rows={2} maxLength={400} value={draft.fit} onChange={e => setDraft({ ...draft, fit: e.target.value })} /></label>
+        <label className="kitty-field">프로그램 특징<textarea className="pc-form-note" rows={3} maxLength={400} value={draft.desc} onChange={e => setDraft({ ...draft, desc: e.target.value })} /></label>
         {error && <p className="kitty-error" role="alert">{error}</p>}
         {foot(!!draft.name.trim(), () => setDraft(null))}
       </form>
