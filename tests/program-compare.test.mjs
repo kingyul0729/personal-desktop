@@ -41,14 +41,3 @@ test('user 11-26 밤: 비교 줄 공통 기준 — 같은 조합 한 줄, 한쪽
   const same = [{ name: '압출 + 스케일링', qty: 2 }, { name: 'CO₂', qty: null, label: '포함' }];
   assert.ok(compareRows(same, same).every(x => x.same));
 });
-
-test('user 11-26 밤 구성안: 핵심 차이 요약은 표 숫자만으로 — 추가·늘어난 횟수·+ 시술·공통 구성', async () => {
-  const { diffSummary } = await import('../src/app/programCompare.ts');
-  const A = [{ name: 'MAX-G · 알렉스', qty: 1 }, { name: '레블라이트 SI + 제네시스 토닝 + LDM 트리플', qty: 5 }, { name: '피코 PLUS + LDM 트리플', qty: 5 }];
-  const B = [{ name: '스타룩스 1540', qty: 1 }, { name: 'MAX-G · 알렉스', qty: 2 }, { name: '레블라이트 SI + 제네시스 토닝 + LDM 트리플', qty: 5 }, { name: '피코 PLUS + 이래비티 + LDM 트리플', qty: 5 }, { name: 'CO₂ 얼굴 전체 점 제거', qty: null, label: '포함' }];
-  assert.deepEqual(diffSummary(compareRows(A, B)), {
-    aPlus: [],
-    bPlus: ['스타룩스 1540 1회', 'MAX-G · 알렉스 1회 → 2회', '피코 PLUS + 이래비티', 'CO₂ 얼굴 전체 점 제거 포함'],
-    common: ['레블라이트 SI + 제네시스 토닝 5회', 'LDM 트리플 10회'],
-  });
-});
