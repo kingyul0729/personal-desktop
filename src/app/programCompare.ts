@@ -10,6 +10,7 @@ export type Cell = { count: string; subs: string[] };
 export type CompareRow = { name: string; a: Cell | null; b: Cell | null; same: boolean };
 
 const CARE = new Set(['LDM 트리플', '비타민 관리']); // 레이저와 함께 하는 관리
+const SUPPORT = new Set([...CARE, 'LED 재생레이저']); // 다른 시술에 따라붙는 것 — 이것만 겹치는 조합끼리는 한 줄로 묶지 않음
 const SV = /\s+S\.?\s?V\.?$/i;
 const norm = (t: string) => (t === '비타민' ? '비타민 관리' : /^LDM 트리플( 단독)?( 관리)?$/.test(t) ? 'LDM 트리플' : t);
 const countText = (e: { qty: number | null; label?: string }) => (e.qty != null ? `${e.qty}회` : e.label || '포함');
@@ -70,8 +71,8 @@ export function compareRows(aItems?: CompareItem[], bItems?: CompareItem[]): Com
   A.forEach((e, i) => { if (pairOf.has(i)) return; B.forEach((x, j) => {
     if (usedB.has(j)) return;
     const common = e.tokens.filter(t => x.tokens.includes(t));
-    const core = common.filter(t => !CARE.has(t));
-    const careOnly = !common.length ? false : core.length === 0 && e.tokens.every(t => CARE.has(t)) && x.tokens.every(t => CARE.has(t));
+    const core = common.filter(t => !SUPPORT.has(t));
+    const careOnly = common.length > 0 && core.length === 0 && e.tokens.every(t => SUPPORT.has(t)) && x.tokens.every(t => SUPPORT.has(t));
     if (core.length || careOnly) cands.push({ i, j, score: common.length * 10 - (e.tokens.length + x.tokens.length - 2 * common.length) });
   }); });
   cands.sort((p, q) => q.score - p.score || p.i - q.i || p.j - q.j);

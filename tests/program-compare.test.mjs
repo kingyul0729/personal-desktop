@@ -32,6 +32,8 @@ test('user 11-26 밤: 비교 줄 공통 기준 — 같은 조합 한 줄, 한쪽
   // 관리만 겹치는 조합끼리는 묶지 않음
   const r = compareRows([{ name: '레이저A + LDM 트리플', qty: 5 }], [{ name: '레이저B + LDM 트리플', qty: 5 }]);
   assert.equal(r.length, 2);
+  // LED 재생레이저처럼 따라붙는 것만 겹쳐도 묶지 않음(MAX-G · 알렉스 + LED / MAX-G · PICO 1064 + LED)
+  assert.equal(compareRows([{ name: '레이저A + LED 재생레이저', qty: 2 }], [{ name: '레이저B + LED 재생레이저', qty: 2 }]).length, 2);
   // 같은 프로그램끼리는 모두 같음, 차이만 보기로 숨을 줄
   const same = [{ name: '압출 + 스케일링', qty: 2 }, { name: 'CO₂', qty: null, label: '포함' }];
   assert.ok(compareRows(same, same).every(x => x.same));
