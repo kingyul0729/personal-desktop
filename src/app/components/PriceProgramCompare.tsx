@@ -63,7 +63,7 @@ export function ProgramCompare() {
       </div>
       <header className="pcz-title">{eng && <small>{eng} PROGRAM</small>}<h3><i />{category} 프로그램 비교<i /></h3></header>
       <div className="pcz-two">
-        {pair.map((p, i) => <div key={i} className="pcz-card">
+        {pair.map((p, i) => <div key={i} className={`pcz-card ${i ? "is-b" : "is-a"}`}>
           <label className="pcz-pick"><b>{p?.name}</b><ChevronDown size={18} /><select value={p?.id ?? ''} aria-label={`프로그램 ${i + 1}`} onChange={e => choose(i as 0 | 1, e.target.value)}>{list.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}</select></label>
           <div className="pcz-price"><strong>{won(p?.price ?? null)}</strong><small>(부가세 포함)</small></div>
           <div className="pcz-feat">{lineDiff && p?.line ? <span className="pcz-tag">{p.line}</span> : null}</div>
@@ -79,7 +79,7 @@ export function ProgramCompare() {
         </div>
       </section>
       {pair.some(p => p?.desc) && <section className="pcz-box pcz-desc pcz-desc2">
-        {pair.map((p, i) => <div key={i}><h5>{p?.name}</h5>{p?.desc ? sentences(p.desc).map((t, k) => <p key={k}>{t}</p>) : <p className="is-empty">—</p>}</div>)}
+        {pair.map((p, i) => <div key={i} className={i ? "is-b" : "is-a"}><h5>{p?.name}</h5>{p?.desc ? sentences(p.desc).map((t, k) => <p key={k}>{t}</p>) : <p className="is-empty">—</p>}</div>)}
       </section>}
     </div>
   </div>;

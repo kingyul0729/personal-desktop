@@ -3490,3 +3490,8 @@ button.iv-pinv { cursor: zoom-in; }
   .pcz-price strong { font-size: 28px; } .pcz-pick b { font-size: 17px; }
   .pcz .pcz-row.pcz-thead > span, .pcz .pcz-row.pcz-thead > span:not(.pcz-name) { font-size: 14px; }
 }
+/* 같은 날 밤 사용자 '왼쪽 오른쪽 색상 다르게': 왼쪽 연회색 · 오른쪽 연한 청회색(카드·설명 소제목) */
+.pcz-card.is-a { background: #f2f3f5; border-color: #d6d9de; }
+.pcz-card.is-b { background: #eaf1f8; border-color: #bccddf; }
+.pcz-desc2 > .is-a h5 { color: #4f565e; }
+.pcz-desc2 > .is-b h5 { color: #44617c; }
