@@ -3421,3 +3421,18 @@ button.iv-pinv { cursor: zoom-in; }
 @container pb (max-width: 760px) { .pcz-pick b { font-size: 19px; } }
 @container pb (max-width: 520px) { .pcz-pick b { font-size: 16px; } }
 .pcz .pcz-note { margin: 0; padding-top: 12px; border-top: 1px solid #edf0f3; }
+/* 프로그램 비교 v4(2026-11-26 사용자): 좌우 같은 색·같은 강조, 카드 층(이름·가격·특징) 높이 맞춤(subgrid), 병행 관리 소제목, 맨 아래 맞춤 피부 */
+.pcz-two { grid-template-rows: auto auto auto; row-gap: 0; }
+.pcz-card, .pcz-card.is-a, .pcz-card.is-b { background: #f3f6f9; border-color: #dfe6ee; grid-row: span 3; display: grid; grid-template-rows: subgrid; row-gap: 12px; align-items: center; justify-items: center; }
+.pcz-card .pcz-pick { align-self: center; }
+.pcz-price { justify-self: stretch; }
+.pcz-feat { align-self: start; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.pcz-feat:empty { display: none; }
+.pcz-tag, .is-a .pcz-tag, .is-b .pcz-tag { background: #e3eaf1; color: #44617c; padding: 4px 14px; font-size: 14px; }
+.pcz-row > span.is-d { background: #eef2f6; color: #2D3136; font-weight: 700; }
+.pcz-sub { margin: 14px 0 0; padding: 10px 0 8px; border-top: 1px solid #edf0f3; font-size: 15px; font-weight: 700; color: #557591; }
+.pcz-desc { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.pcz-desc-h { grid-column: 1 / -1; margin: 0 22px 12px; padding-left: 10px; border-left: 3px solid #557591; font-size: 17px; font-weight: 800; color: #2D3136; line-height: 1.2; }
+.pcz-desc li.is-empty { color: #a3a6ab; }
+@container pb (max-width: 520px) { .pcz-desc-h { margin: 0 16px 10px; } }
+@container pb (max-width: 520px) { .pcz-desc { grid-template-columns: 1fr; } }
