@@ -76,7 +76,7 @@ export function ProgramCompare() {
           <colgroup><col className="pct-n" /><col /><col className="pct-n" /></colgroup>
           <thead><tr><th className="is-a">{a?.name}</th><th>시술 항목</th><th className="is-b">{b?.name}</th></tr></thead>
           <tbody>
-            {rows.map((r, k) => <tr key={k}>{tcell(r.a, r.same)}<th scope="row">{r.name}</th>{tcell(r.b, r.same)}</tr>)}
+            {rows.map((r, k) => <tr key={k} className={r.same ? undefined : "is-d"}>{tcell(r.a, r.same)}<th scope="row">{r.name}</th>{tcell(r.b, r.same)}</tr>)}
             {!rows.length && <tr><td colSpan={3} className="is-empty">구성 같음</td></tr>}
           </tbody>
         </table>
