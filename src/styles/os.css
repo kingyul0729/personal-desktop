@@ -3563,3 +3563,6 @@ button.iv-pinv { cursor: zoom-in; }
 .pct thead th, .pct thead th.is-a, .pct thead th.is-b { background: #fff; border-bottom: 1.5px solid #c8cfd8; }
 .pct tbody tr.is-d > * { background: #f2f4f7; }
 .pct thead th:not(.is-a):not(.is-b) { background: #fff; }
+/* 같은 날 사용자 '글자색만 구분': 줄 바탕색 없음, 두 프로그램이 다른 횟수와 '+ 추가 시술'만 청회색 글자(굵게) */
+.pct tbody tr.is-d > * { background: #fff; }
+.pct td.is-d b, .pct td.is-d small { color: #44617c; }
