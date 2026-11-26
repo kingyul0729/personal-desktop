@@ -3557,3 +3557,5 @@ button.iv-pinv { cursor: zoom-in; }
 /* 같은 날 아침 사용자: 다른 줄은 굵게 + 줄 전체 아주 연한 바탕, 머리 줄은 세 칸 모두 '시술 항목'과 같은 아주 연한 회색 */
 .pct thead th, .pct thead th.is-a, .pct thead th.is-b { background: #f7f8f9; color: #1f2328; }
 .pct tbody tr.is-d > * { background: #f1f4f8; }
+/* 같은 날 사용자 '연한 그레이니까 같이 보인다': 다른 줄 바탕은 회색 머리 줄과 구분되게 아주 연한 노랑(형광펜 느낌) */
+.pct tbody tr.is-d > * { background: #fff8e1; }
