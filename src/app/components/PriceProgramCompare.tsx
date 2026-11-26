@@ -97,8 +97,8 @@ export function ProgramCompare() {
           </div>)}
           {!shown.length && <div className="pcz-row is-empty"><span>구성 같음</span></div>}
         </div>
+        <p className="pc-note pcz-note">매 회차 원장님이 피부 상태를 확인한 후 시술을 결정합니다.</p>
       </section>
-      <p className="pc-note">매 회차 원장님이 피부 상태를 확인한 후 시술을 결정합니다.</p>
       {pair.some(p => p?.fit || p?.desc) && <section className="pcz-box pcz-desc">
         {pair.map((p, i) => <ul key={i}>{[p?.fit, p?.desc].filter(t => t?.trim()).map((t, k) => <li key={k}><CircleCheck size={20} />{t}</li>)}</ul>)}
       </section>}

@@ -3420,3 +3420,4 @@ button.iv-pinv { cursor: zoom-in; }
 .pcz-pick select { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; font-size: 16px; }
 @container pb (max-width: 760px) { .pcz-pick b { font-size: 19px; } }
 @container pb (max-width: 520px) { .pcz-pick b { font-size: 16px; } }
+.pcz .pcz-note { margin: 0; padding-top: 12px; border-top: 1px solid #edf0f3; }
