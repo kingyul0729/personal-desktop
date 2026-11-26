@@ -5,8 +5,8 @@ import { askConfirm } from './AlertDialog';
 import { SavingMark } from './Feedback';
 import { readWon } from '../koreanAmount';
 
-// 프로그램 비교(2026-11-26 사용자 설계 기준, 상담용): 고르기 두 개 → 카드(이름·총금액·부가세 포함, 라인이 다르면 라인 이름표 + 한 줄 요약)
-// → 시술 구성 표(A 횟수 | 시술 항목 | B 횟수, 다른 줄은 양쪽 강조, '차이만 보기'는 같은 줄 숨김) → 안내 한 줄 → 설명 불릿 2개(맞춤 피부 · 설명). 가격 차이 상자·추천 순위·우수 표시·할인율은 넣지 않는다.
+// 프로그램 비교(2026-11-26 사용자 설계 기준·그림, 상담용): 프로그램마다 흰 카드 한 장(고르기 · 총금액 + 부가세 포함, 라인이 다르면 라인 이름표 + 한 줄 요약)
+// 두 카드 아래쪽에 걸쳐 시술 구성 표(A 횟수 | 시술 항목 | B 횟수, 다른 줄은 양쪽 강조, '차이만 보기'는 같은 줄 숨김) → 안내 한 줄 → 설명 불릿 2개(맞춤 피부 · 설명). 가격 차이 상자·추천 순위·우수 표시·할인율은 넣지 않는다.
 // 숫자는 가격표 그림이 아니라 price_programs(앱에서 적거나 파일로 넣음).
 export type ProgramItem = { name: string; qty: number | null; label?: string };
 export type Program = { id: string; category: string; name: string; price: number | null; items: ProgramItem[]; line?: string; desc?: string; fit?: string };
@@ -79,23 +79,25 @@ export function ProgramCompare() {
         <h3>프로그램 비교</h3>
         <button type="button" className="pc-swap" aria-label="자리 바꾸기" title="자리 바꾸기" onClick={() => setPick([b?.id ?? '', a?.id ?? ''])}><ArrowLeftRight size={20} /></button>
       </div>
-      <div className="pc-two">
-        {pair.map((p, i) => <select key={i} className="pc-pick" value={p?.id ?? ''} aria-label={`프로그램 ${i + 1}`} onChange={e => choose(i as 0 | 1, e.target.value)}>{list.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}</select>)}
-      </div>
-      <div className="pc-two">
-        {pair.map((p, i) => { const l = lineDiff ? lineOf(p) : undefined; return <div key={i} className="pc-card"><b>{p?.name}</b><strong>{won(p?.price ?? null)}</strong><small>부가세 포함</small>
-          {lineDiff && <><span className="pcx-tag">{p?.line}</span>{l?.feature ? <p className="pcx-sum">{l.feature}</p> : null}</>}</div>; })}
-      </div>
-      <div className="pc-sec"><h4>시술 구성</h4>
-        <label className="pc-only"><input type="checkbox" checked={onlyDiff} onChange={e => setOnlyDiff(e.target.checked)} /> 차이만 보기</label></div>
-      <div className="pc-table" role="table">
-        <div className="pc-row is-head" role="row"><span>{a?.name}</span><span>시술 항목</span><span>{b?.name}</span></div>
-        {shown.map(r => <div key={r.name} className="pc-row" role="row">
-          <span className={r.same ? '' : 'is-diff'}>{itemText(r.x)}</span>
-          <span className="pc-name">{r.name}</span>
-          <span className={r.same ? '' : 'is-diff'}>{itemText(r.y)}</span>
+      <div className="pcy">
+        {[1, 2].map(c => <div key={c} className="pcy-bg" style={{ gridColumn: c, gridRow: `1 / ${lineDiff ? 4 : 3}` }} />)}
+        {pair.map((p, i) => <div key={'h' + i} className="pcy-cell" style={{ gridColumn: i + 1, gridRow: 1 }}>
+          <select className="pc-pick" value={p?.id ?? ''} aria-label={`프로그램 ${i + 1}`} onChange={e => choose(i as 0 | 1, e.target.value)}>{list.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}</select>
+          <div className="pcx-pr"><strong className="pcx-price">{won(p?.price ?? null)}</strong><small>부가세 포함</small></div>
         </div>)}
-        {!shown.length && <div className="pc-row is-empty"><span>구성 같음</span></div>}
+        {lineDiff && pair.map((p, i) => { const l = lineOf(p); return <div key={'l' + i} className="pcy-cell is-line" style={{ gridColumn: i + 1, gridRow: 2 }}><span className="pcx-tag">{p?.line}</span>{l?.feature ? <p className="pcx-sum">{l.feature}</p> : null}</div>; })}
+        <div className="pcy-table" style={{ gridColumn: '1 / -1', gridRow: lineDiff ? 3 : 2 }}>
+          <div className="pc-sec"><h4>시술 구성</h4>
+            <label className="pc-only"><input type="checkbox" checked={onlyDiff} onChange={e => setOnlyDiff(e.target.checked)} /> 차이만 보기</label></div>
+          <div className="pc-table" role="table">
+            {shown.map(r => <div key={r.name} className="pc-row" role="row">
+              <span className={r.same ? '' : 'is-diff'}>{itemText(r.x)}</span>
+              <span className="pc-name">{r.name}</span>
+              <span className={r.same ? '' : 'is-diff'}>{itemText(r.y)}</span>
+            </div>)}
+            {!shown.length && <div className="pc-row is-empty"><span>구성 같음</span></div>}
+          </div>
+        </div>
       </div>
       <p className="pc-note">매 회차 원장님이 피부 상태를 확인한 후 시술을 결정합니다.</p>
       {pair.some(p => p?.fit || p?.desc) && <div className="pc-two">

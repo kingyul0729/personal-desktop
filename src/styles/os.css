@@ -3359,3 +3359,14 @@ button.iv-pinv { cursor: zoom-in; }
 .pcx .pc-card .pcx-tag { align-self: center; margin-top: 6px; }
 .pcx .pc-card .pcx-sum { text-align: center; }
 .pcx .pc-two > .pcx-c { padding: 12px 18px; }
+/* 프로그램 비교 카드 + 걸친 표(2026-11-26 사용자 그림): 두 흰 카드가 아래까지 이어지고, 시술 구성 표는 두 카드에 걸쳐 */
+.pcy { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 14px; }
+.pcy-bg { grid-row: 1 / -1; background: #fff; border: 1px solid #E1E4E8; border-radius: 16px; }
+.pcy-cell { min-width: 0; padding: 16px 18px 6px; display: flex; flex-direction: column; gap: 10px; }
+.pcy-cell.is-line { padding-top: 4px; gap: 4px; }
+.pcy-cell .pc-pick { width: 100%; }
+.pcy-cell .pcx-pr { display: flex; align-items: baseline; gap: 8px; }
+.pcy-table { position: relative; margin: 8px 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+.pcy-table .pc-sec { padding: 0 8px; }
+.pcy-table .pc-table { border-color: #edf0f3; background: #fff; }
+@container pb (max-width: 520px) { .pcy { column-gap: 8px; } .pcy-cell { padding-inline: 12px; } .pcy-table { margin-inline: 4px; } }
