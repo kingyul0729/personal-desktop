@@ -3539,3 +3539,5 @@ button.iv-pinv { cursor: zoom-in; }
   .pct thead th { font-size: 15px; } .pct tbody th { font-size: 16px; } .pct td { font-size: 17px; }
   .pcz-desc2 p { font-size: 15.5px; }
 }
+/* 같은 날 밤 사용자 '시술구성 하늘색 칸 흰색으로': 표 머리 줄 흰 바탕 */
+.pct thead th { background: #fff; }
