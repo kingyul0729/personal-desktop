@@ -3354,3 +3354,8 @@ button.iv-pinv { cursor: zoom-in; }
   .pcx-grid { column-gap: 8px; } .pcx-c { padding-inline: 12px; }
   .pcx-price { font-size: 22px; } .pcx-items li { font-size: 14px; }
 }
+/* 프로그램 비교 v2 시술 구성(2026-11-26 사용자 그림): 예전 표 모양으로 — 카드는 그림자 없이, 라인 이름표는 카드 안 가운데 */
+.pcx .pc-card { box-shadow: none; }
+.pcx .pc-card .pcx-tag { align-self: center; margin-top: 6px; }
+.pcx .pc-card .pcx-sum { text-align: center; }
+.pcx .pc-two > .pcx-c { padding: 12px 18px; }

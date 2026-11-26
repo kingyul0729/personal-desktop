@@ -1,4 +1,3 @@
-import type React from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { ArrowLeftRight, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { KittyDialog } from './KittyDialog';
@@ -6,9 +5,8 @@ import { askConfirm } from './AlertDialog';
 import { SavingMark } from './Feedback';
 import { readWon } from '../koreanAmount';
 
-// 프로그램 비교(2026-11-26 사용자 설계 기준, 상담용): 프로그램마다 한 칸 — 고르기 → (라인이 다르면) 라인 이름표 + 한 줄 요약
-// → 총금액(부가세 포함) → 시술·횟수 목록, 그 아래 안내 한 줄, 맨 아래 설명 불릿 2개(맞춤 피부 · 설명). 두 칸의 같은 층은 높이를 맞춤.
-// '차이만 보기'는 같은 시술·횟수를 흐리게, 다른 것만 진하게. 가격 차이 상자·추천 순위·우수 표시·할인율은 넣지 않는다.
+// 프로그램 비교(2026-11-26 사용자 설계 기준, 상담용): 고르기 두 개 → 카드(이름·총금액·부가세 포함, 라인이 다르면 라인 이름표 + 한 줄 요약)
+// → 시술 구성 표(A 횟수 | 시술 항목 | B 횟수, 다른 줄은 양쪽 강조, '차이만 보기'는 같은 줄 숨김) → 안내 한 줄 → 설명 불릿 2개(맞춤 피부 · 설명). 가격 차이 상자·추천 순위·우수 표시·할인율은 넣지 않는다.
 // 숫자는 가격표 그림이 아니라 price_programs(앱에서 적거나 파일로 넣음).
 export type ProgramItem = { name: string; qty: number | null; label?: string };
 export type Program = { id: string; category: string; name: string; price: number | null; items: ProgramItem[]; line?: string; desc?: string; fit?: string };
@@ -31,6 +29,23 @@ export async function sendPrograms(body: unknown): Promise<ProgramData> {
 }
 export const won = (n: number | null) => (n == null ? '—' : readWon(n));
 const itemText = (it?: ProgramItem) => (!it ? '—' : it.qty != null ? `${it.qty}회` : it.label || '포함');
+
+// 같은 시술 이름끼리 한 줄: A 순서대로, B에만 있는 것은 B 순서 자리에 끼워 넣음
+export function alignRows(a: Program | undefined, b: Program | undefined) {
+  const names: string[] = [];
+  for (const it of a?.items ?? []) if (!names.includes(it.name)) names.push(it.name);
+  const bi = b?.items ?? [];
+  bi.forEach((it, j) => { // B에만 있는 시술은 B에서 바로 앞에 있던 시술 다음 줄에 — 두 프로그램 순서를 모두 지킴
+    if (names.includes(it.name)) return;
+    let at = 0; for (let k = j - 1; k >= 0; k--) { const i = names.indexOf(bi[k].name); if (i >= 0) { at = i + 1; break; } }
+    names.splice(at, 0, it.name);
+  });
+  return names.map(name => {
+    const x = a?.items.find(i => i.name === name), y = b?.items.find(i => i.name === name);
+    const same = itemText(x) === itemText(y);
+    return { name, x, y, same };
+  });
+}
 
 export function ProgramCompare() {
   const [data, setData] = useState<ProgramData | null>(null);
@@ -55,40 +70,39 @@ export function ProgramCompare() {
   if (!programs) return <div className="pb-empty"><SavingMark /></div>;
   if (!list.length) return <div className="pb-empty">기록 없음</div>;
   const pair = [a, b] as const;
-  const cell = (k: string, nodes: [React.ReactNode, React.ReactNode], cls = '') => pair.map((_, i) => <div key={k + i} className={`pcx-c ${cls}`}>{nodes[i]}</div>);
+  const rows = alignRows(a, b);
+  const shown = onlyDiff ? rows.filter(r => !r.same) : rows;
   return <div className="pc-wrap">
     <div className="pcx">
       <div className="pc-head">
         <label className="pc-cat"><select value={category} aria-label="탭" onChange={e => { setCat(e.target.value); setPick(['', '']); }}>{cats.map(c => <option key={c} value={c}>{c}</option>)}</select></label>
         <h3>프로그램 비교</h3>
-        <label className="pc-only"><input type="checkbox" checked={onlyDiff} onChange={e => setOnlyDiff(e.target.checked)} /> 차이만 보기</label>
         <button type="button" className="pc-swap" aria-label="자리 바꾸기" title="자리 바꾸기" onClick={() => setPick([b?.id ?? '', a?.id ?? ''])}><ArrowLeftRight size={20} /></button>
       </div>
-      <div className="pcx-grid">
-        {cell('pick', [0, 1].map(i => <select key={i} className="pc-pick" value={pair[i]?.id ?? ''} aria-label={`프로그램 ${i + 1}`} onChange={e => choose(i as 0 | 1, e.target.value)}>{list.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}</select>) as [React.ReactNode, React.ReactNode], 'is-top')}
-        {lineDiff && cell('line', pair.map(p => { const l = lineOf(p); return <><span className="pcx-tag">{p?.line}</span>{l?.feature ? <p className="pcx-sum">{l.feature}</p> : null}</>; }) as [React.ReactNode, React.ReactNode])}
-        {cell('price', pair.map(p => <><strong className="pcx-price">{won(p?.price ?? null)}</strong><small>부가세 포함</small></>) as [React.ReactNode, React.ReactNode], 'pcx-pr')}
-        {cell('items', pair.map((p, i) => <ul className="pcx-items">{(p?.items ?? []).map((it, k) => <ItemLine key={k} it={it} other={pair[1 - i]} diff={onlyDiff} />)}</ul>) as [React.ReactNode, React.ReactNode], 'is-bottom')}
+      <div className="pc-two">
+        {pair.map((p, i) => <select key={i} className="pc-pick" value={p?.id ?? ''} aria-label={`프로그램 ${i + 1}`} onChange={e => choose(i as 0 | 1, e.target.value)}>{list.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}</select>)}
+      </div>
+      <div className="pc-two">
+        {pair.map((p, i) => { const l = lineDiff ? lineOf(p) : undefined; return <div key={i} className="pc-card"><b>{p?.name}</b><strong>{won(p?.price ?? null)}</strong><small>부가세 포함</small>
+          {lineDiff && <><span className="pcx-tag">{p?.line}</span>{l?.feature ? <p className="pcx-sum">{l.feature}</p> : null}</>}</div>; })}
+      </div>
+      <div className="pc-sec"><h4>시술 구성</h4>
+        <label className="pc-only"><input type="checkbox" checked={onlyDiff} onChange={e => setOnlyDiff(e.target.checked)} /> 차이만 보기</label></div>
+      <div className="pc-table" role="table">
+        <div className="pc-row is-head" role="row"><span>{a?.name}</span><span>시술 항목</span><span>{b?.name}</span></div>
+        {shown.map(r => <div key={r.name} className="pc-row" role="row">
+          <span className={r.same ? '' : 'is-diff'}>{itemText(r.x)}</span>
+          <span className="pc-name">{r.name}</span>
+          <span className={r.same ? '' : 'is-diff'}>{itemText(r.y)}</span>
+        </div>)}
+        {!shown.length && <div className="pc-row is-empty"><span>구성 같음</span></div>}
       </div>
       <p className="pc-note">매 회차 원장님이 피부 상태를 확인한 후 시술을 결정합니다.</p>
-      {pair.some(p => p?.fit || p?.desc) && <div className="pcx-grid">
-        {cell('desc', pair.map(p => <ul className="pcx-desc">{[p?.fit, p?.desc].filter(t => t?.trim()).map((t, k) => <li key={k}>{t}</li>)}</ul>) as [React.ReactNode, React.ReactNode], 'is-top is-bottom')}
+      {pair.some(p => p?.fit || p?.desc) && <div className="pc-two">
+        {pair.map((p, i) => <div key={i} className="pcx-c is-top is-bottom"><ul className="pcx-desc">{[p?.fit, p?.desc].filter(t => t?.trim()).map((t, k) => <li key={k}>{t}</li>)}</ul></div>)}
       </div>}
     </div>
   </div>;
-}
-
-// 시술 한 줄: 이름 | 횟수. '차이만 보기'일 때만 — 상대 프로그램에 같은 시술·같은 횟수가 있으면 줄째 흐리게,
-// 아니면 ' + '로 나눈 시술 중 상대에도 있는 것(압출·모델링팩 등)은 흐리게, 없는 것(추가 레이저 등)과 다른 횟수는 진하게.
-const parts = (name: string) => name.split(/\s*\+\s*/).map(t => t.trim()).filter(Boolean);
-function ItemLine({ it, other, diff }: { it: ProgramItem; other?: Program; diff: boolean }) {
-  const twin = other?.items.find(x => x.name === it.name);
-  if (!diff) return <li><span>{it.name}</span><em>{itemText(it)}</em></li>;
-  if (twin && itemText(twin) === itemText(it)) return <li className="is-same"><span>{it.name}</span><em>{itemText(it)}</em></li>;
-  const have = new Set((other?.items ?? []).flatMap(x => parts(x.name)));
-  const ps = parts(it.name);
-  return <li><span>{ps.map((t, k) => <span key={k}>{k ? <i className="pcx-plus"> + </i> : null}<span className={have.has(t) ? 'pcx-dim' : 'pcx-hi'}>{t}</span></span>)}</span>
-    <em className={twin && itemText(twin) === itemText(it) ? 'pcx-dim' : 'pcx-hi'}>{itemText(it)}</em></li>;
 }
 
 // 가격표 [편집] 아래: 고른 탭(이름 = category)의 라인 · 프로그램 자료 — 추가·수정·삭제
