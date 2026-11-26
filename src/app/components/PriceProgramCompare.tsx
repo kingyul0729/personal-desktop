@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ChevronDown, CircleCheck, Pencil, Plus, Trash2, X } from 'lucide-react';
+import { ChevronDown, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { KittyDialog } from './KittyDialog';
 import { askConfirm } from './AlertDialog';
 import { SavingMark } from './Feedback';
@@ -73,16 +73,19 @@ export function ProgramCompare() {
         <div className="pcz-head"><h4>시술 구성</h4>
           <label className="pc-only"><input type="checkbox" checked={onlyDiff} onChange={e => setOnlyDiff(e.target.checked)} /> 차이만 보기</label></div>
         <div className="pcz-rows" role="table">
+          <div className="pcz-row pcz-thead" role="row"><span role="columnheader">{a?.name}</span><span role="columnheader" className="pcz-name">시술 항목</span><span role="columnheader">{b?.name}</span></div>
           {rows.map((r, k) => <div key={k} className="pcz-row" role="row">{cell(r.a, r.same)}<span className="pcz-name">{r.name}</span>{cell(r.b, r.same)}</div>)}
           {!rows.length && <div className="pcz-row is-empty"><span>구성 같음</span></div>}
         </div>
       </section>
-      {pair.some(p => p?.desc) && <section className="pcz-box pcz-desc">
-        {pair.map((p, i) => <ul key={i}>{p?.desc ? <li><CircleCheck size={20} />{p.desc}</li> : <li className="is-empty">—</li>}</ul>)}
+      {pair.some(p => p?.desc) && <section className="pcz-box pcz-desc pcz-desc2">
+        {pair.map((p, i) => <div key={i}><h5>{p?.name}</h5>{p?.desc ? sentences(p.desc).map((t, k) => <p key={k}>{t}</p>) : <p className="is-empty">—</p>}</div>)}
       </section>}
     </div>
   </div>;
 }
+// 설명은 원문 그대로, 문장마다 문단으로 나눔(2026-11-26 밤 사용자 그림)
+const sentences = (t: string) => t.split(/(?<=[.。])\s+/).map(x => x.trim()).filter(Boolean);
 const CAT_EN: Record<string, string> = { 색소: 'PIGMENT', 홍조: 'REDNESS', 여드름: 'ACNE', 흉터: 'SCAR', 모공: 'PORE', 리프팅: 'LIFTING', 스킨부스터: 'SKIN BOOSTER', 보톡스: 'BOTOX', 필러: 'FILLER' };
 
 // 가격표 [편집] 아래: 고른 탭(이름 = category)의 라인 · 프로그램 자료 — 추가·수정·삭제

@@ -3447,3 +3447,29 @@ button.iv-pinv { cursor: zoom-in; }
 .pcz .pcz-row > span:not(.pcz-name) { font-weight: 400; }
 .pcz .pcz-row > span.is-d:not(.pcz-name) { font-weight: 800; }
 .pcz .pcz-row > span.is-d small { font-weight: 600; color: #557591; }
+
+/* 프로그램 비교 정돈(2026-11-26 밤 사용자 그림): 가격 카드 낮게(흰 알약 없음, 두 카드 같은 연한 청회색), 표 맨 위 연한 청회색 머리 줄
+   'A 이름 | 시술 항목 | B 이름'(사용자 그림이라 카드 안 머리 띠 예외), 아래 설명은 프로그램 이름 소제목 + 문장마다 문단, 체크 표식 없음 */
+.pcz-card { padding: 14px 16px 14px; gap: 4px; border-radius: 16px; background: #f3f6f9; border-color: #dfe6ee; }
+.pcz-card.is-a, .pcz-card.is-b { background: #f3f6f9; border-color: #dfe6ee; }
+.pcz-pick b { font-size: 20px; }
+.pcz-price { background: none; padding: 2px 0 0; border-radius: 0; }
+.pcz-price strong { font-size: 32px; }
+.pcz-price small { font-size: 13px; }
+.pcz-feat:empty { display: none; }
+.pcz-two { gap: 12px; }
+.pcz-row.pcz-thead { min-height: 44px; padding: 0; margin-bottom: 4px; background: #e9eff5; border-radius: 10px; border-bottom: 0; }
+.pcz-row.pcz-thead > span { font-size: 15px; font-weight: 700; color: #2D3136; padding: 6px 4px; word-break: keep-all; }
+.pcz-row.pcz-thead > span.pcz-name { font-size: 15px; color: #2D3136; }
+.pcz-desc.pcz-desc2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); padding: 20px 0; }
+.pcz-desc2 > div { padding: 0 24px; display: flex; flex-direction: column; gap: 10px; }
+.pcz-desc2 > div + div { border-left: 1px solid #E1E4E8; }
+.pcz-desc2 h5 { margin: 0 0 2px; font-size: 19px; font-weight: 800; color: #44617c; word-break: keep-all; }
+.pcz-desc2 p { margin: 0; font-size: 15px; line-height: 1.6; color: #2D3136; word-break: keep-all; }
+.pcz-desc2 p.is-empty { color: #a3a6ab; }
+@container pb (max-width: 520px) {
+  .pcz-desc.pcz-desc2 { grid-template-columns: 1fr; gap: 14px; }
+  .pcz-desc2 > div { padding: 0 16px; } .pcz-desc2 > div + div { border-left: 0; border-top: 1px solid #E1E4E8; padding-top: 14px; }
+  .pcz-price strong { font-size: 26px; } .pcz-pick b { font-size: 17px; }
+}
+.pcz .pcz-row.pcz-thead > span, .pcz .pcz-row.pcz-thead > span:not(.pcz-name) { font-weight: 700; font-size: 15px; color: #2D3136; }
