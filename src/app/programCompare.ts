@@ -1,7 +1,7 @@
 // 프로그램 비교 줄 만들기(2026-11-26 밤 사용자 공통 기준, 저장 자료는 그대로 — 화면 표시만):
 // ① 같은 시술·관리 조합은 한 줄, 두 프로그램이 같이 하는 조합은 가운데 이름에 묶어 적음
 // ② 한쪽에만 더해지는 레이저·관리는 그쪽 횟수 아래 '+ 이름'
-// ③ 같은 관리(LDM 트리플·비타민 관리)가 한 프로그램 안에서 단독·병행으로 함께 있으면 한 줄로 합쳐 총횟수 + 아래 세부('○○ 병행 5 · 단독 5')
+// ③ 관리(LDM 트리플·비타민 관리)는 레이저에서 떼어 맨 아래 따로 한 줄(총횟수), 단독·병행이 함께면 아래 세부('○○ 병행 5 · 단독 5')
 // ④ 서비스(이름 끝 'S.V')는 같은 시술 줄에서 횟수 아래 '서비스'
 // 특정 프로그램 이름을 보지 않고 시술 이름만으로 정함 — 어떤 두 프로그램이든 같은 규칙.
 export type CompareItem = { name: string; qty: number | null; label?: string };
@@ -30,19 +30,22 @@ export function entriesOf(items: CompareItem[] = []): Entry[] {
     if (!tokens.length) continue;
     raw.push({ tokens, qty: it.qty, ...(it.qty == null ? { label: it.label || '포함' } : {}), service, solo: tokens.length === 1 && CARE.has(tokens[0]) });
   }
-  // ③ 같은 관리가 단독과 병행으로 같이 있으면 한 줄(총횟수 + 세부)
+  // ③ 관리(LDM 트리플·비타민 관리)는 함께 하는 레이저에서 떼어 따로 한 줄(총횟수) — 2026-11-26 밤 사용자 그림('시술구성 표 방식'),
+  //    단독과 병행이 같이 있으면 아래 세부('○○ 병행 5 · 단독 5'), 단독만이면 '단독'
+  const careRows: Entry[] = [];
   for (const care of CARE) {
     const solo = raw.filter(e => e.solo && e.tokens[0] === care);
     const paired = raw.filter(e => !e.solo && e.tokens.length > 1 && e.tokens.includes(care));
-    if (!solo.length || !paired.length || [...solo, ...paired].some(e => e.qty == null)) continue;
-    const parts = paired.map(e => `${e.tokens.filter(t => t !== care).join(' + ')} 병행 ${e.qty}`);
+    if (!paired.length) continue;
+    const all = [...solo, ...paired];
+    const total = all.every(e => e.qty != null) ? all.reduce((s, e) => s + (e.qty ?? 0), 0) : null;
     const soloQty = solo.reduce((s, e) => s + (e.qty ?? 0), 0);
-    const merged: Entry = { tokens: [care], qty: soloQty + paired.reduce((s, e) => s + (e.qty ?? 0), 0), service: false, solo: false, detail: [...parts, `단독 ${soloQty}`].join(' · ') };
+    const detail = solo.length && total != null ? [...paired.map(e => `${e.tokens.filter(t => t !== care).join(' + ')} 병행 ${e.qty}`), `단독 ${soloQty}`].join(' · ') : undefined;
+    careRows.push({ tokens: [care], qty: total, ...(total == null ? { label: '포함' } : {}), service: false, solo: false, ...(detail ? { detail } : {}) });
     for (const e of paired) e.tokens = e.tokens.filter(t => t !== care);
-    const at = raw.indexOf(solo[0]);
     for (const e of solo) raw.splice(raw.indexOf(e), 1);
-    raw.splice(Math.min(at, raw.length), 0, merged);
   }
+  raw.push(...careRows);
   // 같은 조합(+서비스 여부)은 한 줄로, 횟수 더함
   const out: Entry[] = [];
   for (const e of raw) {
@@ -92,5 +95,8 @@ export function compareRows(aItems?: CompareItem[], bItems?: CompareItem[]): Com
     let at = 0; for (let k = j - 1; k >= 0; k--) { const r = rows.findIndex(row => row.bi === k); if (r >= 0) { at = r + 1; break; } }
     rows.splice(at, 0, { name: x.tokens.join(' + '), a: null, b: { count: countText(x), subs: subsOf(x, []) }, bi: j });
   });
-  return rows.map(({ name, a, b }) => ({ name, a, b, same: cellText(a) === cellText(b) }));
+  // 관리 줄은 늘 맨 아래(사용자 그림)
+  const isCare = (r: R) => CARE.has(r.name);
+  const ordered = [...rows.filter(r => !isCare(r)), ...rows.filter(isCare)];
+  return ordered.map(({ name, a, b }) => ({ name, a, b, same: cellText(a) === cellText(b) }));
 }

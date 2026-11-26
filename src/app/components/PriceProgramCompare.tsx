@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ChevronDown, CircleCheck, Pencil, Plus, Trash2, X } from 'lucide-react';
+import { ChevronDown, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { KittyDialog } from './KittyDialog';
 import { askConfirm } from './AlertDialog';
 import { SavingMark } from './Feedback';
@@ -77,10 +77,6 @@ export function ProgramCompare() {
           {!rows.length && <div className="pcz-row is-empty"><span>구성 같음</span></div>}
         </div>
       </section>
-      {pair.some(p => p?.desc) && <section className="pcz-box pcz-desc">
-        <h4 className="pcz-desc-h">프로그램 특징</h4>
-        {pair.map((p, i) => <ul key={i}>{p?.desc ? <li><CircleCheck size={20} />{p.desc}</li> : <li className="is-empty">—</li>}</ul>)}
-      </section>}
     </div>
   </div>;
 }

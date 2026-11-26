@@ -3441,3 +3441,9 @@ button.iv-pinv { cursor: zoom-in; }
 .pcz-row > span:not(.pcz-name) b { font-weight: inherit; }
 .pcz-row > span:not(.pcz-name) small { font-size: 12.5px; font-weight: 600; color: #557591; word-break: keep-all; }
 .pcz-row > span.is-d small { color: #44617c; }
+
+/* 프로그램 비교 · 시술 구성 표 방식(2026-11-26 밤 사용자 그림): 칸 색 없이 다른 횟수만 굵게, 프로그램 특징 상자 없음 */
+.pcz .pcz-row > span.is-d { background: none; color: #2D3136; font-weight: 800; }
+.pcz .pcz-row > span:not(.pcz-name) { font-weight: 400; }
+.pcz .pcz-row > span.is-d:not(.pcz-name) { font-weight: 800; }
+.pcz .pcz-row > span.is-d small { font-weight: 600; color: #557591; }

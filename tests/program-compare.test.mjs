@@ -7,18 +7,23 @@ const flat = (rows) => rows.map(r => `${t(r.a)} | ${r.name} | ${t(r.b)}${r.same 
 
 test('user 11-26 밤: 비교 줄 공통 기준 — 같은 조합 한 줄, 한쪽만 더한 것은 + 이름, 서비스, 단독·병행 합치기', () => {
   // 같은 레이저에 관리만 다름 → 레이저 이름 한 줄, 관리는 횟수 아래 '+'
+  // 관리는 레이저에서 떼어 맨 아래 따로 한 줄(총횟수)
   assert.deepEqual(flat(compareRows(
-    [{ name: '레이저A + 비타민', qty: 5 }],
+    [{ name: '레이저A + 비타민', qty: 5 }, { name: '레이저C + 비타민 관리', qty: 5 }],
     [{ name: '레이저A + LDM 트리플', qty: 5 }, { name: '레이저B S.V', qty: 1 }])), [
-    '5회 / + 비타민 관리 | 레이저A | 5회 / + LDM 트리플 *',
+    '5회 | 레이저A | 5회',
     '— | 레이저B | 1회 / 서비스 *',
+    '5회 | 레이저C | — *',
+    '— | LDM 트리플 | 5회 *',
+    '10회 | 비타민 관리 | — *',
   ]);
   // 두 쪽이 같이 하는 조합은 가운데에 묶고, 한쪽만 더한 시술은 '+'
   assert.deepEqual(flat(compareRows(
     [{ name: '레이저A + 레이저C + LDM 트리플', qty: 5 }, { name: '레이저B + LDM 트리플', qty: 5 }],
     [{ name: '레이저A + 레이저C + LDM 트리플', qty: 5 }, { name: '레이저B + 레이저D + LDM 트리플', qty: 5 }])), [
-    '5회 | 레이저A + 레이저C + LDM 트리플 | 5회',
-    '5회 | 레이저B + LDM 트리플 | 5회 / + 레이저D *',
+    '5회 | 레이저A + 레이저C | 5회',
+    '5회 | 레이저B | 5회 / + 레이저D *',
+    '10회 | LDM 트리플 | 10회',
   ]);
   // 같은 시술의 서비스 여부는 같은 줄
   assert.deepEqual(flat(compareRows([{ name: '레이저B', qty: 1 }], [{ name: '레이저B S.V', qty: 1 }])), ['1회 | 레이저B | 1회 / 서비스 *']);
@@ -29,9 +34,9 @@ test('user 11-26 밤: 비교 줄 공통 기준 — 같은 조합 한 줄, 한쪽
     '5회 | 레이저E | — *',
     '10회 / 레이저E 병행 5 / 단독 5 | LDM 트리플 | 10회 / 단독 *',
   ]);
-  // 관리만 겹치는 조합끼리는 묶지 않음
-  const r = compareRows([{ name: '레이저A + LDM 트리플', qty: 5 }], [{ name: '레이저B + LDM 트리플', qty: 5 }]);
-  assert.equal(r.length, 2);
+  // 다른 레이저끼리는 따로, 관리는 같은 줄
+  assert.deepEqual(flat(compareRows([{ name: '레이저A + LDM 트리플', qty: 5 }], [{ name: '레이저B + LDM 트리플', qty: 5 }])), [
+    '— | 레이저B | 5회 *', '5회 | 레이저A | — *', '5회 | LDM 트리플 | 5회']);
   // 같은 프로그램끼리는 모두 같음, 차이만 보기로 숨을 줄
   const same = [{ name: '압출 + 스케일링', qty: 2 }, { name: 'CO₂', qty: null, label: '포함' }];
   assert.ok(compareRows(same, same).every(x => x.same));
