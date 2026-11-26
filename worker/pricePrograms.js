@@ -90,9 +90,13 @@ export async function handlePrograms(request, env, owner) {
       if (!category || !name) return;
       const hasNums = 'price' in (p || {}) || 'items' in (p || {}), price = cleanPrice(p?.price);
       if (Number.isNaN(price)) return;
-      const items = JSON.stringify(cleanItems(p?.items)), line = clean(p?.line), desc = clean(p?.desc, TEXT), fit = clean(p?.fit, TEXT), id = pid.get(key(category, name));
-      if (id) stmts.push(hasNums ? st(env, 'UPDATE price_programs SET price = ?, items = ?, line = ?, descr = ?, fit = ?, sort = ?, updated_at = ? WHERE id = ? AND owner = ?', price, items, line, desc, fit, i + 1, now, id, owner)
-        : st(env, 'UPDATE price_programs SET line = ?, descr = ?, fit = ?, updated_at = ? WHERE id = ? AND owner = ?', line, desc, fit, now, id, owner));
+      const items = JSON.stringify(cleanItems(p?.items)), line = clean(p?.line), desc = clean(p?.desc, TEXT), fit = clean(p?.fit, TEXT);
+      // from = 예전 이름(이름을 가격표 이름으로 바꿀 때): 새 이름이 아직 없고 예전 이름이 있으면 그 줄의 이름을 바꿔 고침 — 두 줄로 겹치지 않게
+      let id = pid.get(key(category, name));
+      const from = clean(p?.from);
+      if (!id && from && pid.has(key(category, from))) { id = pid.get(key(category, from)); pid.delete(key(category, from)); pid.set(key(category, name), id); }
+      if (id) stmts.push(hasNums ? st(env, 'UPDATE price_programs SET name = ?, price = ?, items = ?, line = ?, descr = ?, fit = ?, sort = ?, updated_at = ? WHERE id = ? AND owner = ?', name, price, items, line, desc, fit, i + 1, now, id, owner)
+        : st(env, 'UPDATE price_programs SET name = ?, line = ?, descr = ?, fit = ?, updated_at = ? WHERE id = ? AND owner = ?', name, line, desc, fit, now, id, owner));
       else stmts.push(st(env, 'INSERT INTO price_programs (id, owner, category, name, price, items, line, descr, fit, sort, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', crypto.randomUUID(), owner, category, name, price, items, line, desc, fit, i + 1, now));
     });
     if (!stmts.length) return json({ error: '넣을 프로그램이 없어요.' }, 400);

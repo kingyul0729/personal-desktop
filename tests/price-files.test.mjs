@@ -269,4 +269,8 @@ test('user 11-26: 프로그램 비교 자료 — 파일로 넣기는 두 번 올
   res = await post({ action: 'delete', id: res.programs[1].id });
   assert.equal(res.programs.length, 1);
   assert.equal((await handleApi(request('/api/price-programs', { action: 'import', format: 'x', programs: [] }), env)).status, 400);
+  // 이름을 가격표 이름으로 바꾼 파일(from = 예전 이름)은 그 줄을 고침 — 겹치지 않음, 두 번 올려도 같음
+  const ren = { action: 'import', format: 'dachaeum-programs', programs: [{ category: '색소', name: '가 프로그램 (새 이름)', from: '가 프로그램', price: 990000, items: [{ name: '장비A', qty: 2 }], desc: 'd' }] };
+  res = await post(ren); res = await post(ren);
+  assert.deepEqual(res.programs.map(p => p.name), ['가 프로그램 (새 이름)']);
 });
