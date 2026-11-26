@@ -3321,3 +3321,36 @@ button.iv-pinv { cursor: zoom-in; }
 .pc-dl dt { font-size: 12px; font-weight: 700; color: #557591; margin-bottom: 2px; }
 .pc-dl dd { margin: 0; font-size: 14.5px; line-height: 1.55; color: #2D3136; word-break: keep-all; }
 .pc-edit-cap { margin: 8px 0 0; font-size: 13px; font-weight: 700; color: #5d646d; }
+/* 프로그램 비교 v2(2026-11-26 사용자): 프로그램마다 한 칸, 같은 층끼리 높이 맞춤(격자 한 줄 = 두 칸), 가격 차이 상자 없음 */
+.pcx { max-width: 880px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
+.pcx .pc-head h3 { flex: 1; }
+.pcx-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 14px; }
+.pcx-c { min-width: 0; background: #fff; border: 1px solid #E1E4E8; border-top: 0; border-bottom: 0; padding: 10px 18px; display: flex; flex-direction: column; gap: 4px; }
+.pcx-c.is-top { border-top: 1px solid #E1E4E8; border-radius: 16px 16px 0 0; padding-top: 16px; }
+.pcx-c.is-bottom { border-bottom: 1px solid #E1E4E8; border-radius: 0 0 16px 16px; padding-bottom: 16px; }
+.pcx-c.is-top.is-bottom { border-radius: 16px; }
+.pcx-c .pc-pick { width: 100%; }
+.pcx-tag { align-self: flex-start; padding: 3px 12px; border-radius: 999px; background: #ecf1f6; border: 1px solid #c9d6e3; color: #44617c; font-size: 13px; font-weight: 700; word-break: keep-all; }
+.pcx-sum { margin: 2px 0 0; font-size: 14px; line-height: 1.5; color: #5d646d; word-break: keep-all; }
+.pcx-pr { flex-direction: row; align-items: baseline; gap: 8px; border-bottom: 0; }
+.pcx-pr::after { content: none; }
+.pcx-price { font-size: 30px; font-weight: 800; color: #2D3136; letter-spacing: -.5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pcx-pr small { font-size: 13px; color: #7D838B; }
+.pcx-items, .pcx-desc { list-style: none; margin: 0; padding: 0; }
+.pcx-items { border-top: 1px solid #edf0f3; }
+.pcx-items li { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 42px; padding: 6px 0; border-top: 1px solid #f2f4f6; font-size: 15.5px; color: #2D3136; }
+.pcx-items li:first-child { border-top: 0; }
+.pcx-items li > span { min-width: 0; word-break: keep-all; line-height: 1.45; }
+.pcx-items li > em { font-style: normal; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pcx-items li.is-same, .pcx-dim { color: #b4b8bd; }
+.pcx-items li.is-same em { font-weight: 500; }
+.pcx-hi { color: #44617c; font-weight: 700; }
+.pcx-items em.pcx-hi { background: #ecf1f6; padding: 2px 8px; border-radius: 999px; }
+.pcx-plus { font-style: normal; color: #b4b8bd; }
+.pcx-desc li { position: relative; padding: 3px 0 3px 14px; font-size: 14.5px; line-height: 1.55; color: #2D3136; word-break: keep-all; }
+.pcx-desc li::before { content: ''; position: absolute; left: 2px; top: 12px; width: 5px; height: 5px; border-radius: 50%; background: #557591; }
+.pcx .pc-note { font-size: 14px; color: #5d646d; }
+@container pb (max-width: 520px) {
+  .pcx-grid { column-gap: 8px; } .pcx-c { padding-inline: 12px; }
+  .pcx-price { font-size: 22px; } .pcx-items li { font-size: 14px; }
+}
