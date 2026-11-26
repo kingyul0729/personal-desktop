@@ -54,7 +54,7 @@ export function ProgramCompare() {
   const pair = [a, b] as const;
   const allRows = compareRows(a?.items, b?.items);
   const rows = onlyDiff ? allRows.filter(r => !r.same) : allRows;
-  const cell = (c: Cell | null, same: boolean) => <span className={same ? '' : 'is-d'}>{c ? <><b>{c.count}</b>{c.subs.map((t, k) => <small key={k}>{t}</small>)}</> : '—'}</span>;
+  const tcell = (c: Cell | null, same: boolean) => <td className={same ? '' : 'is-d'}>{c ? <><b>{c.count}</b>{c.subs.map((t, k) => <small key={k}>{t}</small>)}</> : '—'}</td>;
   const eng = CAT_EN[category];
   return <div className="pc-wrap">
     <div className="pcz">
@@ -72,11 +72,14 @@ export function ProgramCompare() {
       <section className="pcz-box">
         <div className="pcz-head"><h4>시술 구성</h4>
           <label className="pc-only"><input type="checkbox" checked={onlyDiff} onChange={e => setOnlyDiff(e.target.checked)} /> 차이만 보기</label></div>
-        <div className="pcz-rows" role="table">
-          <div className="pcz-row pcz-thead" role="row"><span role="columnheader" className="is-a">{a?.name}</span><span role="columnheader" className="pcz-name">시술 항목</span><span role="columnheader" className="is-b">{b?.name}</span></div>
-          {rows.map((r, k) => <div key={k} className="pcz-row" role="row">{cell(r.a, r.same)}<span className="pcz-name">{r.name}</span>{cell(r.b, r.same)}</div>)}
-          {!rows.length && <div className="pcz-row is-empty"><span>구성 같음</span></div>}
-        </div>
+        <table className="pct">
+          <colgroup><col className="pct-n" /><col /><col className="pct-n" /></colgroup>
+          <thead><tr><th className="is-a">{a?.name}</th><th>시술 항목</th><th className="is-b">{b?.name}</th></tr></thead>
+          <tbody>
+            {rows.map((r, k) => <tr key={k}>{tcell(r.a, r.same)}<th scope="row">{r.name}</th>{tcell(r.b, r.same)}</tr>)}
+            {!rows.length && <tr><td colSpan={3} className="is-empty">구성 같음</td></tr>}
+          </tbody>
+        </table>
       </section>
       {pair.some(p => p?.desc) && <section className="pcz-box pcz-desc pcz-desc2">
         {pair.map((p, i) => <div key={i} className={i ? "is-b" : "is-a"}><h5>{p?.name}</h5>{p?.desc ? sentences(p.desc).map((t, k) => <p key={k}>{t}</p>) : <p className="is-empty">—</p>}</div>)}

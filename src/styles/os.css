@@ -3502,3 +3502,21 @@ button.iv-pinv { cursor: zoom-in; }
 .pcz .pcz-row.pcz-thead > span.is-a, .pcz-desc2 > .is-a h5 { color: #3f5f86; }
 .pcz .pcz-row.pcz-thead > span.is-b, .pcz-desc2 > .is-b h5 { color: #86603e; }
 .pcz .pcz-row.pcz-thead > span.is-a, .pcz .pcz-row.pcz-thead > span.is-b { background: none; }
+
+/* 시술 구성 = 진짜 표(같은 날 밤 사용자 '아예 표로'): 칸마다 선, 머리 줄 연한 청회색(이름 글자는 왼쪽 파랑·오른쪽 모래색), 시술 항목 가운데 */
+.pct { width: 100%; border-collapse: separate; border-spacing: 0; table-layout: fixed; border: 1px solid #d6dde6; border-radius: 12px; overflow: hidden; font-variant-numeric: tabular-nums; }
+.pct col.pct-n { width: 27%; }
+.pct th, .pct td { border-right: 1px solid #e1e6ec; border-bottom: 1px solid #e1e6ec; padding: 12px 8px; text-align: center; vertical-align: middle; word-break: keep-all; }
+.pct tr > :last-child { border-right: 0; }
+.pct tbody tr:last-child > * { border-bottom: 0; }
+.pct thead th { background: #e9eff5; font-size: 17px; font-weight: 700; color: #2D3136; border-bottom-color: #d6dde6; }
+.pct thead th.is-a { color: #3f5f86; } .pct thead th.is-b { color: #86603e; }
+.pct tbody th { font-size: 18px; font-weight: 400; color: #2D3136; line-height: 1.4; }
+.pct td { font-size: 19px; color: #2D3136; line-height: 1.3; }
+.pct td b { display: block; font-weight: 400; }
+.pct td.is-d b { font-weight: 800; }
+.pct td small { display: block; margin-top: 2px; font-size: 14px; font-weight: 600; color: #557591; }
+.pct td.is-empty { color: #7D838B; font-size: 15px; }
+@container pb (max-width: 520px) {
+  .pct thead th { font-size: 14px; } .pct tbody th { font-size: 15px; } .pct td { font-size: 16px; } .pct th, .pct td { padding: 10px 6px; }
+}
