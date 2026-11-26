@@ -54,7 +54,8 @@ export function ProgramCompare() {
   const pair = [a, b] as const;
   const allRows = compareRows(a?.items, b?.items);
   const rows = onlyDiff ? allRows.filter(r => !r.same) : allRows;
-  const tcell = (c: Cell | null, same: boolean) => <td className={same ? '' : 'is-d'}>{c ? <><b>{c.count}</b>{c.subs.map((t, k) => <small key={k}>{t}</small>)}</> : '—'}</td>;
+  // 다른 것만 강조: 횟수는 상대 칸과 다를 때만, 작은 줄(+ 추가 시술 등)은 상대 칸에 없을 때만 — 좌우 같은 색
+  const tcell = (c: Cell | null, o: Cell | null) => <td>{c ? <><b className={o && o.count === c.count ? undefined : 'is-d'}>{c.count}</b>{c.subs.map((t, k) => <small key={k} className={o?.subs.includes(t) ? undefined : 'is-d'}>{t}</small>)}</> : '—'}</td>;
   const eng = CAT_EN[category];
   return <div className="pc-wrap">
     <div className="pcz">
@@ -76,7 +77,7 @@ export function ProgramCompare() {
           <colgroup><col className="pct-n" /><col /><col className="pct-n" /></colgroup>
           <thead><tr><th className="is-a">{a?.name}</th><th>시술 항목</th><th className="is-b">{b?.name}</th></tr></thead>
           <tbody>
-            {rows.map((r, k) => <tr key={k} className={r.same ? undefined : "is-d"}>{tcell(r.a, r.same)}<th scope="row">{r.name}</th>{tcell(r.b, r.same)}</tr>)}
+            {rows.map((r, k) => <tr key={k} className={r.same ? undefined : "is-d"}>{tcell(r.a, r.b)}<th scope="row">{r.name}</th>{tcell(r.b, r.a)}</tr>)}
             {!rows.length && <tr><td colSpan={3} className="is-empty">구성 같음</td></tr>}
           </tbody>
         </table>

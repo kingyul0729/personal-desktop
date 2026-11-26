@@ -3566,3 +3566,8 @@ button.iv-pinv { cursor: zoom-in; }
 /* 같은 날 사용자 '글자색만 구분': 줄 바탕색 없음, 두 프로그램이 다른 횟수와 '+ 추가 시술'만 청회색 글자(굵게) */
 .pct tbody tr.is-d > * { background: #fff; }
 .pct td.is-d b, .pct td.is-d small { color: #44617c; }
+/* 2026-11-27 사용자 '피코 PLUS 양쪽 5회는 기본, + 이래비티만 강조 — 비슷한 상황 모두': 칸 단위가 아니라 글자 단위로 다른 것만 */
+.pct td.is-d b, .pct td.is-d small { color: inherit; }
+.pct td b { font-weight: 500; color: #1f2328; }
+.pct td small { color: #5b6470; }
+.pct td b.is-d, .pct td small.is-d { color: #44617c; font-weight: 700; }
