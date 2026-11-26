@@ -3543,3 +3543,7 @@ button.iv-pinv { cursor: zoom-in; }
 .pct thead th { background: #fff; }
 /* 같은 날 밤 사용자 '각 박스 색으로': 머리 줄 양쪽 이름 칸은 위 가격 카드와 같은 색(왼쪽 파랑 · 오른쪽 모래색), 가운데는 흰색 */
 .pct thead th.is-a { background: #ebf1f8; } .pct thead th.is-b { background: #f6efe7; }
+/* 같은 날 밤 사용자: 가운데 '시술 항목' 머리 칸 아주 연한 회색, 가격 숫자 조금 작게 */
+.pct thead th:not(.is-a):not(.is-b) { background: #f7f8f9; }
+.pcz-price strong { font-size: 30px; }
+@container pb (max-width: 520px) { .pcz-price strong { font-size: 24px; } }
