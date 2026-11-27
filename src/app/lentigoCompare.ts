@@ -1,5 +1,5 @@
-// 흑자 개별 제거 비교(2026-11-27 사용자): 색소 탭의 크기별 흑자 프로그램('흑자 제거 (1cm 이하)' 등, 1개당 금액)을
-// 고르기 목록에서 '흑자 개별 제거' 하나로 묶고, 크기별 개수를 정하면 등록된 1개당 금액 × 개수의 합이 총액.
+// 흑자 제거 비교(2026-11-27 사용자): 색소 탭의 크기별 흑자 프로그램('흑자 제거 (1cm 이하)' 등, 1개당 금액)을
+// 고르기 목록에서 '흑자 제거' 하나로 묶고, 크기별 개수를 정하면 등록된 1개당 금액 × 개수의 합이 총액.
 // 레이저 회차는 등록된 구성 그대로(개수만큼 곱하지 않음). PICO 532 흑자 제거는 'PICO 532 · 흑자 제거' 한 줄로 비교 —
 // 스페셜 토닝 03·04 '추가 관리'(얼굴 전체 CO₂ 또는 흑자 PICO 532)는 흑자 비교일 때 이 줄에 '얼굴 전체'로.
 // 금액은 모두 등록된 price_programs 값만 쓴다(고정 금액 없음).
@@ -8,7 +8,7 @@ export type LProgram = { id: string; category: string; name: string; price: numb
 export type LSize = { id: string; size: string; price: number; items: LItem[]; desc?: string };
 
 export const LENTIGO_ID = 'lentigo';
-export const LENTIGO_NAME = '흑자 개별 제거';
+export const LENTIGO_NAME = '흑자 제거';
 export const PICO_ROW = 'PICO 532'; // 흑자 제거 레이저 이름 하나로(2026-11-27 사용자) — 표에서는 이름 아래 작은 '흑자 제거'
 const SIZE_RE = /^흑자 제거\s*\((.+)\)$/;
 const isPico = (name: string) => /532/.test(name) && !/\+/.test(name);
@@ -67,7 +67,7 @@ export function extraSplit(p: LProgram, list: LProgram[]): { base: number; extra
   return base?.price != null && p.price != null ? { base: base.price, extra: p.price - base.price } : null;
 }
 
-// 고르기 목록: 크기별 흑자 프로그램 자리에 '흑자 개별 제거' 하나
+// 고르기 목록: 크기별 흑자 프로그램 자리에 '흑자 제거' 하나
 export function withLentigo<T extends LProgram>(list: T[], virtual: T | null): T[] {
   if (!virtual) return list;
   const first = list.findIndex(p => SIZE_RE.test(p.name));

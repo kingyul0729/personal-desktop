@@ -20,7 +20,7 @@ const list = [
   { id: 's1', category: '색소', name: '흑자 제거 (1cm 이하)', price: 33, items },
 ];
 
-test('user 11-27: 흑자 개별 제거 — 크기별 개수 × 등록 금액, 회차는 그대로, PICO 532 한 줄', () => {
+test('user 11-27: 흑자 제거 — 크기별 개수 × 등록 금액, 회차는 그대로, PICO 532 한 줄', () => {
   const sizes = L.lentigoSizes(list);
   assert.deepEqual(sizes.map(z => z.size), ['1cm 이하', '1cm 초과 ~ 2cm 이하']);
   const v = L.lentigoProgram(sizes, { s1: 3, s2: 1 });

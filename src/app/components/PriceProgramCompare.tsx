@@ -45,7 +45,7 @@ export function ProgramCompare() {
   const category = cats.includes(cat) ? cat : cats[0] ?? '';
   useEffect(() => { if (category) { try { localStorage.setItem('price-compare-cat', category); } catch { /* 이 기기 편의 */ } } }, [category]);
   const raw = (programs ?? []).filter(p => p.category === category);
-  // 흑자 개별 제거(2026-11-27 사용자): 크기별 흑자 프로그램을 '흑자 개별 제거' 하나로 — 크기별 개수 × 등록된 1개당 금액
+  // 흑자 제거(2026-11-27 사용자): 크기별 흑자 프로그램을 '흑자 제거' 하나로 — 크기별 개수 × 등록된 1개당 금액
   const sizes = lentigoSizes(raw);
   const cnt = sizes.length && !lentigoCount(counts) ? { [sizes[0].id]: 1 } : counts;
   const lentigo = lentigoProgram(sizes, cnt, category) as Program | null;
