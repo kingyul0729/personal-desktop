@@ -3614,3 +3614,5 @@ button.iv-pinv { cursor: zoom-in; }
 }
 /* 2026-11-27 사용자 '각각': 더해진 시술은 한 줄에 하나씩 */
 .pct td small.is-d { display: table; margin: 4px auto 0; }
+/* 프로그램 이름 묶음은 한 줄로(2026-11-27 '(대표 원장님)' 끊김) */
+.pc-nw { white-space: nowrap; }
