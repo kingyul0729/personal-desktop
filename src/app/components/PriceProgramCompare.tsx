@@ -120,7 +120,8 @@ export function ProgramCompare() {
         <p className="pcz-cnt-sum">전체 {lt.n}개 · {lt.rate == null ? '할인 기준 확인 필요' : lt.rate ? `할인 ${Math.round(lt.rate * 100)}%` : '할인 없음'}</p>
       </section>}
       {gap != null && <p className="pcz-gap">{gap ? <><b>{won(gap)}</b> 추가 수납</> : '추가 수납 없음'}</p>}
-      <section className="pcz-box">
+      {/* 구성이 없는 프로그램끼리(보톡스: 제품 차이 설명만, 2026-11-27 사용자)는 시술 구성 상자를 안 보임 */}
+      {(pair[0]?.items?.length || pair[1]?.items?.length) ? <section className="pcz-box">
         <div className="pcz-head"><h4>시술 구성</h4>
           <label className="pc-only"><input type="checkbox" checked={onlyDiff} onChange={e => setOnlyDiff(e.target.checked)} /> 차이만 보기</label></div>
         <table className="pct">
@@ -131,7 +132,7 @@ export function ProgramCompare() {
             {!rows.length && <tr><td colSpan={3} className="is-empty">구성 같음</td></tr>}
           </tbody>
         </table>
-      </section>
+      </section> : null}
       {pair.some(p => p?.desc) && <section className="pcz-box pcz-desc pcz-desc2">
         {pair.map((p, i) => <div key={i} className={i ? "is-b" : "is-a"}><h5>{title(p)}</h5>{p?.desc ? descView(p.desc) : <p className="is-empty">—</p>}</div>)}
       </section>}
@@ -142,7 +143,7 @@ export function ProgramCompare() {
 // 줄바꿈도 문단으로(2026-11-27 사용자 보톡스 설명 — 줄마다 그대로)
 const sentences = (t: string) => t.split(/\n+|(?<=[.。])\s+/).map(x => x.trim()).filter(Boolean);
 // 빈 줄로 나눈 묶음은 묶음끼리만 띄우고 묶음 안 줄은 붙여서(2026-11-27 사용자 그림 — 보톡스 설명 두 줄씩)
-const descView = (t: string) => (/\n\s*\n/.test(t)
+const descView = (t: string) => (/\n/.test(t) // 줄바꿈으로 쓴 글은 줄을 붙이고 빈 줄에서만 띄움
   ? t.split(/\n\s*\n/).map((g, k) => <div key={k} className="pcz-dg">{sentences(g).map((x, j) => <p key={j}>{x}</p>)}</div>)
   : sentences(t).map((x, k) => <p key={k}>{x}</p>));
 // 편집 목록의 횟수 글자(숫자면 N회, 아니면 적은 글자) — 2026-11-27 빠져서 [편집]이 흰 화면이 되던 것 되살림
