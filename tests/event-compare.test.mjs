@@ -49,16 +49,15 @@ test('user 11-28: 만원 단위 그대로 · 리프팅 관리는 포함 · 상�
   assert.equal(E.rowDiff({ name: 'x', a: { count: '3회', subs: [] }, b: { count: '5회', subs: [] }, same: false }), true);
 });
 
-test('user 11-28: 달 이벤트 — 기간이 끝난 달은 숨김(자료는 그대로), 소제목 묶음', () => {
-  const lines = [{ category: '이벤트', name: '10월 EVENT', feature: '2026-10-01 ~ 2026-10-25' }, { category: '이벤트', name: '11월 EVENT', feature: '2026-10-26 ~ 2026-11-30' }];
+test('user 11-28: 달 이벤트 — 사용자가 숨긴 달만 숨김(날짜로 저절로 안 숨김), 소제목 묶음', () => {
+  const lines = [{ category: '이벤트', name: '10월 EVENT', feature: '2026-10-01 ~ 2026-10-25', fit: '숨김' }, { category: '이벤트', name: '11월 EVENT', feature: '2026-10-26 ~ 2026-11-30', fit: '' }];
   const ps = [
     { id: 'a', category: '이벤트', name: '예전 [기본]', price: 1, line: '10월 EVENT' },
     { id: 'b', category: '이벤트', name: '올리지오 600샷 패키지 [힐로웨이브 2cc]', price: 2, line: '11월 EVENT', fit: 'EVENT 01' },
     { id: 'c', category: '리프팅', name: 'x', price: 3 },
   ];
-  assert.deepEqual(E.liveEvents(ps, lines, '2026-11-28').list.map(p => p.id), ['b']);
-  assert.deepEqual(E.liveEvents(ps, lines, '2026-10-20').months, ['10월 EVENT', '11월 EVENT']);
-  assert.deepEqual(E.liveEvents(ps, lines, '2026-12-01').list, []);
+  const v = E.liveEvents(ps, lines);
+  assert.deepEqual([v.months, v.hidden, v.list.map(p => p.id)], [['11월 EVENT'], ['10월 EVENT'], ['a', 'b']]);
+  assert.deepEqual(E.liveEvents(ps, lines.map(l => ({ ...l, fit: '' }))).months, ['10월 EVENT', '11월 EVENT']);
   assert.equal(E.eventGroups(ps)[1].sub, 'EVENT 01');
-  assert.equal(E.todayKey(new Date(2026, 10, 5)), '2026-11-05');
 });

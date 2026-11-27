@@ -4,7 +4,7 @@ import { KittyDialog } from './KittyDialog';
 import { askConfirm } from './AlertDialog';
 import { SavingMark } from './Feedback';
 import { compareRows, type Cell } from '../programCompare';
-import { EVENT_CAT, TIERS, cellDiff, eventGroups, includeOnly, liveEvents, manwon, rowDiff, sameAll, tierPrice, todayKey } from '../eventCompare';
+import { EVENT_CAT, HIDDEN, TIERS, cellDiff, eventGroups, includeOnly, liveEvents, manwon, rowDiff, sameAll, tierPrice } from '../eventCompare';
 import type { PrepaidTier } from '../prepaid';
 import { LENTIGO_ID, PICO_ROW, addonPair, lentigoCount, lentigoProgram, lentigoSizes, lentigoTotal, picoQty, withLentigo, withPicoRow } from '../lentigoCompare';
 
@@ -70,7 +70,7 @@ export function ProgramCompare() {
 
   if (error) return <div className="pb-empty">{error}</div>;
   if (!programs) return <div className="pb-empty"><SavingMark /></div>;
-  if (category === EVENT_CAT) return <EventCompare programs={programs} lines={data?.lines ?? []} cats={cats} onCat={c => { setCat(c); setPick(['', '']); }} />;
+  if (category === EVENT_CAT) return <EventCompare programs={programs} lines={data?.lines ?? []} onData={setData} cats={cats} onCat={c => { setCat(c); setPick(['', '']); }} />;
   if (!list.length) return <div className="pb-empty">기록 없음</div>;
   const lmode = a?.id === LENTIGO_ID || b?.id === LENTIGO_ID;
   // 흑자 비교에서 스페셜 토닝 기본형을 고르면 등록된 '추가 관리(1개)'(PICO 532 흑자 제거 추가) 상품으로 보여 줌 — 금액을 따로 더하지 않음
@@ -150,10 +150,20 @@ export function ProgramCompare() {
 }
 // 이벤트 비교(2026-11-28 사용자 문서 · 그림): '이벤트' 탭을 고르면 왼쪽 이벤트 상품(등록 가격·구성·옵션 그대로) | 오른쪽 전체 프로그램 + 300·400·500만원권 할인 가격
 // 두 쪽은 따로 — 권종만 바꾸면 가격만, 상품을 바꾸면 구성표도. 할인율·할인 금액·계산식은 화면에 안 보임. 계산은 eventCompare.ts
-function EventCompare({ programs, lines, cats, onCat }: { programs: Program[]; lines: ProgramLine[]; cats: string[]; onCat: (c: string) => void }) {
-  const live = useMemo(() => liveEvents(programs, lines, todayKey()), [programs, lines]); // 끝난 달 이벤트는 숨김(자료는 그대로)
-  const [month, setMonth] = useState('');
-  const mon = live.months.includes(month) ? month : live.months[live.months.length - 1] ?? '';
+function EventCompare({ programs, lines, onData, cats, onCat }: { programs: Program[]; lines: ProgramLine[]; onData: (d: ProgramData) => void; cats: string[]; onCat: (c: string) => void }) {
+  const live = useMemo(() => liveEvents(programs, lines), [programs, lines]); // 숨긴 달은 사용자가 [숨기기]로만(자료는 그대로)
+  const [month, setMonth] = useState(''); const [busy, setBusy] = useState(false);
+  const mon = [...live.months, ...live.hidden].includes(month) ? month : live.months[live.months.length - 1] ?? '';
+  const monLine = lines.find(l => l.category === EVENT_CAT && l.name === mon);
+  const isHidden = live.hidden.includes(mon);
+  const toggleHide = async () => {
+    if (!mon || busy) return;
+    setBusy(true);
+    try {
+      onData(await sendPrograms({ action: 'save-line', id: monLine?.id, category: EVENT_CAT, name: mon, feature: monLine?.feature ?? '', fit: isHidden ? '' : HIDDEN }));
+      if (!isHidden) setMonth('');
+    } catch (e) { void askConfirm({ title: (e as Error).message, ok: '확인' }); } finally { setBusy(false); }
+  };
   const groups = useMemo(() => eventGroups(live.list.filter(p => (p.line ?? '') === mon)), [live, mon]);
   const subs = Array.from(new Set(groups.map(x => x.sub)));
   const others = useMemo(() => programs.filter(p => p.category !== EVENT_CAT), [programs]);
@@ -175,7 +185,12 @@ function EventCompare({ programs, lines, cats, onCat }: { programs: Program[]; l
     <div className="pcz pcz-ev">
       <div className="pcz-top">
         <label className="pc-cat"><select value={EVENT_CAT} aria-label="탭" onChange={e => onCat(e.target.value)}>{cats.map(c => <option key={c} value={c}>{c}</option>)}</select></label>
-        {live.months.length > 1 ? <label className="pc-cat"><select value={mon} aria-label="달" onChange={e => { setMonth(e.target.value); setEv(''); setOpt(0); }}>{live.months.map(m => <option key={m} value={m}>{m || '이벤트'}</option>)}</select></label> : null}
+        {mon || live.hidden.length ? <label className="pc-cat"><select value={mon} aria-label="달" onChange={e => { setMonth(e.target.value); setEv(''); setOpt(0); }}>
+          {!mon && <option value="">—</option>}
+          {live.months.map(m => <option key={m} value={m}>{m || '이벤트'}</option>)}
+          {live.hidden.length ? <optgroup label="숨긴 달">{live.hidden.map(m => <option key={m} value={m}>{m}</option>)}</optgroup> : null}
+        </select></label> : null}
+        {mon ? <button type="button" className="pcz-hide" disabled={busy} onClick={() => void toggleHide()}>{isHidden ? '보이기' : '숨기기'}</button> : null}
       </div>
       <header className="pcz-title"><small>EVENT PROGRAM</small><h3><i />이벤트 프로그램 비교<i /></h3></header>
       {!groups.length ? <div className="pb-empty">기록 없음</div> : <>

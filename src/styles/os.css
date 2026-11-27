@@ -3676,3 +3676,8 @@ button.iv-pinv { cursor: zoom-in; }
 .pcz-tiers button.is-on { background: #44617c; border-color: #44617c; color: #fff; }
 .pct.pct-one th[scope="row"] { text-align: left; } .pct.pct-one td { width: 30%; }
 @container pb (max-width: 520px) { .pcz-tiers button, .pcz-opt { font-size: 14px; } }
+
+/* 달 이벤트 숨기기·보이기(2026-11-28 사용자 '내가 할 수 있게') — 상담 화면에 튀지 않게 작은 회색 글자 버튼 */
+.pcz-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.pcz-hide { height: 36px; padding: 0 12px; border: 0; background: none; font: inherit; font-size: 14px; color: #9aa0a8; cursor: pointer; }
+.pcz-hide:disabled { opacity: .5; }
