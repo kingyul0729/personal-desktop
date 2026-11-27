@@ -36,4 +36,20 @@ export function cellDiff(c: Cell | null, o: Cell | null): boolean {
   const x = unit(c.count), y = unit(o.count);
   return !!x && !!y && x.u === y.u && x.n !== y.n;
 }
-export const sameAll = (rows: CompareRow[]) => rows.length > 0 && rows.every(r => r.same);
+export const sameAll = (rows: CompareRow[]) => rows.length > 0 && rows.every(r => !rowDiff(r));
+
+// 만원 단위 표시(2026-11-28 사용자 '양쪽 가격은 모두 만원, 반올림·자릿수 버리기 없이'): 원 계산값 그대로 ÷ 10000 — 93.5만원 · 123.45만원
+export const manwon = (n: number | null) => (n == null ? '—' : `${(n / 10000).toLocaleString('ko-KR', { maximumFractionDigits: 4 })}만원`);
+
+// 차이로 볼 줄: 횟수가 같은 단위로 다르거나 한쪽에만 있거나 작은 줄(+ 추가 시술 등)이 다를 때 — '포함'·'1회'처럼 상세 정도만 다른 줄은 아님
+export const rowDiff = (r: CompareRow) => !r.same && (cellDiff(r.a, r.b) || (r.a?.subs ?? []).join('|') !== (r.b?.subs ?? []).join('|'));
+
+// 리프팅(이벤트 포함)의 LDM 트리플·스킨보톡스·스킨부스터는 횟수 대신 '포함'(없으면 —) — 2026-11-28 사용자
+export const INCLUDE_ONLY = /LDM\s*트리플|스킨\s*보톡스|스킨\s*부스터/;
+export function includeOnly(rows: CompareRow[]): CompareRow[] {
+  return rows.map(r => {
+    if (!INCLUDE_ONLY.test(r.name)) return r;
+    const a = r.a ? { count: '포함', subs: [] } : null, b = r.b ? { count: '포함', subs: [] } : null;
+    return { ...r, a, b, same: !!a === !!b };
+  });
+}

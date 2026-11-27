@@ -36,3 +36,15 @@ test('user 11-28: 포함·1회처럼 단위가 다르면 차이로 강조하지 
   assert.equal(E.sameAll(compareRows(list[0].items, list[0].items)), true);
   assert.equal(E.sameAll(compareRows(list[0].items, list[2].items)), false);
 });
+
+test('user 11-28: 만원 단위 그대로 · 리프팅 관리는 포함 · 상세 정도만 다른 줄은 차이 아님', () => {
+  assert.equal(E.manwon(935000), '93.5만원');
+  assert.equal(E.manwon(1234500), '123.45만원');
+  assert.equal(E.manwon(12100000), '1,210만원');
+  const rows = E.includeOnly(compareRows([{ name: '올리지오', qty: null, label: '600샷' }, { name: 'LDM 트리플', qty: 3 }], [{ name: '올리지오', qty: null, label: '600샷' }, { name: 'LDM 트리플', qty: 5 }, { name: '스킨보톡스', qty: 1 }]));
+  const ldm = rows.find(r => r.name === 'LDM 트리플'), sb = rows.find(r => r.name === '스킨보톡스');
+  assert.deepEqual([ldm.a.count, ldm.b.count, ldm.same], ['포함', '포함', true]);
+  assert.deepEqual([sb.a, sb.b.count], [null, '포함']);
+  assert.equal(E.rowDiff({ name: 'x', a: { count: '포함', subs: [] }, b: { count: '1회', subs: [] }, same: false }), false);
+  assert.equal(E.rowDiff({ name: 'x', a: { count: '3회', subs: [] }, b: { count: '5회', subs: [] }, same: false }), true);
+});

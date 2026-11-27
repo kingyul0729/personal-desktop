@@ -3,9 +3,8 @@ import { ChevronDown, Minus, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { KittyDialog } from './KittyDialog';
 import { askConfirm } from './AlertDialog';
 import { SavingMark } from './Feedback';
-import { readWon } from '../koreanAmount';
 import { compareRows, type Cell } from '../programCompare';
-import { EVENT_CAT, TIERS, cellDiff, eventGroups, sameAll, tierPrice } from '../eventCompare';
+import { EVENT_CAT, TIERS, cellDiff, eventGroups, includeOnly, manwon, rowDiff, sameAll, tierPrice } from '../eventCompare';
 import type { PrepaidTier } from '../prepaid';
 import { LENTIGO_ID, PICO_ROW, addonPair, lentigoCount, lentigoProgram, lentigoSizes, lentigoTotal, picoQty, withLentigo, withPicoRow } from '../lentigoCompare';
 
@@ -32,7 +31,7 @@ export async function sendPrograms(body: unknown): Promise<ProgramData> {
   if (!r.ok || !d) throw new Error(d?.error || '저장하지 못했어요.');
   return asData(d);
 }
-export const won = (n: number | null) => (n == null ? '—' : readWon(n));
+export const won = manwon; // 비교 화면 금액은 모두 만원 단위(2026-11-28 사용자)
 export function ProgramCompare() {
   const [data, setData] = useState<ProgramData | null>(null);
   const programs = data?.programs ?? null;
@@ -55,15 +54,19 @@ export function ProgramCompare() {
   // 리프팅만(2026-11-27 사용자): 왼쪽은 시술 하나(이름에 ' + ' 없음), 오른쪽은 리프팅 두 개(' + ' 있음) 중에서 고름 — 한쪽이 비면 전체
   const lift = category === '리프팅';
   const combo = (p: Program) => p.name.includes(' + ');
-  const listA = lift && list.some(p => !combo(p)) && list.some(combo) ? list.filter(p => !combo(p)) : list;
-  const listB = listA === list ? list : list.filter(combo);
+  // 국산·수입 라인이 둘 다 있는 탭(보톡스·필러, 2026-11-28 사용자 '고정으로 각각 국산 수입'): 왼쪽은 국산, 오른쪽은 수입 — 왼쪽을 바꾸면 오른쪽은 같은 시술의 수입 제품으로
+  const kr = (p: Program) => /국산/.test(p.line ?? ''), im = (p: Program) => /수입/.test(p.line ?? '');
+  const origin = list.some(kr) && list.some(im);
+  const baseOf = (p?: Program) => (p?.name ?? '').replace(/\s*\([^()]*\)$/, '');
+  const listA = origin ? list.filter(kr) : lift && list.some(p => !combo(p)) && list.some(combo) ? list.filter(p => !combo(p)) : list;
+  const listB = origin ? list.filter(im) : listA === list ? list : list.filter(combo);
   const a = listA.find(p => p.id === pick[0]) ?? listA[0];
-  const b = listB.find(p => p.id === pick[1]) ?? (listB === list ? list[1] ?? list[0] : listB[0]);
+  const b = listB.find(p => p.id === pick[1]) ?? (origin ? listB.find(p => baseOf(p) === baseOf(a)) ?? listB[0] : listB === list ? list[1] ?? list[0] : listB[0]);
   // 라인 요약은 서로 다른 라인끼리 비교할 때만(2026-11-26 사용자 '다른 라인끼리면 라인 요약도')
   const lineDiff = !!a?.line && !!b?.line && a.line !== b.line;
   // 구성 없는 프로그램끼리(보톡스, 2026-11-27 사용자 그림): 시술 구성 상자·카드 라인 이름표 없이, 설명 제목 = 시술 이름 + 라인 이름, 마지막 설명 묶음(톡신 설명)에 밑줄
   const noItems = !a?.items?.length && !b?.items?.length && a?.id !== LENTIGO_ID && b?.id !== LENTIGO_ID;
-  const choose = (i: 0 | 1, id: string) => setPick(p => { const n: [string, string] = [a?.id ?? '', b?.id ?? '']; n[i] = id; return n; });
+  const choose = (i: 0 | 1, id: string) => setPick(() => { const n: [string, string] = [a?.id ?? '', b?.id ?? '']; n[i] = id; if (origin && i === 0) n[1] = ''; return n; });
 
   if (error) return <div className="pb-empty">{error}</div>;
   if (!programs) return <div className="pb-empty"><SavingMark /></div>;
@@ -93,10 +96,11 @@ export function ProgramCompare() {
   const pq = picoQty(sizes);
   const fixPico = (c: Cell | null, p?: Program) => (!c ? c : p?.id === LENTIGO_ID ? { count: pq != null ? `${pq}회` : c.count, subs: [`(${lentigoCount(cnt)}개)`] } : { count: `${addN(p) || 1}회`, subs: [`(${c.count})`] });
   const allRows2 = lmode ? allRows.map(r => (r.name === PICO_ROW ? { ...r, a: fixPico(r.a, pair[0]), b: fixPico(r.b, pair[1]) } : r)) : allRows;
-  const rows = onlyDiff ? allRows2.filter(r => !r.same) : allRows2;
+  const allRows3 = category === '리프팅' ? includeOnly(allRows2) : allRows2;
+  const rows = onlyDiff ? allRows3.filter(rowDiff) : allRows3;
   // 다른 것만 강조: 횟수는 상대 칸과 다를 때만, 작은 줄(+ 추가 시술 등)은 상대 칸에 없을 때만 — 좌우 같은 색
   // 다른 것만 강조(2026-11-27 사용자 그림): 횟수가 다르면 양쪽 칸 모두('—' 포함) 같은 연한 바탕, 같은 횟수는 기본 — 한쪽에만 있는 작은 줄(+ 추가 시술 등)만 작은 연한 바탕
-  const tcell = (c: Cell | null, o: Cell | null) => { const diff = (c?.count ?? null) !== (o?.count ?? null); return <td><div className={diff ? 'pct-v is-d' : 'pct-v'}>{c ? <><b>{c.count}</b>{c.subs.map((t, k) => <small key={k} className={o?.subs.includes(t) ? undefined : 'is-d'}>{t}</small>)}</> : <b className="is-none">—</b>}</div></td>; };
+  const tcell = (c: Cell | null, o: Cell | null) => { const diff = cellDiff(c, o); /* '포함'·'1회'처럼 상세 정도만 다른 칸은 차이 아님 */ return <td><div className={diff ? 'pct-v is-d' : 'pct-v'}>{c ? <><b>{c.count}</b>{c.subs.map((t, k) => <small key={k} className={o?.subs.includes(t) ? undefined : 'is-d'}>{t}</small>)}</> : <b className="is-none">—</b>}</div></td>; };
   const eng = CAT_EN[category];
   return <div className="pc-wrap">
     <div className="pcz">
@@ -107,7 +111,7 @@ export function ProgramCompare() {
       <div className="pcz-two">
         {pair.map((p, i) => <div key={i} className={`pcz-card ${i ? "is-b" : "is-a"}`}>
           <label className="pcz-pick"><b>{title(p, true)}</b><ChevronDown size={18} /><select value={sel[i]} aria-label={`프로그램 ${i + 1}`} onChange={e => choose(i as 0 | 1, e.target.value)}>{(i ? listB : listA).map(x => <option key={x.id} value={x.id}>{x.name}</option>)}</select></label>
-          <div className="pcz-price">{p?.id === LENTIGO_ID && lt.final == null ? <strong className="is-check">할인 기준 확인 필요</strong> : <><strong>{won(p?.price ?? null)}</strong><small>(부가세 포함)</small></>}</div>
+          <div className="pcz-price">{p?.id === LENTIGO_ID && lt.final == null ? <strong className="is-check">할인 기준 확인 필요</strong> : <><strong>{won(p?.price ?? null)}</strong><small>부가세 포함</small></>}</div>
           {p?.id === LENTIGO_ID ? <div className="pcz-note">
             {lt.off ? <span>할인 {Math.round((lt.rate ?? 0) * 100)}% −{won(lt.off)}</span> : null}
             <button type="button" className="pcz-set" aria-expanded={setting} onClick={() => setSetting(v => !v)}>개수·크기 설정</button>
@@ -133,7 +137,7 @@ export function ProgramCompare() {
           <colgroup><col className="pct-n" /><col /><col className="pct-n" /></colgroup>
           <thead><tr><th className="is-a">{title(pair[0])}</th><th>시술 항목</th><th className="is-b">{title(pair[1])}</th></tr></thead>
           <tbody>
-            {rows.map((r, k) => <tr key={k} className={r.same ? undefined : "is-d"}>{tcell(r.a, r.b)}<th scope="row">{lmode && r.name === PICO_ROW ? `${r.name} (흑자 제거)` : r.name}</th>{tcell(r.b, r.a)}</tr>)}
+            {rows.map((r, k) => <tr key={k} className={rowDiff(r) ? "is-d" : undefined}>{tcell(r.a, r.b)}<th scope="row">{lmode && r.name === PICO_ROW ? `${r.name} (흑자 제거)` : r.name}</th>{tcell(r.b, r.a)}</tr>)}
             {!rows.length && <tr><td colSpan={3} className="is-empty">구성 같음</td></tr>}
           </tbody>
         </table>
@@ -158,9 +162,9 @@ function EventCompare({ programs, cats, onCat }: { programs: Program[]; cats: st
   const a = o?.program, b = others.find(p => p.id === pid) ?? others[0];
   const base0 = g?.options[0]?.program.price ?? null;
   const optText = (x: { label: string; program: Program }, k: number) => `${x.label || '기본'}${k === 0 ? (g!.options.length > 1 ? ' · 기본' : '') : x.program.price != null && base0 != null && x.program.price !== base0 ? ` · ${x.program.price > base0 ? '+' : '−'}${won(Math.abs(x.program.price - base0))}` : ''}`;
-  const allRows = compareRows(a?.items, b?.items);
+  const allRows = includeOnly(compareRows(a?.items, b?.items)); // 리프팅 이벤트 — LDM 트리플·스킨보톡스·스킨부스터는 '포함'
   const same = sameAll(allRows);
-  const rows = onlyDiff ? allRows.filter(r => !r.same) : allRows;
+  const rows = onlyDiff ? allRows.filter(rowDiff) : allRows;
   const cell = (c: Cell | null, x: Cell | null) => <td><div className={cellDiff(c, x) ? 'pct-v is-d' : 'pct-v'}>{c ? <><b>{c.count}</b>{c.subs.map((t, k) => <small key={k} className={x?.subs.includes(t) ? undefined : 'is-d'}>{t}</small>)}</> : <b className="is-none">—</b>}</div></td>;
   return <div className="pc-wrap">
     <div className="pcz pcz-ev">
@@ -192,7 +196,7 @@ function EventCompare({ programs, cats, onCat }: { programs: Program[]; cats: st
           <table className="pct">
             <colgroup><col className="pct-n" /><col /><col className="pct-n" /></colgroup>
             <thead><tr><th className="is-a">이벤트</th><th>시술 항목</th><th className="is-b">{tier}만원권</th></tr></thead>
-            <tbody>{rows.map((r, k) => <tr key={k} className={r.same ? undefined : 'is-d'}>{cell(r.a, r.b)}<th scope="row">{r.name}</th>{cell(r.b, r.a)}</tr>)}</tbody>
+            <tbody>{rows.map((r, k) => <tr key={k} className={rowDiff(r) ? 'is-d' : undefined}>{cell(r.a, r.b)}<th scope="row">{r.name}</th>{cell(r.b, r.a)}</tr>)}</tbody>
           </table>
         </>}
       </section> : null}
