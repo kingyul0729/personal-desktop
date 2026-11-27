@@ -145,14 +145,14 @@ export function ProgramCompare() {
 // 줄바꿈도 문단으로(2026-11-27 사용자 보톡스 설명 — 줄마다 그대로)
 const sentences = (t: string) => t.split(/\n+|(?<=[.。])\s+/).map(x => x.trim()).filter(Boolean);
 // 빈 줄로 나눈 묶음은 묶음끼리만 띄우고 묶음 안 줄은 붙여서(2026-11-27 사용자 그림 — 보톡스 설명 두 줄씩)
-// '▸ 제목'으로 시작하는 묶음은 눌러서 펼쳐 보는 칸(2026-11-28 사용자 '수입 필러를 권유하는 이유 펼쳐 볼 수 있게'), 형광펜은 펼침 칸 말고 마지막 묶음에
+// '▸ 제목'으로 시작하는 묶음은 눌러서 펼쳐 보는 칸(2026-11-28 사용자 '수입 필러를 권유하는 이유 펼쳐 볼 수 있게' · '환자 눈에 대놓고 보이면 안 돼' → 제목 글자 없이 작은 연회색 점 세 개만, 펼쳐도 제목 없이 내용만), 형광펜은 펼침 칸 말고 마지막 묶음에
 const MORE = /^\s*▸\s*/;
 const descView = (t: string, under = false) => {
   if (!/\n/.test(t)) return sentences(t).map((x, k) => <p key={k}>{x}</p>);
   const gs = t.split(/\n\s*\n/), plain = gs.map((g, k) => (MORE.test(g) ? -1 : k)).filter(k => k >= 0);
   const last = plain.length > 1 ? plain[plain.length - 1] : -1;
   return gs.map((g, k) => {
-    if (MORE.test(g)) { const [head, ...rest] = g.replace(MORE, '').split('\n'); return <details key={k} className="pcz-more"><summary>{head.trim()}</summary><div className="pcz-dg">{sentences(rest.join('\n')).map((x, j) => <p key={j}><span>{x}</span></p>)}</div></details>; }
+    if (MORE.test(g)) { const [head, ...rest] = g.replace(MORE, '').split('\n'); return <details key={k} className="pcz-more"><summary aria-label={head.trim()} title="" /><div className="pcz-dg">{sentences(rest.join('\n')).map((x, j) => <p key={j}><span>{x}</span></p>)}</div></details>; }
     return <div key={k} className={under && k === last ? 'pcz-dg is-u' : 'pcz-dg'}>{sentences(g).map((x, j) => <p key={j}><span>{x}</span></p>)}</div>;
   });
 };

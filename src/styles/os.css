@@ -3652,11 +3652,11 @@ button.iv-pinv { cursor: zoom-in; }
 /* 톡신 설명: 연한 회색 형광펜(2026-11-27 사용자 '밑줄 말고 연한 형광색처럼, 연한 회색') */
 .pcz-desc2 .pcz-dg.is-u p span { background: #eceef1; padding: 1px 4px; margin: 0 -4px; border-radius: 3px; -webkit-box-decoration-break: clone; box-decoration-break: clone; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 
-/* 설명 안 펼침 칸 '▸ 제목'(2026-11-28 사용자 — 수입 필러를 권유하는 이유) */
-.pcz-desc2 details.pcz-more { border-top: 1px solid #eef1f4; padding-top: 10px; }
-.pcz-desc2 details.pcz-more summary { cursor: pointer; list-style: none; display: inline-flex; align-items: center; gap: 6px; font-size: 16px; font-weight: 700; color: #44617c; min-height: 36px; }
+/* 설명 안 펼침 칸 '▸ 제목'(2026-11-28 사용자 — 환자 눈에 안 띄게: 제목 글자 없이 연회색 점 세 개, 펼쳐도 내용만) */
+.pcz-desc2 details.pcz-more summary { cursor: pointer; list-style: none; align-self: flex-end; display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 24px; margin-top: -4px; color: #d3d7dc; font-size: 18px; letter-spacing: 1px; line-height: 1; }
+.pcz-desc2 details.pcz-more { display: flex; flex-direction: column; }
 .pcz-desc2 details.pcz-more summary::-webkit-details-marker { display: none; }
-.pcz-desc2 details.pcz-more summary::after { content: ''; width: 7px; height: 7px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(45deg) translateY(-2px); transition: transform .15s; }
-.pcz-desc2 details.pcz-more[open] summary::after { transform: rotate(-135deg) translate(-2px, 0); }
-.pcz-desc2 details.pcz-more .pcz-dg { margin-top: 6px; gap: 6px; }
-@media print { .pcz-desc2 details.pcz-more .pcz-dg { display: grid; } }
+.pcz-desc2 details.pcz-more summary::before { content: '···'; }
+.pcz-desc2 details.pcz-more[open] summary { order: 2; }
+.pcz-desc2 details.pcz-more .pcz-dg { gap: 6px; padding-top: 10px; border-top: 1px solid #eef1f4; }
+@media print { .pcz-desc2 details.pcz-more summary { display: none; } }
