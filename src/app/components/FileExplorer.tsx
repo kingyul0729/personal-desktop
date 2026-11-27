@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as RPointerEvent } from 'react';
-import { ChevronLeft, ChevronRight, FolderInput, GripVertical, Minus, Pencil, Plus, Trash2, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, FolderInput, GripVertical, Minus, Pencil, Plus, Printer, Trash2, X } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { KittyDialog } from './KittyDialog';
 import { askConfirm } from './AlertDialog';
@@ -35,7 +35,9 @@ const useTall = () => {
 };
 export const sideOf = (image: PriceImage, tall: boolean) => (tall ? image.variants?.portrait : image.variants?.landscape) || image.src;
 
-type Dialog = { type: 'name'; image: PriceImage } | { type: 'folder'; folder?: PriceFolder } | { type: 'add'; file: File };
+type Dialog = { type: 'name'; image: PriceImage } | { type: 'folder'; folder?: PriceFolder } | { type: 'add'; file: File; folderId?: string };
+// 순서지(2026-11-27 사용자 '프로그램마다 순서지 그림을 넣고 그대로 프린트'): 이름이 '순서지'인 탭에 그림을 모아 두고 탭 줄에는 안 보임
+const SHEET = '순서지';
 
 export function FileExplorer({ onFolders, goto, onLocation }: { onFolders?: (folders: { id: string; name: string }[]) => void; goto?: { id: string; n: number }; onLocation?: (id: string) => void } = {}) {
   const [files, setFiles] = useState<PriceFiles>(initialPriceFiles);
@@ -49,7 +51,7 @@ export function FileExplorer({ onFolders, goto, onLocation }: { onFolders?: (fol
   const [name, setName] = useState('');
   const tall = useTall();
   // 프로그램 비교(2026-11-26 사용자): [한 장] [프로그램 비교] — 비교는 상담용이라 탭 줄·편집 버튼 숨김
-  const [mode, setMode] = useState<'one' | 'compare'>(() => { try { return localStorage.getItem('price-mode') === 'compare' ? 'compare' : 'one'; } catch { return 'one'; } });
+  const [mode, setMode] = useState<'one' | 'compare' | 'print'>(() => { try { const m = localStorage.getItem('price-mode'); return m === 'compare' || m === 'print' ? m : 'one'; } catch { return 'one'; } });
   useEffect(() => { try { localStorage.setItem('price-mode', mode); } catch { /* 이 기기 편의 */ } }, [mode]);
   const [programs, setPrograms] = useState<ProgramData>(emptyPrograms);
   useEffect(() => { if (editing) loadPrograms().then(setPrograms).catch(() => undefined); }, [editing]);
@@ -68,7 +70,9 @@ export function FileExplorer({ onFolders, goto, onLocation }: { onFolders?: (fol
   useTrashChange('price', () => { void refresh(); });
   // 탭이 화면 위에 있으니 왼쪽 메뉴에는 하위 목록을 두지 않는다(고르면 메뉴가 접힘)
   useEffect(() => { onFolders?.([]); }, []);
-  const folders = files.folders;
+  const folders = files.folders.filter(f => f.name !== SHEET);
+  const sheetFolder = files.folders.find(f => f.name === SHEET);
+  const sheets = useMemo(() => files.images.filter(i => i.folderId === sheetFolder?.id), [files.images, sheetFolder?.id]);
   const current = folders.find(f => f.id === tab || f.id.endsWith(`:${tab}`)) ?? folders[0];
   useEffect(() => { if (current) { try { localStorage.setItem('price-tab', current.id); } catch { /* 이 기기 편의 */ } onLocation?.(current.id); } }, [current?.id]);
   useEffect(() => { if (goto) setTab(goto.id); }, [goto?.n]);
@@ -107,7 +111,7 @@ export function FileExplorer({ onFolders, goto, onLocation }: { onFolders?: (fol
     const d = dialog;
     const ok = await run(() => d.type === 'name' ? post({ action: 'edit-image', id: d.image.id, name: name.trim(), folderId: d.image.folderId })
       : d.type === 'folder' ? post({ action: d.folder ? 'rename-folder' : 'create-folder', id: d.folder?.id, name: name.trim(), variant: 'heart' })
-        : sendImage({ file: d.file, name: name.trim(), folderId: current!.id }));
+        : sendImage({ file: d.file, name: name.trim(), folderId: d.folderId ?? current!.id }));
     if (ok) {
       setDialog(null);
       if (d.type === 'folder' && !d.folder) setFiles(f => { const made = f.folders.find(x => x.name === name.trim()); if (made) setTab(made.id); return f; });
@@ -160,6 +164,19 @@ export function FileExplorer({ onFolders, goto, onLocation }: { onFolders?: (fol
     finally { setFiles(now); setPending(false); }
   };
 
+  // 순서지 추가: 그림이면 이름을 받아 '순서지' 탭에(없으면 만듦), 묶음 파일(.json)이면 묶음 넣기와 같은 길
+  const addSheet = () => pick(`${IMG},application/json,.json`, async f => {
+    if (/json/.test(f.type) || f.name.endsWith('.json')) { void importBundle(f); return; }
+    if (tooBig(f)) return;
+    let id = sheetFolder?.id;
+    if (!id) { try { setPending(true); const now = await post({ action: 'create-folder', name: SHEET, variant: 'heart' }); setFiles(now); id = now.folders.find(x => x.name === SHEET)?.id; } catch (e) { setError((e as Error).message); } finally { setPending(false); } }
+    if (id) openDialog({ type: 'add', file: f, folderId: id });
+  });
+  const removeSheet = async (image: PriceImage) => {
+    if (!await askConfirm({ title: '삭제하시겠습니까?', message: `‘${image.name}’ 순서지`, kind: 'delete' })) return;
+    if (await run(() => post({ action: 'delete-image', id: image.id }), '휴지통으로 이동했습니다.')) announceTrash('price');
+  };
+
   // 프로그램 파일({format:'dachaeum-programs', lines:[{category, name, feature, fit}], programs:[{category, name, price?, items?, line?, desc?, fit?}]}) — 같은 탭·같은 이름은 고침(설명만 든 파일이면 금액·구성은 그대로)
   const importPrograms = async (file: File) => {
     setPending(true); setError(''); setNotice('');
@@ -174,14 +191,15 @@ export function FileExplorer({ onFolders, goto, onLocation }: { onFolders?: (fol
   return <div className={`price-board${editing ? ' is-editing' : ''}`} aria-label="가격표 보관함">
     <header className="pb-top">
       <h2>가격표</h2>
-      {mode === 'compare' && !editing ? <span className="pb-spacer" /> : <nav className="pb-tabs" aria-label="카테고리">
+      {mode !== 'one' && !editing ? <span className="pb-spacer" /> : <nav className="pb-tabs" aria-label="카테고리">
         {folders.map(f => { const n = files.images.filter(i => i.folderId === f.id).length; return <button key={f.id} type="button" className={f.id === current?.id ? 'is-on' : ''} onClick={() => setTab(f.id)}>{f.name}<small>{n}</small></button>; })}
         {editing && <button type="button" className="pb-tab-add" onClick={() => openDialog({ type: 'folder' })}><Plus size={15} />탭</button>}
       </nav>}
       {!editing && files.authenticated && <div className="pb-modes" role="group" aria-label="보기">
         <button type="button" aria-pressed={mode === 'one'} onClick={() => setMode('one')}>한 장</button>
-        <button type="button" aria-pressed={mode === 'compare'} onClick={() => setMode('compare')}>프로그램 비교</button></div>}
-      {mode === 'compare' && !editing ? null : files.authenticated ? <button type="button" className={`pb-edit${editing ? ' is-on' : ''}`} onClick={() => { setEditing(v => !v); setError(''); setNotice(''); }}>{editing ? '완료' : '편집'}</button>
+        <button type="button" aria-pressed={mode === 'compare'} onClick={() => setMode('compare')}>프로그램 비교</button>
+        <button type="button" aria-pressed={mode === 'print'} onClick={() => setMode('print')}>순서지</button></div>}
+      {mode !== 'one' && !editing ? null : files.authenticated ? <button type="button" className={`pb-edit${editing ? ' is-on' : ''}`} onClick={() => { setEditing(v => !v); setError(''); setNotice(''); }}>{editing ? '완료' : '편집'}</button>
         : <a className="pb-edit" href="/signin-with-chatgpt?return_to=%2F" target="_top">로그인</a>}
     </header>
     {(error || notice) && <p className={`pb-msg${error ? ' is-error' : ''}`} role={error ? 'alert' : 'status'}>{error || notice}{pending && <SavingMark />}</p>}
@@ -206,12 +224,13 @@ export function FileExplorer({ onFolders, goto, onLocation }: { onFolders?: (fol
       {current && <ProgramEditor category={current.name} data={programs} onChange={setPrograms} />}
     </div>
       : mode === 'compare' ? <ProgramCompare />
+      : mode === 'print' ? <SheetPrint sheets={sheets} loading={loading} pending={pending} onAdd={addSheet} onRemove={image => void removeSheet(image)} />
       : images.length ? <Pager key={current?.id} images={images} page={page} tall={tall} onPage={go} label={current?.name ?? ''} />
         : <div className="pb-empty">{loading ? <LoadingBox label="가격표 불러오는 중…" /> : '가격표 없음'}</div>}
     <input ref={picker} type="file" hidden onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) pickFor.current?.(f); }} />
-    {dialog && <KittyDialog title={dialog.type === 'folder' ? (dialog.folder ? '탭 이름' : '새 탭') : dialog.type === 'add' ? '가격표 추가' : '가격표 이름'} onClose={() => !pending && setDialog(null)} busy={pending}>
+    {dialog && <KittyDialog title={dialog.type === 'folder' ? (dialog.folder ? '탭 이름' : '새 탭') : dialog.type === 'add' ? (dialog.folderId ? '순서지 추가' : '가격표 추가') : '가격표 이름'} onClose={() => !pending && setDialog(null)} busy={pending}>
       <form onSubmit={e => { e.preventDefault(); void saveDialog(); }}>
-        <label className="kitty-field">{dialog.type === 'folder' ? '탭 이름' : '가격표 이름'}<input autoFocus required maxLength={100} value={name} onChange={e => setName(e.target.value)} disabled={pending} /></label>
+        <label className="kitty-field">{dialog.type === 'folder' ? '탭 이름' : dialog.type === 'add' && dialog.folderId ? '프로그램 이름' : '가격표 이름'}<input autoFocus required maxLength={100} value={name} onChange={e => setName(e.target.value)} disabled={pending} /></label>
         {error && <p className="kitty-error" role="alert">{error}</p>}
         <footer className="kitty-dialog-actions"><button type="button" onClick={() => setDialog(null)} disabled={pending}>취소</button><button type="submit" className="kitty-primary" disabled={pending || !name.trim()}>{pending ? <><SavingMark />저장 중…</> : '저장'}</button></footer>
       </form>
@@ -282,4 +301,26 @@ function Pager({ images, page, tall, onPage, label }: { images: PriceImage[]; pa
     </>}
   </div>;
   return full ? <>{createPortal(body, document.body)}<div className="pb-view" /></> : body;
+}
+
+// 순서지 프린트(2026-11-27 사용자 '순서지 이미지를 프로그램에 맞게 프린트'): 그림을 고르면 그 그림만 A4 한 장 그대로 인쇄(화면의 다른 것은 인쇄 안 함)
+function SheetPrint({ sheets, loading, pending, onAdd, onRemove }: { sheets: PriceImage[]; loading: boolean; pending: boolean; onAdd: () => void; onRemove: (image: PriceImage) => void }) {
+  const [pickId, setPickId] = useState('');
+  const [printing, setPrinting] = useState<PriceImage | null>(null);
+  const chosen = sheets.find(x => x.id === pickId) ?? sheets[0];
+  useEffect(() => { const done = () => setPrinting(null); window.addEventListener('afterprint', done); return () => window.removeEventListener('afterprint', done); }, []);
+  const print = () => { if (chosen) setPrinting(chosen); };
+  return <div className="pb-sheets">
+    <div className="pb-sheet-bar">
+      <button type="button" className="pb-sheet-add" disabled={pending} onClick={onAdd}><Plus size={15} />순서지 추가</button>
+      <button type="button" className="pb-sheet-print" disabled={!chosen} onClick={print}><Printer size={16} />프린트</button>
+    </div>
+    {sheets.length ? <div className="pb-sheet-grid">
+      {sheets.map(x => <div key={x.id} className={`pb-sheet${x.id === chosen?.id ? ' is-on' : ''}`}>
+        <button type="button" className="pb-sheet-pick" aria-pressed={x.id === chosen?.id} onClick={() => setPickId(x.id)}><img src={x.src} alt="" loading="lazy" /><b>{x.name}</b></button>
+        <button type="button" className="pb-sheet-del" aria-label={`${x.name} 삭제`} onClick={() => onRemove(x)}><Trash2 size={14} /></button>
+      </div>)}
+    </div> : <div className="pb-empty">{loading ? <LoadingBox label="순서지 불러오는 중…" /> : '순서지 없음'}</div>}
+    {printing && createPortal(<div className="pb-print-root"><img src={printing.src} alt={printing.name} onLoad={() => window.setTimeout(() => window.print(), 50)} /></div>, document.body)}
+  </div>;
 }

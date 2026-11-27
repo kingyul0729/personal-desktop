@@ -3588,3 +3588,27 @@ button.iv-pinv { cursor: zoom-in; }
 .pct .pct-v.is-d b { color: #44617c; font-weight: 700; }
 .pct td b.is-d, .pct td small.is-d { border: 0; padding: 0; }
 .pct td small.is-d { display: inline-block; margin-top: 4px; padding: 1px 8px; border-radius: 6px; background: #eef2f6; color: #44617c; font-weight: 700; }
+
+/* 순서지(2026-11-27 사용자 '프로그램마다 순서지 그림을 그대로 프린트'): 가격표 위 [순서지] — 그림 목록에서 고르고 [프린트] → 그 그림만 A4 한 장 */
+.pb-sheets { flex: 1; min-height: 0; overflow: auto; padding: 16px var(--pg-x, 28px) 28px; }
+.pb-sheet-bar { display: flex; justify-content: flex-end; gap: 8px; margin-bottom: 16px; }
+.pb-sheet-bar button { display: inline-flex; align-items: center; gap: 6px; height: 40px; padding: 0 16px; border-radius: 999px; border: 1px solid #c9d6e3; background: #fff; color: #2D3136; font-size: 15px; font-weight: 600; }
+.pb-sheet-bar .pb-sheet-print { background: #44617c; border-color: #44617c; color: #fff; }
+.pb-sheet-bar button:disabled { opacity: .45; }
+.pb-sheet-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 16px; }
+.pb-sheet { position: relative; }
+.pb-sheet-pick { display: flex; flex-direction: column; gap: 8px; width: 100%; padding: 8px; border: 1.5px solid #e1e4e8; border-radius: 12px; background: #fff; text-align: center; }
+.pb-sheet-pick img { width: 100%; aspect-ratio: 210 / 297; object-fit: contain; background: #fafafa; border-radius: 6px; }
+.pb-sheet-pick b { font-size: 15px; font-weight: 600; color: #2D3136; word-break: keep-all; }
+.pb-sheet.is-on .pb-sheet-pick { border-color: #557591; background: #ecf1f6; }
+.pb-sheet-del { position: absolute; top: 14px; right: 14px; width: 30px; height: 30px; display: grid; place-items: center; border-radius: 999px; border: 1px solid #e1e4e8; background: #fff; color: #7D838B; }
+.pb-print-root { display: none; }
+@page sheet { size: A4 portrait; margin: 0; }
+@media print {
+  /* 순서지를 찍을 때만(.pb-print-root가 있을 때) — 월말보고 인쇄는 예전 그대로 */
+  body:has(> .pb-print-root) > *:not(.pb-print-root) { display: none !important; }
+  body:has(> .pb-print-root) { background: #fff !important; margin: 0 !important; }
+  .pb-print-root, .pb-print-root * { visibility: visible !important; }
+  .pb-print-root { display: block !important; page: sheet; width: 100%; height: 100vh; break-inside: avoid; }
+  .pb-print-root img { display: block; width: 100%; height: 100%; object-fit: contain; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
