@@ -98,8 +98,8 @@ export function ProgramCompare() {
 const sentences = (t: string) => t.split(/(?<=[.。])\s+/).map(x => x.trim()).filter(Boolean);
 // 편집 목록의 횟수 글자(숫자면 N회, 아니면 적은 글자) — 2026-11-27 빠져서 [편집]이 흰 화면이 되던 것 되살림
 // 이름은 '+ 시술'·'(대표 원장님)' 묶음 사이에서만 줄바꿈(2026-11-27 사용자 '문장 띄어쓰기' — '(대표 / 원장님)'처럼 끊기지 않게)
-// '추가 관리'는 이름 아래 작은 줄로(2026-11-27 사용자 — 오른쪽 제목이 길어지지 않게)
-const nameView = (n?: string) => { if (!n) return null; const m = n.match(/^(.+?)\s+(추가 관리.*)$/); return m ? <>{nameParts(m[1])}<small className="pc-sub">{m[2]}</small></> : nameParts(n); };
+// '추가 관리'·흑자 크기 '(1cm 이하)'는 이름 아래 작은 연회색 줄로(2026-11-27 사용자 — 오른쪽 제목이 길어지지 않게)
+const nameView = (n?: string) => { if (!n) return null; const m = n.match(/^(.+?)\s+(추가 관리.*|\([^()]*\dcm[^()]*\))$/); return m ? <>{nameParts(m[1])}<small className="pc-sub">{m[2]}</small></> : nameParts(n); };
 const nameParts = (n?: string) => (n ? n.split(/\s+(?=\+\s|\()/).map((t, k) => <Fragment key={k}>{k ? ' ' : ''}<span className="pc-nw">{t}</span></Fragment>) : null);
 const itemText = (i: { qty: number | null; label?: string }) => (i.qty != null ? `${i.qty}회` : i.label || '포함');
 const CAT_EN: Record<string, string> = { 색소: 'PIGMENT', 홍조: 'REDNESS', 여드름: 'ACNE', 흉터: 'SCAR', 모공: 'PORE', 리프팅: 'LIFTING', 스킨부스터: 'SKIN BOOSTER', 보톡스: 'BOTOX', 필러: 'FILLER' };
