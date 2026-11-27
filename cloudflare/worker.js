@@ -7,6 +7,9 @@ import MIGRATIONS from './migrations.js';
 
 const SESSION_COOKIE = 'dc_session';
 const SESSION_DAYS = 1;   // 2026-11-23 사용자 '하루만 저장' (예전 30일)
+// 2026-11-27 사용자 '밤 12시 되면 자동 로그아웃, 하루에 한 번 로그인': 로그인은 그날 한국 시간 밤 12시까지
+const nextMidnightKst = (now = Date.now()) => { const H9 = 9 * 3600000, D = 86400000; return Math.floor((now + H9) / D) * D + D - H9; };
+const untilMidnight = () => Math.max(60, Math.floor((nextMidnightKst() - Date.now()) / 1000));
 const PBKDF2_ITER = 100000;
 const enc = new TextEncoder();
 const nowISO = () => new Date().toISOString();
@@ -72,13 +75,15 @@ async function verifyPassword(pw, stored) {
 }
 async function secret(env) { if (env.SESSION_SECRET) return env.SESSION_SECRET; const r = await env.DB.prepare(`SELECT value FROM kv WHERE key='session_secret'`).first(); return r && r.value; }
 async function hmac(sec, data) { const k = await crypto.subtle.importKey('raw', enc.encode(sec), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']); return b64u(await crypto.subtle.sign('HMAC', k, enc.encode(data))); }
-async function makeSession(env, u) { const p = b64u(enc.encode(JSON.stringify({ uid: u.id, name: u.name, role: u.role, exp: Date.now() + SESSION_DAYS * 86400000 }))); return p + '.' + await hmac(await secret(env), p); }
+async function makeSession(env, u) { const p = b64u(enc.encode(JSON.stringify({ uid: u.id, name: u.name, role: u.role, exp: nextMidnightKst() }))); return p + '.' + await hmac(await secret(env), p); }
 async function readSession(env, request) {
   const m = (request.headers.get('cookie') || '').match(new RegExp('(?:^|;\\s*)' + SESSION_COOKIE + '=([^;]+)'));
   if (!m) return null; const [p, sig] = m[1].split('.'); if (!p || !sig || sig !== await hmac(await secret(env), p)) return null;
   try { const s = JSON.parse(new TextDecoder().decode(b64uDec(p))); if (!s.exp || s.exp < Date.now()) return null;
     // 예전 30일짜리 로그인(동의서 사이트에서 만든 것 포함)은 하루 넘게 남아 있으면 다시 로그인
     if (s.exp > Date.now() + SESSION_DAYS * 86400000 + 60000) return null;
+    // 밤 12시(한국 시간)를 넘겨 남아 있는 로그인(예전 쿠키·동의서 사이트에서 만든 것 포함)은 12시에 끝
+    if (s.exp > nextMidnightKst() + 60000) return null;
     // 중지된 계정은 바로 막는다
     const u = await env.DB.prepare('SELECT active FROM users WHERE id = ?').bind(s.uid).first(); return u && Number(u.active) ? s : null; } catch (e) { return null; }
 }
@@ -108,14 +113,14 @@ async function handleAuth(request, env, url) {
     await env.DB.prepare(`INSERT INTO users (name, pw_hash, role, active, created_at) VALUES (?, ?, 'admin', 1, ?)`).bind(name, await hashPassword(pw), nowISO()).run();
     const u = await env.DB.prepare('SELECT id, name, role FROM users WHERE name = ?').bind(name).first();
     await audit(env, name, 'setup.admin', 'desktop');
-    return json({ ok: true }, 200, { 'set-cookie': cookie(request, await makeSession(env, u), SESSION_DAYS * 86400) });
+    return json({ ok: true }, 200, { 'set-cookie': cookie(request, await makeSession(env, u), untilMidnight()) });
   }
   if (path === '/auth/login') {
     const u = await env.DB.prepare('SELECT id, name, role, active, pw_hash FROM users WHERE name = ?').bind(name).first();
     if (!u || !Number(u.active) || !(await verifyPassword(pw, u.pw_hash))) { await audit(env, null, 'login.fail', name, 'desktop'); return json({ ok: false, error: '이름 또는 비밀번호가 맞지 않습니다' }, 401); }
     await env.DB.prepare('UPDATE users SET last_login = ? WHERE id = ?').bind(nowISO(), u.id).run();
     await audit(env, u.name, 'login', null, 'desktop');
-    return json({ ok: true }, 200, { 'set-cookie': cookie(request, await makeSession(env, { id: u.id, name: u.name, role: u.role }), SESSION_DAYS * 86400) });
+    return json({ ok: true }, 200, { 'set-cookie': cookie(request, await makeSession(env, { id: u.id, name: u.name, role: u.role }), untilMidnight()) });
   }
   if (path === '/auth/logout') return json({ ok: true }, 200, { 'set-cookie': cookie(request, '', 0) });
   return json({ ok: false, error: '없는 주소' }, 404);
