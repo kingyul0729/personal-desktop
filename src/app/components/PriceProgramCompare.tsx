@@ -91,6 +91,8 @@ export function ProgramCompare() {
 }
 // 설명은 원문 그대로, 문장마다 문단으로 나눔(2026-11-26 밤 사용자 그림)
 const sentences = (t: string) => t.split(/(?<=[.。])\s+/).map(x => x.trim()).filter(Boolean);
+// 편집 목록의 횟수 글자(숫자면 N회, 아니면 적은 글자) — 2026-11-27 빠져서 [편집]이 흰 화면이 되던 것 되살림
+const itemText = (i: { qty: number | null; label?: string }) => (i.qty != null ? `${i.qty}회` : i.label || '포함');
 const CAT_EN: Record<string, string> = { 색소: 'PIGMENT', 홍조: 'REDNESS', 여드름: 'ACNE', 흉터: 'SCAR', 모공: 'PORE', 리프팅: 'LIFTING', 스킨부스터: 'SKIN BOOSTER', 보톡스: 'BOTOX', 필러: 'FILLER' };
 
 // 가격표 [편집] 아래: 고른 탭(이름 = category)의 라인 · 프로그램 자료 — 추가·수정·삭제
