@@ -5,7 +5,7 @@ import { askConfirm } from './AlertDialog';
 import { SavingMark } from './Feedback';
 import { compareRows, type Cell } from '../programCompare';
 import { EVENT_CAT, PREPAID_CAT, HIDDEN, TIERS, cellDiff, eventGroups, includeOnly, liveEvents, manwon, rowDiff, sameAll, tierPrice } from '../eventCompare';
-import type { PrepaidTier } from '../prepaid';
+import { prepaidDiscountRates, type PrepaidTier } from '../prepaid';
 import { LENTIGO_ID, PICO_ROW, addonPair, lentigoCount, lentigoProgram, lentigoSizes, lentigoTotal, picoQty, withLentigo, withPicoRow } from '../lentigoCompare';
 
 // 프로그램 비교(2026-11-26 사용자 그림·밤 공통 기준, 상담용): 탭 고르기 → 가운데 제목 → 프로그램 카드 둘(이름 = 고르기, 가격 알약, 라인이 다르면 라인 이름표 —
@@ -252,8 +252,10 @@ function PrepaidCompare({ programs, cats, onCat }: { programs: Program[]; cats: 
           <span className="pcz-kind">선결제권</span>
           <label className="pcz-pick"><b>{nameView(b?.name)}</b><ChevronDown size={18} /><select value={b?.id ?? ''} aria-label="프로그램 2" onChange={e => setPick(p => [p[0] || (a?.id ?? ''), e.target.value])}>{opts()}</select></label>
           <div className="pcz-tiers" role="group" aria-label="선결제권">{TIERS.map(t => <button key={t} type="button" aria-pressed={tier === t} className={tier === t ? 'is-on' : undefined} onClick={() => setTier(t)}>{t}만원권</button>)}</div>
-          <div className="pcz-price"><strong>{won(tierPrice(b?.price ?? null, tier))}</strong><small>{b?.price != null ? `정가 ${won(b.price)} · ` : ''}부가세 포함</small></div>
+          <div className="pcz-price"><strong>{won(tierPrice(b?.price ?? null, tier))}</strong><small>부가세 포함</small></div>
         </div>
+        <div className="pcz-pre-note" />
+        <div className="pcz-pre-note"><b>{tier}만원 선결제 시</b> : {won(tierPrice(b?.price ?? null, tier))} ({prepaidDiscountRates[tier]}% 할인)</div>
       </div>}
     </div>
   </div>;

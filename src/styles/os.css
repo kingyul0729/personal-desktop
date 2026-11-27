@@ -3681,3 +3681,11 @@ button.iv-pinv { cursor: zoom-in; }
 .pcz-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .pcz-hide { height: 36px; padding: 0 12px; border: 0; background: none; font: inherit; font-size: 14px; color: #9aa0a8; cursor: pointer; }
 .pcz-hide:disabled { opacity: .5; }
+
+/* 선결제 비교 다듬기(2026-11-28 사용자 그림): 권종 버튼 작게(이벤트 비교도 같은 버튼), 카드 아래 '300만원 선결제 시 : N만원 (10% 할인)' 칸 */
+.pcz-tiers { justify-self: center; grid-template-columns: repeat(3, auto); gap: 6px; }
+.pcz-tiers button { min-height: 34px; padding: 0 12px; font-size: 14px; border-radius: 8px; }
+.pcz-pre-note { grid-row: auto; margin-top: 12px; min-height: 56px; display: flex; align-items: center; justify-content: center; padding: 12px 16px; border: 1px solid #E1E4E8; border-radius: 16px; background: #fff; font-size: 17px; color: #1f2328; text-align: center; word-break: keep-all; }
+.pcz-pre-note:empty { visibility: hidden; }
+.pcz-pre-note b { font-weight: 700; margin-right: 4px; }
+@container pb (max-width: 520px) { .pcz-pre-note { font-size: 14px; } .pcz-tiers button { padding: 0 8px; font-size: 13px; } }
