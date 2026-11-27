@@ -3576,3 +3576,8 @@ button.iv-pinv { cursor: zoom-in; }
 .pct td small.is-d { margin-top: 4px; color: #3d4650; }
 .pct td b.is-d + small { display: block; }
 .pct td small + small { margin-top: 3px; }
+/* 2026-11-27 사용자 '표선을 없애자'(테두리 표시와 함께): 바깥·세로 선 없음, 머리 줄 아래 선 + 줄 사이 아주 연한 선만 */
+.pct { border: 0; border-radius: 0; }
+.pct th, .pct td { border-right: 0; border-bottom: 1px solid #eef1f4; }
+.pct thead th, .pct thead th.is-a, .pct thead th.is-b { border-bottom: 1.5px solid #c8cfd8; }
+.pct tbody tr:last-child > * { border-bottom: 0; }
