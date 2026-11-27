@@ -41,3 +41,13 @@ test('user 11-26 밤: 비교 줄 공통 기준 — 같은 조합 한 줄, 한쪽
   const same = [{ name: '압출 + 스케일링', qty: 2 }, { name: 'CO₂', qty: null, label: '포함' }];
   assert.ok(compareRows(same, same).every(x => x.same));
 });
+
+test('user 11-27: 리프팅 S.V 관리는 서비스만(단독 아님), 샷 수는 글자 그대로', () => {
+  const rows = compareRows(
+    [{ name: '울쎄라', label: '300샷' }, { name: '스킨보톡스 S.V', qty: 1 }],
+    [{ name: '울쎄라', label: '300샷' }, { name: '올리지오', label: '600샷' }, { name: '스킨보톡스 S.V', qty: 1 }, { name: 'LDM 트리플 S.V', qty: 1 }],
+  );
+  const ldm = rows.find(r => r.name === 'LDM 트리플');
+  assert.deepEqual(ldm.b, { count: '1회', subs: ['서비스'] });
+  assert.equal(rows.find(r => r.name === '울쎄라').same, true);
+});

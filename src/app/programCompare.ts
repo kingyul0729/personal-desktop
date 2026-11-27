@@ -28,7 +28,7 @@ export function entriesOf(items: CompareItem[] = []): Entry[] {
       return norm(t);
     });
     if (!tokens.length) continue;
-    raw.push({ tokens, qty: it.qty, ...(it.qty == null ? { label: it.label || '포함' } : {}), service, solo: tokens.length === 1 && CARE.has(tokens[0]) });
+    raw.push({ tokens, qty: it.qty, ...(it.qty == null ? { label: it.label || '포함' } : {}), service, solo: !service && tokens.length === 1 && CARE.has(tokens[0]) }); // 서비스(S.V) 관리는 '단독' 아님 — 리프팅 'LDM 트리플 S.V'
   }
   // ③ 관리(LDM 트리플·비타민 관리)는 함께 하는 레이저에서 떼어 따로 한 줄(총횟수) — 2026-11-26 밤 사용자 그림('시술구성 표 방식'),
   //    단독과 병행이 같이 있으면 아래 세부('○○ 병행 5 · 단독 5'), 단독만이면 '단독'
