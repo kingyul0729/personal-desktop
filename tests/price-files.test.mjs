@@ -274,3 +274,12 @@ test('user 11-26: 프로그램 비교 자료 — 파일로 넣기는 두 번 올
   res = await post(ren); res = await post(ren);
   assert.deepEqual(res.programs.map(p => p.name), ['가 프로그램 (새 이름)']);
 });
+
+test('user 11-27: 프로그램 파일의 drop_categories는 예전 탭 자료만 지움', async () => {
+  const env = environment();
+  const post = async (body) => (await handleApi(request('/api/price-programs', body), env)).json();
+  await post({ action: 'import', format: 'dachaeum-programs', lines: [{ category: '흉터·모공', name: 'L' }], programs: [{ category: '흉터·모공', name: '가', price: 1, items: [] }, { category: '색소', name: '나', price: 2, items: [] }] });
+  const res = await post({ action: 'import', format: 'dachaeum-programs', drop_categories: ['흉터·모공', '흉터'], programs: [{ category: '흉터', name: '가', price: 3, items: [] }] });
+  assert.deepEqual(res.programs.map(p => `${p.category}/${p.name}`).sort(), ['색소/나', '흉터/가']);
+  assert.equal(res.lines.length, 0);
+});

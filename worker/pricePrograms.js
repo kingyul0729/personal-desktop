@@ -78,6 +78,13 @@ export async function handlePrograms(request, env, owner) {
     const key = (c, n) => `${c}\u0000${n}`;
     const pid = new Map(have.results.map(r => [key(r.category, r.name), r.id])), lid = new Map(haveLines.results.map(r => [key(r.category, r.name), r.id]));
     const stmts = [];
+    // drop_categories: 탭 이름을 바꾼 뒤 남은 예전 탭 자료를 통째로 지움(2026-11-27 사용자 '흉터·모공' 삭제) — 이 파일에 든 탭은 지우지 않음
+    const keep = new Set([...programs, ...lines].map(x => clean(x?.category)));
+    const drops = (Array.isArray(body.drop_categories) ? body.drop_categories : []).map(c => clean(c)).filter(c => c && !keep.has(c)).slice(0, 10);
+    for (const c of drops) {
+      stmts.push(st(env, 'DELETE FROM price_programs WHERE owner = ? AND category = ?', owner, c), st(env, 'DELETE FROM price_program_lines WHERE owner = ? AND category = ?', owner, c));
+      for (const m of [pid, lid]) for (const k of [...m.keys()]) if (k.startsWith(`${c}\u0000`)) m.delete(k);
+    }
     lines.forEach((l, i) => {
       const category = clean(l?.category), name = clean(l?.name), feature = clean(l?.feature, TEXT), fit = clean(l?.fit, TEXT);
       if (!category || !name) return;
