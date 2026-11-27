@@ -140,7 +140,7 @@ export function FileExplorer({ onFolders, goto, onLocation }: { onFolders?: (fol
   // 같은 이름이 이미 있으면 그림은 그대로 두고, 세로 칸이 비어 있을 때만 세로를 채움. 다 넣은 뒤 탭 안 순서는 파일 순서대로(파일에 없는 가격표는 뒤에).
   const importBundle = async (file: File) => {
     setPending(true); setError(''); setNotice('');
-    let added = 0, skipped = 0, tall = 0, now = files;
+    let added = 0, skipped = 0, tall = 0, replaced = 0, now = files;
     const toFile = (name: string, x: { type?: string; data: string }) => { const type = x.type || 'image/webp'; return new File([Uint8Array.from(atob(x.data), c => c.charCodeAt(0))], `${name}.${type.split('/')[1]}`, { type }); };
     try {
       const j = JSON.parse(await file.text());
@@ -150,6 +150,9 @@ export function FileExplorer({ onFolders, goto, onLocation }: { onFolders?: (fol
         if (!folder) { now = await post({ action: 'create-folder', name: f.name, variant: 'heart' }); folder = now.folders.find(x => x.name === f.name); if (!folder) throw new Error(`'${f.name}' 탭을 만들지 못했어요.`); }
         for (const image of f.images || []) {
           let item = now.images.find(x => x.folderId === folder!.id && x.name === image.name);
+          // replace: true(2026-11-27 사용자 새 리프팅 가격표) — 같은 이름 가격표는 같은 자리에서 가로·세로 그림만 바꿈
+          if (item && j.replace) { now = await sendImage({ file: toFile(image.name, image), id: item.id, side: 'landscape' }); replaced++; item = now.images.find(x => x.id === item!.id) ?? item;
+            if (image.portrait) { now = await sendImage({ file: toFile(`${image.name}-세로`, image.portrait), id: item.id, side: 'portrait' }); tall++; } setFiles(now); continue; }
           if (item) skipped++;
           else { now = await sendImage({ file: toFile(image.name, image), name: image.name, folderId: folder.id }); added++; item = now.images.filter(x => x.folderId === folder!.id && x.name === image.name).pop(); }
           if (image.portrait && item && !item.ownPortrait) { now = await sendImage({ file: toFile(`${image.name}-세로`, image.portrait), id: item.id, side: 'portrait' }); tall++; }
@@ -159,7 +162,7 @@ export function FileExplorer({ onFolders, goto, onLocation }: { onFolders?: (fol
         const ids = [...names.map(n => inTab.find(x => x.name === n)?.id).filter((x): x is string => !!x), ...inTab.filter(x => !names.includes(x.name)).map(x => x.id)];
         if (ids.length > 1) now = await post({ action: 'reorder', folderId: folder.id, ids });
       }
-      setNotice([`${added}장 넣음`, tall ? `세로 ${tall}장` : '', skipped ? `이미 있는 ${skipped}장` : ''].filter(Boolean).join(' · '));
+      setNotice([`${added}장 넣음`, replaced ? `바꾼 ${replaced}장` : '', tall ? `세로 ${tall}장` : '', skipped ? `이미 있는 ${skipped}장` : ''].filter(Boolean).join(' · '));
     } catch (e) { setError(`${(e as Error).message || '파일을 읽지 못했어요.'}${added ? ` (${added}장까지 넣음)` : ''}`); }
     finally { setFiles(now); setPending(false); }
   };
