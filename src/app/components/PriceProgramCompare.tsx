@@ -55,7 +55,8 @@ export function ProgramCompare() {
   const allRows = compareRows(a?.items, b?.items);
   const rows = onlyDiff ? allRows.filter(r => !r.same) : allRows;
   // 다른 것만 강조: 횟수는 상대 칸과 다를 때만, 작은 줄(+ 추가 시술 등)은 상대 칸에 없을 때만 — 좌우 같은 색
-  const tcell = (c: Cell | null, o: Cell | null) => <td>{c ? <><b className={o && o.count === c.count ? undefined : 'is-d'}>{c.count}</b>{c.subs.map((t, k) => <small key={k} className={o?.subs.includes(t) ? undefined : 'is-d'}>{t}</small>)}</> : '—'}</td>;
+  // 다른 것만 강조(2026-11-27 사용자 그림): 횟수가 다르면 양쪽 칸 모두('—' 포함) 같은 연한 바탕, 같은 횟수는 기본 — 한쪽에만 있는 작은 줄(+ 추가 시술 등)만 작은 연한 바탕
+  const tcell = (c: Cell | null, o: Cell | null) => { const diff = (c?.count ?? null) !== (o?.count ?? null); return <td><div className={diff ? 'pct-v is-d' : 'pct-v'}>{c ? <><b>{c.count}</b>{c.subs.map((t, k) => <small key={k} className={o?.subs.includes(t) ? undefined : 'is-d'}>{t}</small>)}</> : <b>—</b>}</div></td>; };
   const eng = CAT_EN[category];
   return <div className="pc-wrap">
     <div className="pcz">
