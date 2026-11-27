@@ -145,9 +145,17 @@ export function ProgramCompare() {
 // 줄바꿈도 문단으로(2026-11-27 사용자 보톡스 설명 — 줄마다 그대로)
 const sentences = (t: string) => t.split(/\n+|(?<=[.。])\s+/).map(x => x.trim()).filter(Boolean);
 // 빈 줄로 나눈 묶음은 묶음끼리만 띄우고 묶음 안 줄은 붙여서(2026-11-27 사용자 그림 — 보톡스 설명 두 줄씩)
-const descView = (t: string, under = false) => (/\n/.test(t) // 줄바꿈으로 쓴 글은 줄을 붙이고 빈 줄에서만 띄움
-  ? t.split(/\n\s*\n/).map((g, k, all) => <div key={k} className={under && all.length > 1 && k === all.length - 1 ? 'pcz-dg is-u' : 'pcz-dg'}>{sentences(g).map((x, j) => <p key={j}><span>{x}</span></p>)}</div>)
-  : sentences(t).map((x, k) => <p key={k}>{x}</p>));
+// '▸ 제목'으로 시작하는 묶음은 눌러서 펼쳐 보는 칸(2026-11-28 사용자 '수입 필러를 권유하는 이유 펼쳐 볼 수 있게'), 형광펜은 펼침 칸 말고 마지막 묶음에
+const MORE = /^\s*▸\s*/;
+const descView = (t: string, under = false) => {
+  if (!/\n/.test(t)) return sentences(t).map((x, k) => <p key={k}>{x}</p>);
+  const gs = t.split(/\n\s*\n/), plain = gs.map((g, k) => (MORE.test(g) ? -1 : k)).filter(k => k >= 0);
+  const last = plain.length > 1 ? plain[plain.length - 1] : -1;
+  return gs.map((g, k) => {
+    if (MORE.test(g)) { const [head, ...rest] = g.replace(MORE, '').split('\n'); return <details key={k} className="pcz-more"><summary>{head.trim()}</summary><div className="pcz-dg">{sentences(rest.join('\n')).map((x, j) => <p key={j}><span>{x}</span></p>)}</div></details>; }
+    return <div key={k} className={under && k === last ? 'pcz-dg is-u' : 'pcz-dg'}>{sentences(g).map((x, j) => <p key={j}><span>{x}</span></p>)}</div>;
+  });
+};
 // 편집 목록의 횟수 글자(숫자면 N회, 아니면 적은 글자) — 2026-11-27 빠져서 [편집]이 흰 화면이 되던 것 되살림
 // 이름은 '+ 시술'·'(대표 원장님)' 묶음 사이에서만 줄바꿈(2026-11-27 사용자 '문장 띄어쓰기' — '(대표 / 원장님)'처럼 끊기지 않게)
 // '추가 관리'·흑자 크기 '(1cm 이하)'는 이름 아래 작은 연회색 줄로(2026-11-27 사용자 — 오른쪽 제목이 길어지지 않게)
