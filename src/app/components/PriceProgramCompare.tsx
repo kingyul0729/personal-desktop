@@ -133,7 +133,7 @@ export function ProgramCompare() {
         </table>
       </section>
       {pair.some(p => p?.desc) && <section className="pcz-box pcz-desc pcz-desc2">
-        {pair.map((p, i) => <div key={i} className={i ? "is-b" : "is-a"}><h5>{title(p)}</h5>{p?.desc ? sentences(p.desc).map((t, k) => <p key={k}>{t}</p>) : <p className="is-empty">—</p>}</div>)}
+        {pair.map((p, i) => <div key={i} className={i ? "is-b" : "is-a"}><h5>{title(p)}</h5>{p?.desc ? descView(p.desc) : <p className="is-empty">—</p>}</div>)}
       </section>}
     </div>
   </div>;
@@ -141,6 +141,10 @@ export function ProgramCompare() {
 // 설명은 원문 그대로, 문장마다 문단으로 나눔(2026-11-26 밤 사용자 그림)
 // 줄바꿈도 문단으로(2026-11-27 사용자 보톡스 설명 — 줄마다 그대로)
 const sentences = (t: string) => t.split(/\n+|(?<=[.。])\s+/).map(x => x.trim()).filter(Boolean);
+// 빈 줄로 나눈 묶음은 묶음끼리만 띄우고 묶음 안 줄은 붙여서(2026-11-27 사용자 그림 — 보톡스 설명 두 줄씩)
+const descView = (t: string) => (/\n\s*\n/.test(t)
+  ? t.split(/\n\s*\n/).map((g, k) => <div key={k} className="pcz-dg">{sentences(g).map((x, j) => <p key={j}>{x}</p>)}</div>)
+  : sentences(t).map((x, k) => <p key={k}>{x}</p>));
 // 편집 목록의 횟수 글자(숫자면 N회, 아니면 적은 글자) — 2026-11-27 빠져서 [편집]이 흰 화면이 되던 것 되살림
 // 이름은 '+ 시술'·'(대표 원장님)' 묶음 사이에서만 줄바꿈(2026-11-27 사용자 '문장 띄어쓰기' — '(대표 / 원장님)'처럼 끊기지 않게)
 // '추가 관리'·흑자 크기 '(1cm 이하)'는 이름 아래 작은 연회색 줄로(2026-11-27 사용자 — 오른쪽 제목이 길어지지 않게)

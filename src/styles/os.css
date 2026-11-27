@@ -3648,3 +3648,4 @@ button.iv-pinv { cursor: zoom-in; }
 .pct th[scope="row"] .pc-sub { display: block; }
 .pct td .pct-v small:only-of-type:not(.is-d) { color: #9aa0a8; }
 .pcz .pcz-card .pcz-note { border-top: 0; }
+.pcz-desc2 .pcz-dg { display: grid; gap: 2px; }
