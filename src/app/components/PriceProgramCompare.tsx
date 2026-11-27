@@ -88,7 +88,6 @@ export function ProgramCompare() {
   const pq = picoQty(sizes);
   const fixPico = (c: Cell | null, p?: Program) => (!c ? c : p?.id === LENTIGO_ID ? { count: pq != null ? `${pq}회` : c.count, subs: [`(${lentigoCount(cnt)}개)`] } : { count: `${addN(p) || 1}회`, subs: [`(${c.count})`] });
   const allRows2 = lmode ? allRows.map(r => (r.name === PICO_ROW ? { ...r, a: fixPico(r.a, pair[0]), b: fixPico(r.b, pair[1]) } : r)) : allRows;
-  const bothPico = lmode && allRows2.some(r => r.name === PICO_ROW && r.a && r.b);
   const rows = onlyDiff ? allRows2.filter(r => !r.same) : allRows2;
   // 다른 것만 강조: 횟수는 상대 칸과 다를 때만, 작은 줄(+ 추가 시술 등)은 상대 칸에 없을 때만 — 좌우 같은 색
   // 다른 것만 강조(2026-11-27 사용자 그림): 횟수가 다르면 양쪽 칸 모두('—' 포함) 같은 연한 바탕, 같은 횟수는 기본 — 한쪽에만 있는 작은 줄(+ 추가 시술 등)만 작은 연한 바탕
@@ -133,7 +132,6 @@ export function ProgramCompare() {
           </tbody>
         </table>
       </section>
-      {bothPico && <p className="pcz-foot">흑자 제거는 두 구성 모두 PICO 532로 진행합니다.</p>}
       {pair.some(p => p?.desc) && <section className="pcz-box pcz-desc pcz-desc2">
         {pair.map((p, i) => <div key={i} className={i ? "is-b" : "is-a"}><h5>{title(p)}</h5>{p?.desc ? sentences(p.desc).map((t, k) => <p key={k}>{t}</p>) : <p className="is-empty">—</p>}</div>)}
       </section>}
