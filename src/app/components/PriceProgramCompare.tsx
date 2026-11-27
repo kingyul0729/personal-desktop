@@ -59,6 +59,8 @@ export function ProgramCompare() {
   const b = listB.find(p => p.id === pick[1]) ?? (listB === list ? list[1] ?? list[0] : listB[0]);
   // 라인 요약은 서로 다른 라인끼리 비교할 때만(2026-11-26 사용자 '다른 라인끼리면 라인 요약도')
   const lineDiff = !!a?.line && !!b?.line && a.line !== b.line;
+  // 구성 없는 프로그램끼리(보톡스, 2026-11-27 사용자 그림): 시술 구성 상자·카드 라인 이름표 없이, 설명 제목 = 시술 이름 + 라인 이름, 마지막 설명 묶음(톡신 설명)에 밑줄
+  const noItems = !a?.items?.length && !b?.items?.length && a?.id !== LENTIGO_ID && b?.id !== LENTIGO_ID;
   const choose = (i: 0 | 1, id: string) => setPick(p => { const n: [string, string] = [a?.id ?? '', b?.id ?? '']; n[i] = id; return n; });
 
   if (error) return <div className="pb-empty">{error}</div>;
@@ -107,7 +109,7 @@ export function ProgramCompare() {
             {lt.off ? <span>할인 {Math.round((lt.rate ?? 0) * 100)}% −{won(lt.off)}</span> : null}
             <button type="button" className="pcz-set" aria-expanded={setting} onClick={() => setSetting(v => !v)}>개수·크기 설정</button>
           </div> : null}
-          <div className="pcz-feat">{lineDiff && p?.line ? <span className="pcz-tag">{p.line}</span> : null}</div>
+          <div className="pcz-feat">{lineDiff && p?.line && !noItems ? <span className="pcz-tag">{p.line}</span> : null}</div>
         </div>)}
       </div>
       {lmode && setting && <section className="pcz-box pcz-cnt">
@@ -134,7 +136,7 @@ export function ProgramCompare() {
         </table>
       </section> : null}
       {pair.some(p => p?.desc) && <section className="pcz-box pcz-desc pcz-desc2">
-        {pair.map((p, i) => <div key={i} className={i ? "is-b" : "is-a"}><h5>{title(p)}</h5>{p?.desc ? descView(p.desc) : <p className="is-empty">—</p>}</div>)}
+        {pair.map((p, i) => <div key={i} className={i ? "is-b" : "is-a"}><h5>{noItems && p?.line ? <>{nameParts(p.name.replace(/\s*\([^()]*\)$/, ''))} <span className="pc-nw">{p.line}</span></> : title(p)}</h5>{p?.desc ? descView(p.desc, noItems) : <p className="is-empty">—</p>}</div>)}
       </section>}
     </div>
   </div>;
@@ -143,8 +145,8 @@ export function ProgramCompare() {
 // 줄바꿈도 문단으로(2026-11-27 사용자 보톡스 설명 — 줄마다 그대로)
 const sentences = (t: string) => t.split(/\n+|(?<=[.。])\s+/).map(x => x.trim()).filter(Boolean);
 // 빈 줄로 나눈 묶음은 묶음끼리만 띄우고 묶음 안 줄은 붙여서(2026-11-27 사용자 그림 — 보톡스 설명 두 줄씩)
-const descView = (t: string) => (/\n/.test(t) // 줄바꿈으로 쓴 글은 줄을 붙이고 빈 줄에서만 띄움
-  ? t.split(/\n\s*\n/).map((g, k) => <div key={k} className="pcz-dg">{sentences(g).map((x, j) => <p key={j}>{x}</p>)}</div>)
+const descView = (t: string, under = false) => (/\n/.test(t) // 줄바꿈으로 쓴 글은 줄을 붙이고 빈 줄에서만 띄움
+  ? t.split(/\n\s*\n/).map((g, k, all) => <div key={k} className={under && all.length > 1 && k === all.length - 1 ? 'pcz-dg is-u' : 'pcz-dg'}>{sentences(g).map((x, j) => <p key={j}>{x}</p>)}</div>)
   : sentences(t).map((x, k) => <p key={k}>{x}</p>));
 // 편집 목록의 횟수 글자(숫자면 N회, 아니면 적은 글자) — 2026-11-27 빠져서 [편집]이 흰 화면이 되던 것 되살림
 // 이름은 '+ 시술'·'(대표 원장님)' 묶음 사이에서만 줄바꿈(2026-11-27 사용자 '문장 띄어쓰기' — '(대표 / 원장님)'처럼 끊기지 않게)

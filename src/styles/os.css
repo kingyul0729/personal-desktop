@@ -3649,3 +3649,4 @@ button.iv-pinv { cursor: zoom-in; }
 .pct td .pct-v small:only-of-type:not(.is-d) { color: #9aa0a8; }
 .pcz .pcz-card .pcz-note { border-top: 0; }
 .pcz-desc2 .pcz-dg { display: grid; gap: 2px; }
+.pcz-desc2 .pcz-dg.is-u p { text-decoration: underline; text-decoration-color: #9aa0a8; text-decoration-thickness: 1px; text-underline-offset: 5px; }
