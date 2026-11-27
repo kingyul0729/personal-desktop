@@ -61,7 +61,7 @@ export function ProgramCompare() {
   const rows = onlyDiff ? allRows.filter(r => !r.same) : allRows;
   // 다른 것만 강조: 횟수는 상대 칸과 다를 때만, 작은 줄(+ 추가 시술 등)은 상대 칸에 없을 때만 — 좌우 같은 색
   // 다른 것만 강조(2026-11-27 사용자 그림): 횟수가 다르면 양쪽 칸 모두('—' 포함) 같은 연한 바탕, 같은 횟수는 기본 — 한쪽에만 있는 작은 줄(+ 추가 시술 등)만 작은 연한 바탕
-  const tcell = (c: Cell | null, o: Cell | null) => { const diff = (c?.count ?? null) !== (o?.count ?? null); return <td><div className={diff ? 'pct-v is-d' : 'pct-v'}>{c ? <><b>{c.count}</b>{c.subs.map((t, k) => <small key={k} className={o?.subs.includes(t) ? undefined : 'is-d'}>{t}</small>)}</> : <b>—</b>}</div></td>; };
+  const tcell = (c: Cell | null, o: Cell | null) => { const diff = (c?.count ?? null) !== (o?.count ?? null); return <td><div className={diff ? 'pct-v is-d' : 'pct-v'}>{c ? <><b>{c.count}</b>{c.subs.map((t, k) => <small key={k} className={o?.subs.includes(t) ? undefined : 'is-d'}>{t}</small>)}</> : <b className="is-none">—</b>}</div></td>; };
   const eng = CAT_EN[category];
   return <div className="pc-wrap">
     <div className="pcz">
@@ -98,7 +98,9 @@ export function ProgramCompare() {
 const sentences = (t: string) => t.split(/(?<=[.。])\s+/).map(x => x.trim()).filter(Boolean);
 // 편집 목록의 횟수 글자(숫자면 N회, 아니면 적은 글자) — 2026-11-27 빠져서 [편집]이 흰 화면이 되던 것 되살림
 // 이름은 '+ 시술'·'(대표 원장님)' 묶음 사이에서만 줄바꿈(2026-11-27 사용자 '문장 띄어쓰기' — '(대표 / 원장님)'처럼 끊기지 않게)
-const nameView = (n?: string) => (n ? n.split(/\s+(?=\+\s|\()/).map((t, k) => <Fragment key={k}>{k ? ' ' : ''}<span className="pc-nw">{t}</span></Fragment>) : null);
+// '추가 관리'는 이름 아래 작은 줄로(2026-11-27 사용자 — 오른쪽 제목이 길어지지 않게)
+const nameView = (n?: string) => { if (!n) return null; const m = n.match(/^(.+?)\s+(추가 관리.*)$/); return m ? <>{nameParts(m[1])}<small className="pc-sub">{m[2]}</small></> : nameParts(n); };
+const nameParts = (n?: string) => (n ? n.split(/\s+(?=\+\s|\()/).map((t, k) => <Fragment key={k}>{k ? ' ' : ''}<span className="pc-nw">{t}</span></Fragment>) : null);
 const itemText = (i: { qty: number | null; label?: string }) => (i.qty != null ? `${i.qty}회` : i.label || '포함');
 const CAT_EN: Record<string, string> = { 색소: 'PIGMENT', 홍조: 'REDNESS', 여드름: 'ACNE', 흉터: 'SCAR', 모공: 'PORE', 리프팅: 'LIFTING', 스킨부스터: 'SKIN BOOSTER', 보톡스: 'BOTOX', 필러: 'FILLER' };
 

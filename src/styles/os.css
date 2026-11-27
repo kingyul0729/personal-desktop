@@ -3616,3 +3616,12 @@ button.iv-pinv { cursor: zoom-in; }
 .pct td small.is-d { display: table; margin: 4px auto 0; }
 /* 프로그램 이름 묶음은 한 줄로(2026-11-27 '(대표 원장님)' 끊김) */
 .pc-nw { white-space: nowrap; }
+/* 시술 구성 표 정리(2026-11-27 사용자): 숫자 뒤 색 바탕 없음, 흰 바탕 + 줄 사이 옅은 가로선만,
+   가운데 시술명 왼쪽 정렬, 좌우 횟수 같은 크기·굵기 가운데, 없는 항목 '—'만 연한 회색, '추가 관리'는 이름 아래 작게 */
+.pct .pct-v, .pct .pct-v.is-d { background: none; padding: 4px; }
+.pct td b, .pct .pct-v.is-d b { color: #1f2328; font-weight: 600; }
+.pct td b.is-none, .pct .pct-v.is-d b.is-none { color: #c3c8cf; font-weight: 400; }
+.pct td small, .pct td small.is-d { display: block; margin: 2px 0 0; padding: 0; background: none; border-radius: 0; color: #6b7280; font-weight: 500; }
+.pct tbody th[scope="row"], .pct thead th:nth-child(2) { text-align: left; }
+.pct td { text-align: center; }
+.pc-sub { display: block; margin-top: 2px; font-size: 13px; font-weight: 500; color: #7D838B; white-space: nowrap; }
