@@ -3612,3 +3612,5 @@ button.iv-pinv { cursor: zoom-in; }
   .pb-print-root { display: block !important; page: sheet; width: 100%; height: 100vh; break-inside: avoid; }
   .pb-print-root img { display: block; width: 100%; height: 100%; object-fit: contain; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
+/* 2026-11-27 사용자 '각각': 더해진 시술은 한 줄에 하나씩 */
+.pct td small.is-d { display: table; margin: 4px auto 0; }

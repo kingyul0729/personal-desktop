@@ -5,7 +5,7 @@
 // ④ 서비스(이름 끝 'S.V')는 같은 시술 줄에서 횟수 아래 '서비스'
 // 특정 프로그램 이름을 보지 않고 시술 이름만으로 정함 — 어떤 두 프로그램이든 같은 규칙.
 export type CompareItem = { name: string; qty: number | null; label?: string };
-type Entry = { tokens: string[]; qty: number | null; label?: string; service: boolean; solo: boolean; detail?: string };
+type Entry = { tokens: string[]; qty: number | null; label?: string; service: boolean; sv: string[]; solo: boolean; detail?: string };
 export type Cell = { count: string; subs: string[] };
 export type CompareRow = { name: string; a: Cell | null; b: Cell | null; same: boolean };
 
@@ -23,12 +23,16 @@ export function entriesOf(items: CompareItem[] = []): Entry[] {
   const raw: Entry[] = [];
   for (const it of items) {
     let service = false;
+    const sv: string[] = [];
     const tokens = it.name.split(/\s*\+\s*/).map(t => t.trim()).filter(Boolean).map(t => {
-      if (SV.test(t)) { service = true; t = t.replace(SV, ''); }
-      return norm(t);
+      const s = SV.test(t);
+      if (s) { service = true; t = t.replace(SV, ''); }
+      t = norm(t);
+      if (s) sv.push(t);
+      return t;
     });
     if (!tokens.length) continue;
-    raw.push({ tokens, qty: it.qty, ...(it.qty == null ? { label: it.label || '포함' } : {}), service, solo: !service && tokens.length === 1 && CARE.has(tokens[0]) }); // 서비스(S.V) 관리는 '단독' 아님 — 리프팅 'LDM 트리플 S.V'
+    raw.push({ tokens, qty: it.qty, ...(it.qty == null ? { label: it.label || '포함' } : {}), service, sv, solo: !service && tokens.length === 1 && CARE.has(tokens[0]) }); // 서비스(S.V) 관리는 '단독' 아님 — 리프팅 'LDM 트리플 S.V'
   }
   // ③ 관리(LDM 트리플·비타민 관리)는 함께 하는 레이저에서 떼어 따로 한 줄(총횟수) — 2026-11-26 밤 사용자 그림('시술구성 표 방식'),
   //    단독과 병행이 같이 있으면 아래 세부('○○ 병행 5 · 단독 5'), 단독만이면 '단독'
@@ -41,7 +45,7 @@ export function entriesOf(items: CompareItem[] = []): Entry[] {
     const total = all.every(e => e.qty != null) ? all.reduce((s, e) => s + (e.qty ?? 0), 0) : null;
     const soloQty = solo.reduce((s, e) => s + (e.qty ?? 0), 0);
     const detail = solo.length && total != null ? [...paired.map(e => `${e.tokens.filter(t => t !== care).join(' + ')} 병행 ${e.qty}`), `단독 ${soloQty}`].join(' · ') : undefined;
-    careRows.push({ tokens: [care], qty: total, ...(total == null ? { label: '포함' } : {}), service: false, solo: false, ...(detail ? { detail } : {}) });
+    careRows.push({ tokens: [care], qty: total, ...(total == null ? { label: '포함' } : {}), service: false, sv: [], solo: false, ...(detail ? { detail } : {}) });
     for (const e of paired) e.tokens = e.tokens.filter(t => t !== care);
     for (const e of solo) raw.splice(raw.indexOf(e), 1);
   }
@@ -57,8 +61,8 @@ export function entriesOf(items: CompareItem[] = []): Entry[] {
 }
 
 const subsOf = (e: Entry, extra: string[]) => [
-  ...extra.map(t => `+ ${t}`),
-  ...(e.service ? ['서비스'] : []),
+  ...extra.map(t => `+ ${t}${e.sv.includes(t) ? ' S/V' : ''}`), // 한쪽에만 더해진 시술의 S.V는 이름 옆 'S/V'(2026-11-27 사용자 '서브시전은 S/V 유무 표기')
+  ...(e.service && e.sv.some(t => !extra.includes(t)) ? ['서비스'] : []),
   ...(e.detail ? e.detail.split(' · ') : e.solo ? ['단독'] : []),
 ];
 const cellText = (c: Cell | null) => (c ? [c.count, ...c.subs].join('/') : '—');

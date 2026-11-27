@@ -51,3 +51,10 @@ test('user 11-27: 리프팅 S.V 관리는 서비스만(단독 아님), 샷 수�
   assert.deepEqual(ldm.b, { count: '1회', subs: ['서비스'] });
   assert.equal(rows.find(r => r.name === '울쎄라').same, true);
 });
+
+test('user 11-27: 한쪽에만 더해진 시술은 각각, S.V는 이름 옆 S/V', () => {
+  const rows = compareRows([{ name: '피코프락셀', qty: 5 }], [{ name: '피코프락셀 + CROSS + 서브시전 S.V', qty: 5 }]);
+  assert.deepEqual(rows[0].b.subs, ['+ CROSS', '+ 서브시전 S/V']);
+  const r2 = compareRows([{ name: '피코프락셀 + CROSS', qty: 5 }], [{ name: '피코프락셀 + CROSS + 서브시전', qty: 5 }]);
+  assert.deepEqual(r2[0].b.subs, ['+ 서브시전']);
+});
