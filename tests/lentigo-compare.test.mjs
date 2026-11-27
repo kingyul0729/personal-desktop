@@ -24,7 +24,7 @@ test('user 11-27: 흑자 개별 제거 — 크기별 개수 × 등록 금액, �
   const sizes = L.lentigoSizes(list);
   assert.deepEqual(sizes.map(z => z.size), ['1cm 이하', '1cm 초과 ~ 2cm 이하']);
   const v = L.lentigoProgram(sizes, { s1: 3, s2: 1 });
-  assert.equal(v.price, 33 * 3 + 44);
+  assert.equal(v.price, Math.round((33 * 3 + 44) * 0.7)); // 4개 → 30% 할인
   assert.deepEqual(v.items, [{ name: L.PICO_ROW, qty: null, label: '선택한 흑자 4개' }, { name: '레블라이트 SI', qty: 4 }]);
   assert.deepEqual(L.withLentigo(list, v).map(p => p.id), ['a', 'b', 'lentigo']);
   const other = L.withPicoRow(list[1]);
@@ -34,4 +34,22 @@ test('user 11-27: 흑자 개별 제거 — 크기별 개수 × 등록 금액, �
   assert.equal(rows.find(x => x.name === '레블라이트 SI').a.count, '4회');
   assert.deepEqual(L.extraSplit(list[1], list), { base: 1000, extra: 100 });
   assert.equal(L.extraSplit(list[0], list), null);
+});
+
+test('user 11-27: 흑자 개수 할인 — 크기 무관 전체 개수, 정상 총액에 한 번, 5개 이상은 확인 필요', () => {
+  const sizes = L.lentigoSizes(list);
+  assert.deepEqual([1, 2, 3, 4, 5].map(L.lentigoRate), [0, 0.1, 0.2, 0.3, null]);
+  assert.deepEqual(L.lentigoTotal(sizes, { s1: 1 }), { n: 1, normal: 33, rate: 0, off: 0, final: 33 });
+  assert.deepEqual(L.lentigoTotal(sizes, { s1: 1, s2: 1 }), { n: 2, normal: 77, rate: 0.1, off: 8, final: 69 });
+  const five = L.lentigoTotal(sizes, { s1: 3, s2: 2 });
+  assert.equal(five.normal, 187); assert.equal(five.final, null); assert.equal(five.off, null);
+  assert.equal(L.lentigoProgram(sizes, { s1: 5 }).price, null);
+});
+
+test('user 11-27: 스페셜 토닝 기본형 ↔ 추가 관리(1개) — 등록 금액만, 두 번 더하지 않음', () => {
+  const ap = L.addonPair(list[0], list);
+  assert.equal(ap.base.id, 'a'); assert.equal(ap.plus.id, 'b');
+  assert.equal(L.addonPair(list[1], list).base.id, 'a');
+  assert.equal(ap.plus.price, 1100);
+  assert.equal(L.addonPair(list[2], list), null);
 });

@@ -3634,3 +3634,13 @@ button.iv-pinv { cursor: zoom-in; }
 .pcz-cnt-row b { text-align: center; font-variant-numeric: tabular-nums; }
 .pcz-cnt-row button { width: 32px; height: 32px; display: grid; place-items: center; border: 1px solid #d5dce4; border-radius: 8px; background: #fff; color: #44617c; cursor: pointer; }
 .pcz-gap { margin: 4px 0 0; text-align: center; font-size: 16px; color: #5b6168; } .pcz-gap b { color: #1f2328; font-size: 18px; margin: 0 4px; }
+/* 흑자 개별 제거 v2(2026-11-27 사용자): 개수 설정은 버튼을 눌렀을 때만 따로 카드, 할인 풀이·토닝 추가 체크 */
+.pcz-box.pcz-cnt { max-width: none; margin-top: 0; padding: 16px 20px; border-radius: 12px; gap: 10px; }
+.pcz-box.pcz-cnt .pcz-cnt-row { max-width: 460px; }
+.pcz-done { height: 36px; padding: 0 16px; border: 0; border-radius: 999px; background: #44617c; color: #fff; font: inherit; font-weight: 600; cursor: pointer; }
+.pcz-cnt-sum { margin: 2px 0 0; font-size: 14px; color: #6b7280; }
+.pcz-calc { color: #44617c; font-weight: 600; }
+.pcz-price strong.is-check { font-size: 20px; color: #6b7280; }
+.pcz-add { display: inline-flex; align-items: center; gap: 6px; color: #44617c; font-weight: 600; cursor: pointer; }
+.pcz-add input { width: 18px; height: 18px; accent-color: #44617c; }
+.pcz-gap small { font-size: 13px; color: #9aa0a8; }
