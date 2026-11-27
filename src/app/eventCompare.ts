@@ -8,6 +8,7 @@ import { prepaidDiscountRates, type PrepaidTier } from './prepaid.ts';
 import type { Cell, CompareRow } from './programCompare.ts';
 
 export const EVENT_CAT = '이벤트';
+export const PREPAID_CAT = '선결제'; // 탭 고르기에만 있는 가상 탭(저장 자료 없음)
 export const TIERS: PrepaidTier[] = [300, 400, 500];
 type P = { id: string; category: string; name: string; price: number | null; line?: string; fit?: string };
 

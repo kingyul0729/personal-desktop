@@ -4,7 +4,7 @@ import { KittyDialog } from './KittyDialog';
 import { askConfirm } from './AlertDialog';
 import { SavingMark } from './Feedback';
 import { compareRows, type Cell } from '../programCompare';
-import { EVENT_CAT, HIDDEN, TIERS, cellDiff, eventGroups, includeOnly, liveEvents, manwon, rowDiff, sameAll, tierPrice } from '../eventCompare';
+import { EVENT_CAT, PREPAID_CAT, HIDDEN, TIERS, cellDiff, eventGroups, includeOnly, liveEvents, manwon, rowDiff, sameAll, tierPrice } from '../eventCompare';
 import type { PrepaidTier } from '../prepaid';
 import { LENTIGO_ID, PICO_ROW, addonPair, lentigoCount, lentigoProgram, lentigoSizes, lentigoTotal, picoQty, withLentigo, withPicoRow } from '../lentigoCompare';
 
@@ -42,7 +42,7 @@ export function ProgramCompare() {
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [setting, setSetting] = useState(false);
   useEffect(() => { loadPrograms().then(setData).catch(e => setError((e as Error).message)); }, []);
-  const cats = useMemo(() => Array.from(new Set((programs ?? []).map(p => p.category))), [programs]);
+  const cats = useMemo(() => { const c = Array.from(new Set((programs ?? []).map(p => p.category))); return c.length ? [...c, PREPAID_CAT] : c; }, [programs]); // '선결제' = 정가 | 선결제권 할인 비교(2026-11-28 사용자 '선결제 비교 탭 추가')
   const category = cats.includes(cat) ? cat : cats[0] ?? '';
   useEffect(() => { if (category) { try { localStorage.setItem('price-compare-cat', category); } catch { /* 이 기기 편의 */ } } }, [category]);
   const raw = (programs ?? []).filter(p => p.category === category);
@@ -70,6 +70,7 @@ export function ProgramCompare() {
 
   if (error) return <div className="pb-empty">{error}</div>;
   if (!programs) return <div className="pb-empty"><SavingMark /></div>;
+  if (category === PREPAID_CAT) return <PrepaidCompare programs={programs} cats={cats} onCat={c => { setCat(c); setPick(['', '']); }} />;
   if (category === EVENT_CAT) return <EventCompare programs={programs} lines={data?.lines ?? []} onData={setData} cats={cats} onCat={c => { setCat(c); setPick(['', '']); }} />;
   if (!list.length) return <div className="pb-empty">기록 없음</div>;
   const lmode = a?.id === LENTIGO_ID || b?.id === LENTIGO_ID;
@@ -176,7 +177,7 @@ function EventCompare({ programs, lines, onData, cats, onCat }: { programs: Prog
   const a = o?.program, b = others.find(p => p.id === pid) ?? others[0];
   const base0 = g?.options[0]?.program.price ?? null;
   const optText = (x: { label: string; program: Program }, k: number) => `${x.label || '기본'}${k === 0 ? (g!.options.some(y => y.program.price !== base0) ? ' · 기본' : '') : x.program.price != null && base0 != null && x.program.price !== base0 ? ` · ${x.program.price > base0 ? '+' : '−'}${won(Math.abs(x.program.price - base0))}` : ''}`;
-  const rows0 = compareRows(a?.items, b?.items);
+  const rows0 = compareRows(a?.items, b?.items).map(r => ({ ...r, a: r.a && { ...r.a, subs: r.a.subs.filter(t => t !== '단독') }, b: r.b && { ...r.b, subs: r.b.subs.filter(t => t !== '단독') } })); // 이벤트 비교는 '단독' 글자 없이(2026-11-28 사용자)
   const allRows = b?.category === '리프팅' ? includeOnly(rows0) : rows0; // 리프팅과 비교할 때 LDM 트리플·스킨보톡스·스킨부스터는 '포함'
   const same = sameAll(allRows);
   const rows = onlyDiff ? allRows.filter(rowDiff) : allRows;
@@ -223,6 +224,37 @@ function EventCompare({ programs, lines, onData, cats, onCat }: { programs: Prog
         </>}
       </section> : null}
       </>}
+    </div>
+  </div>;
+}
+// 선결제 비교(2026-11-28 사용자 그림 '선결제 비교 탭 추가'): 왼쪽 '전체 프로그램' 정가 | 오른쪽 '선결제권' 300·400·500만원권 할인 — 시술 구성 표 없음
+function PrepaidCompare({ programs, cats, onCat }: { programs: Program[]; cats: string[]; onCat: (c: string) => void }) {
+  const list = useMemo(() => programs.filter(p => p.category !== EVENT_CAT), [programs]);
+  const groups = Array.from(new Set(list.map(p => p.category)));
+  const [pick, setPick] = useState<[string, string]>(['', '']); const [tier, setTier] = useState<PrepaidTier>(300);
+  const a = list.find(p => p.id === pick[0]) ?? list[0];
+  const b = list.find(p => p.id === pick[1]) ?? a; // 처음엔 오른쪽도 같은 프로그램
+  const opts = () => groups.map(c => <optgroup key={c} label={c}>{list.filter(p => p.category === c).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</optgroup>);
+  return <div className="pc-wrap">
+    <div className="pcz pcz-ev">
+      <div className="pcz-top">
+        <label className="pc-cat"><select value={PREPAID_CAT} aria-label="탭" onChange={e => onCat(e.target.value)}>{cats.map(c => <option key={c} value={c}>{c}</option>)}</select></label>
+      </div>
+      <header className="pcz-title"><small>PREPAID</small><h3><i />선결제권 비교<i /></h3></header>
+      {!list.length ? <div className="pb-empty">기록 없음</div> : <div className="pcz-two">
+        <div className="pcz-card is-a">
+          <span className="pcz-kind">전체 프로그램</span>
+          <label className="pcz-pick"><b>{nameView(a?.name)}</b><ChevronDown size={18} /><select value={a?.id ?? ''} aria-label="프로그램 1" onChange={e => setPick(p => [e.target.value, p[1]])}>{opts()}</select></label>
+          <div className="pcz-opt is-empty" />
+          <div className="pcz-price"><strong>{won(a?.price ?? null)}</strong><small>부가세 포함</small></div>
+        </div>
+        <div className="pcz-card is-b">
+          <span className="pcz-kind">선결제권</span>
+          <label className="pcz-pick"><b>{nameView(b?.name)}</b><ChevronDown size={18} /><select value={b?.id ?? ''} aria-label="프로그램 2" onChange={e => setPick(p => [p[0] || (a?.id ?? ''), e.target.value])}>{opts()}</select></label>
+          <div className="pcz-tiers" role="group" aria-label="선결제권">{TIERS.map(t => <button key={t} type="button" aria-pressed={tier === t} className={tier === t ? 'is-on' : undefined} onClick={() => setTier(t)}>{t}만원권</button>)}</div>
+          <div className="pcz-price"><strong>{won(tierPrice(b?.price ?? null, tier))}</strong><small>{b?.price != null ? `정가 ${won(b.price)} · ` : ''}부가세 포함</small></div>
+        </div>
+      </div>}
     </div>
   </div>;
 }
