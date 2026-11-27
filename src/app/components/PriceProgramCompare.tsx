@@ -5,7 +5,7 @@ import { askConfirm } from './AlertDialog';
 import { SavingMark } from './Feedback';
 import { readWon } from '../koreanAmount';
 import { compareRows, type Cell } from '../programCompare';
-import { LENTIGO_ID, PICO_ROW, addonPair, extraSplit, lentigoCount, lentigoParts, lentigoProgram, lentigoSizes, lentigoTotal, withLentigo, withPicoRow } from '../lentigoCompare';
+import { LENTIGO_ID, PICO_ROW, addonPair, extraSplit, lentigoCount, lentigoParts, lentigoProgram, lentigoSizes, lentigoTotal, picoQty, withLentigo, withPicoRow } from '../lentigoCompare';
 
 // 프로그램 비교(2026-11-26 사용자 그림·밤 공통 기준, 상담용): 탭 고르기 → 가운데 제목 → 프로그램 카드 둘(이름 = 고르기, 가격 알약, 라인이 다르면 라인 이름표 —
 // 두 카드 같은 층 높이·같은 색) → 시술 구성(A 횟수 | 시술 항목 | B 횟수, 줄 만들기는 programCompare.ts) → 안내 한 줄 → 맨 아래 '프로그램 특징'(desc) 좌우.
@@ -65,16 +65,31 @@ export function ProgramCompare() {
   if (!programs) return <div className="pb-empty"><SavingMark /></div>;
   if (!list.length) return <div className="pb-empty">기록 없음</div>;
   const lmode = a?.id === LENTIGO_ID || b?.id === LENTIGO_ID;
+  // 흑자 비교에서 스페셜 토닝 기본형을 고르면 등록된 '추가 관리(1개)'(PICO 532 흑자 제거 추가) 상품으로 보여 줌 — 금액을 따로 더하지 않음
+  const eff = (p?: Program) => { if (!p || !lmode || p.id === LENTIGO_ID) return p; const ap = addonPair(p, raw); return ap && p.id === ap.base.id ? ap.plus as Program : p; };
   const view = (p?: Program) => (p && lmode && p.id !== LENTIGO_ID ? withPicoRow(p) as Program : p);
-  const pair = [a, b] as const;
-  const rows0 = compareRows(view(a)?.items, view(b)?.items, { split: category === '흉터' });
+  const sel = [a?.id ?? '', b?.id ?? ''];
+  const pair = [eff(a), eff(b)] as const;
+  const rows0 = compareRows(view(pair[0])?.items, view(pair[1])?.items, { split: category === '흉터' });
   const allRows = lmode ? [...rows0.filter(r => r.name === PICO_ROW), ...rows0.filter(r => r.name !== PICO_ROW)] : rows0; // 흑자 비교는 PICO 532 줄을 맨 위로
   const step = (id: string, d: number) => setCounts(() => { const n = { ...cnt, [id]: Math.max(0, (cnt[id] ?? 0) + d) }; return lentigoCount(n) ? n : cnt; });
-  const title = (p?: Program) => (p?.id === LENTIGO_ID ? <>{p.name}<small className="pc-sub">흑자 {lentigoCount(cnt)}개</small></> : nameView(p?.name));
+  // 흑자 비교 제목: 이름 + 작은 줄(카드 = 'PICO 532 · 흑자 N개' / 'PICO 532 흑자 제거 추가', 표 머리 = '선택한 흑자 N개' / 'PICO 532 추가')
+  const addN = (p?: Program) => { const m = p?.name.match(/추가 관리\((\d+)개\)/); return m ? Number(m[1]) : 0; };
+  const title = (p?: Program, card = false) => {
+    if (p?.id === LENTIGO_ID) return <>{p.name}<small className="pc-sub">{card ? `PICO 532 · 흑자 ${lentigoCount(cnt)}개` : `선택한 흑자 ${lentigoCount(cnt)}개`}</small></>;
+    const n = lmode ? addN(p) : 0;
+    if (n) return <>{nameParts(p!.name.replace(/\s+추가 관리.*$/, ''))}<small className="pc-sub">{card ? `PICO 532 흑자 제거${n > 1 ? ` ${n}개` : ''} 추가` : `PICO 532${n > 1 ? ` ${n}개` : ''} 추가`}</small></>;
+    return nameView(p?.name);
+  };
   const lt = lentigoTotal(sizes, cnt); // 정상 총액 · 할인율 · 할인 금액 · 최종(5개 이상은 null)
   // 총액 차이 = 두 최종 금액(둘 다 부가세 포함 등록 금액 기준), 흑자 할인 기준이 없으면(5개 이상) 숨김
-  const gap = lmode && a?.price != null && b?.price != null ? Math.abs(a.price - b.price) : null;
-  const rows = onlyDiff ? allRows.filter(r => !r.same) : allRows;
+  const gap = lmode && pair[0]?.price != null && pair[1]?.price != null ? Math.abs(pair[0].price - pair[1].price) : null;
+  // PICO 532 줄: 흑자 쪽 'N개' 아래 'N회', 토닝 쪽 '얼굴 전체' 아래 '추가 금액 반영'
+  const pq = picoQty(sizes);
+  const fixPico = (c: Cell | null, p?: Program) => (!c ? c : p?.id === LENTIGO_ID ? { ...c, subs: pq != null ? [`${pq}회`] : [] } : { ...c, subs: ['추가 금액 반영'] });
+  const allRows2 = lmode ? allRows.map(r => (r.name === PICO_ROW ? { ...r, a: fixPico(r.a, pair[0]), b: fixPico(r.b, pair[1]) } : r)) : allRows;
+  const bothPico = lmode && allRows2.some(r => r.name === PICO_ROW && r.a && r.b);
+  const rows = onlyDiff ? allRows2.filter(r => !r.same) : allRows2;
   // 다른 것만 강조: 횟수는 상대 칸과 다를 때만, 작은 줄(+ 추가 시술 등)은 상대 칸에 없을 때만 — 좌우 같은 색
   // 다른 것만 강조(2026-11-27 사용자 그림): 횟수가 다르면 양쪽 칸 모두('—' 포함) 같은 연한 바탕, 같은 횟수는 기본 — 한쪽에만 있는 작은 줄(+ 추가 시술 등)만 작은 연한 바탕
   const tcell = (c: Cell | null, o: Cell | null) => { const diff = (c?.count ?? null) !== (o?.count ?? null); return <td><div className={diff ? 'pct-v is-d' : 'pct-v'}>{c ? <><b>{c.count}</b>{c.subs.map((t, k) => <small key={k} className={o?.subs.includes(t) ? undefined : 'is-d'}>{t}</small>)}</> : <b className="is-none">—</b>}</div></td>; };
@@ -87,18 +102,15 @@ export function ProgramCompare() {
       <header className="pcz-title">{eng && <small>{eng} PROGRAM</small>}<h3><i />{category} 프로그램 비교<i /></h3></header>
       <div className="pcz-two">
         {pair.map((p, i) => <div key={i} className={`pcz-card ${i ? "is-b" : "is-a"}`}>
-          <label className="pcz-pick"><b>{title(p)}</b><ChevronDown size={18} /><select value={p?.id ?? ''} aria-label={`프로그램 ${i + 1}`} onChange={e => choose(i as 0 | 1, e.target.value)}>{(i ? listB : listA).map(x => <option key={x.id} value={x.id}>{x.name}</option>)}</select></label>
+          <label className="pcz-pick"><b>{title(p, true)}</b><ChevronDown size={18} /><select value={sel[i]} aria-label={`프로그램 ${i + 1}`} onChange={e => choose(i as 0 | 1, e.target.value)}>{(i ? listB : listA).map(x => <option key={x.id} value={x.id}>{x.name}</option>)}</select></label>
           <div className="pcz-price">{p?.id === LENTIGO_ID && lt.final == null ? <strong className="is-check">할인 기준 확인 필요</strong> : <><strong>{won(p?.price ?? null)}</strong><small>(부가세 포함)</small></>}</div>
           {p?.id === LENTIGO_ID ? <div className="pcz-note">
-            <span className="pcz-calc">정상 {won(lt.normal)}{lt.rate != null && <> · 할인 {Math.round(lt.rate * 100)}%{lt.off ? <> −{won(lt.off)}</> : null}</>}</span>
-            <span>{lentigoParts(sizes, cnt).map((x, k) => <Fragment key={k}>{k ? ' + ' : ''}<span className="pc-nw">{x.size} · {won(x.price)} × {x.n}</span></Fragment>)}</span>
+            <span>{lentigoParts(sizes, cnt).map((x, k) => <Fragment key={k}>{k ? ' + ' : ''}<span className="pc-nw">{x.size} · {won(x.price)} × {x.n}개</span></Fragment>)}</span>
+            {lt.off ? <span>할인 {Math.round((lt.rate ?? 0) * 100)}% −{won(lt.off)}</span> : null}
             <button type="button" className="pcz-set" aria-expanded={setting} onClick={() => setSetting(v => !v)}>개수·크기 설정</button>
-          </div> : lmode && p ? (() => {
-            const x = extraSplit(p, raw); const ap = addonPair(p, raw); const on = p.id !== ap?.base.id;
-            return x || ap ? <div className="pcz-note">
-              {x && <span>기본 {won(x.base)} + 추가 {won(x.extra)}</span>}
-              {ap && <label className="pcz-add"><input type="checkbox" checked={on} onChange={e => choose(i as 0 | 1, e.target.checked ? ap.plus.id : ap.base.id)} /> PICO 532 흑자 제거 추가</label>}
-            </div> : null; })() : null}
+          </div> : lmode && p ? (() => { const x = extraSplit(p, raw); return x ? <div className="pcz-note">
+            <span>기본 {won(x.base)} + 흑자 제거 {won(x.extra)}</span><span>추가 금액이 반영된 총액</span>
+          </div> : null; })() : null}
           <div className="pcz-feat">{lineDiff && p?.line ? <span className="pcz-tag">{p.line}</span> : null}</div>
         </div>)}
       </div>
@@ -111,19 +123,20 @@ export function ProgramCompare() {
           <button type="button" aria-label={`${z.size} 더하기`} onClick={() => step(z.id, 1)}><Plus size={15} /></button></div>)}
         <p className="pcz-cnt-sum">전체 {lt.n}개 · {lt.rate == null ? '할인 기준 확인 필요' : lt.rate ? `할인 ${Math.round(lt.rate * 100)}%` : '할인 없음'}</p>
       </section>}
-      {gap != null && <p className="pcz-gap">{gap ? <>총액 차이 <b>{won(gap)}</b> <small>(부가세 포함)</small></> : '총액 같음'}</p>}
+      {gap != null && <p className="pcz-gap">{gap ? <>총액 차이 <b>{won(gap)}</b> {(pair[0]!.price! > pair[1]!.price! ? pair[0] : pair[1])!.name.replace(/\s+추가 관리.*$/, '')} 쪽이 높음</> : '총액 같음'}</p>}
       <section className="pcz-box">
         <div className="pcz-head"><h4>시술 구성</h4>
           <label className="pc-only"><input type="checkbox" checked={onlyDiff} onChange={e => setOnlyDiff(e.target.checked)} /> 차이만 보기</label></div>
         <table className="pct">
           <colgroup><col className="pct-n" /><col /><col className="pct-n" /></colgroup>
-          <thead><tr><th className="is-a">{title(a)}</th><th>시술 항목</th><th className="is-b">{title(b)}</th></tr></thead>
+          <thead><tr><th className="is-a">{title(pair[0])}</th><th>시술 항목</th><th className="is-b">{title(pair[1])}</th></tr></thead>
           <tbody>
-            {rows.map((r, k) => <tr key={k} className={r.same ? undefined : "is-d"}>{tcell(r.a, r.b)}<th scope="row">{r.name}</th>{tcell(r.b, r.a)}</tr>)}
+            {rows.map((r, k) => <tr key={k} className={r.same ? undefined : "is-d"}>{tcell(r.a, r.b)}<th scope="row">{lmode && r.name === PICO_ROW ? <>{r.name}<small className="pc-sub">흑자 제거</small></> : r.name}</th>{tcell(r.b, r.a)}</tr>)}
             {!rows.length && <tr><td colSpan={3} className="is-empty">구성 같음</td></tr>}
           </tbody>
         </table>
       </section>
+      {bothPico && <p className="pcz-foot">흑자 제거는 두 구성 모두 PICO 532로 진행합니다.</p>}
       {pair.some(p => p?.desc) && <section className="pcz-box pcz-desc pcz-desc2">
         {pair.map((p, i) => <div key={i} className={i ? "is-b" : "is-a"}><h5>{title(p)}</h5>{p?.desc ? sentences(p.desc).map((t, k) => <p key={k}>{t}</p>) : <p className="is-empty">—</p>}</div>)}
       </section>}

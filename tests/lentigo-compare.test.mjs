@@ -25,12 +25,12 @@ test('user 11-27: 흑자 개별 제거 — 크기별 개수 × 등록 금액, �
   assert.deepEqual(sizes.map(z => z.size), ['1cm 이하', '1cm 초과 ~ 2cm 이하']);
   const v = L.lentigoProgram(sizes, { s1: 3, s2: 1 });
   assert.equal(v.price, Math.round((33 * 3 + 44) * 0.7)); // 4개 → 30% 할인
-  assert.deepEqual(v.items, [{ name: L.PICO_ROW, qty: null, label: '선택한 흑자 4개' }, { name: '레블라이트 SI', qty: 4 }]);
+  assert.deepEqual(v.items, [{ name: L.PICO_ROW, qty: null, label: '4개' }, { name: '레블라이트 SI', qty: 4 }]);
   assert.deepEqual(L.withLentigo(list, v).map(p => p.id), ['a', 'b', 'lentigo']);
   const other = L.withPicoRow(list[1]);
   const rows = compareRows(v.items, other.items);
   const pico = rows.find(x => x.name === L.PICO_ROW);
-  assert.equal(pico.a.count, '선택한 흑자 4개'); assert.equal(pico.b.count, '얼굴 전체');
+  assert.equal(pico.a.count, '4개'); assert.equal(L.PICO_ROW, 'PICO 532'); assert.equal(L.picoQty(sizes), 1); assert.equal(pico.b.count, '얼굴 전체');
   assert.equal(rows.find(x => x.name === '레블라이트 SI').a.count, '4회');
   assert.deepEqual(L.extraSplit(list[1], list), { base: 1000, extra: 100 });
   assert.equal(L.extraSplit(list[0], list), null);

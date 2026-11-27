@@ -9,9 +9,11 @@ export type LSize = { id: string; size: string; price: number; items: LItem[]; d
 
 export const LENTIGO_ID = 'lentigo';
 export const LENTIGO_NAME = '흑자 개별 제거';
-export const PICO_ROW = 'PICO 532 · 흑자 제거';
+export const PICO_ROW = 'PICO 532'; // 흑자 제거 레이저 이름 하나로(2026-11-27 사용자) — 표에서는 이름 아래 작은 '흑자 제거'
 const SIZE_RE = /^흑자 제거\s*\((.+)\)$/;
 const isPico = (name: string) => /532/.test(name) && !/\+/.test(name);
+// 흑자 프로그램의 PICO 532 회차(등록 구성 그대로, 표에서 '3개' 아래 작은 'N회')
+export const picoQty = (sizes: LSize[]) => sizes[0]?.items.find(i => isPico(i.name))?.qty ?? null;
 
 export const lentigoSizes = (list: LProgram[]): LSize[] => list
   .map(p => { const m = p.name.match(SIZE_RE); return m && p.price != null ? { id: p.id, size: m[1], price: p.price, items: p.items, desc: p.desc } : null; })
@@ -37,8 +39,8 @@ export function lentigoTotal(sizes: LSize[], counts: Record<string, number>) {
 export function lentigoProgram(sizes: LSize[], counts: Record<string, number>, category = '색소'): LProgram | null {
   if (!sizes.length) return null;
   const { n, final: price } = lentigoTotal(sizes, counts);
-  const items = sizes[0].items.map(i => (isPico(i.name) ? { name: PICO_ROW, qty: null, label: `선택한 흑자 ${n}개` } : i));
-  if (!items.some(i => i.name === PICO_ROW)) items.unshift({ name: PICO_ROW, qty: null, label: `선택한 흑자 ${n}개` });
+  const items = sizes[0].items.map(i => (isPico(i.name) ? { name: PICO_ROW, qty: null, label: `${n}개` } : i));
+  if (!items.some(i => i.name === PICO_ROW)) items.unshift({ name: PICO_ROW, qty: null, label: `${n}개` });
   return { id: LENTIGO_ID, category, name: LENTIGO_NAME, price, items, desc: sizes[0].desc };
 }
 
