@@ -42,8 +42,13 @@ export function ProgramCompare() {
   const category = cats.includes(cat) ? cat : cats[0] ?? '';
   useEffect(() => { if (category) { try { localStorage.setItem('price-compare-cat', category); } catch { /* 이 기기 편의 */ } } }, [category]);
   const list = (programs ?? []).filter(p => p.category === category);
-  const a = list.find(p => p.id === pick[0]) ?? list[0];
-  const b = list.find(p => p.id === pick[1]) ?? list[1] ?? list[0];
+  // 리프팅만(2026-11-27 사용자): 왼쪽은 시술 하나(이름에 ' + ' 없음), 오른쪽은 리프팅 두 개(' + ' 있음) 중에서 고름 — 한쪽이 비면 전체
+  const lift = category === '리프팅';
+  const combo = (p: Program) => p.name.includes(' + ');
+  const listA = lift && list.some(p => !combo(p)) && list.some(combo) ? list.filter(p => !combo(p)) : list;
+  const listB = listA === list ? list : list.filter(combo);
+  const a = listA.find(p => p.id === pick[0]) ?? listA[0];
+  const b = listB.find(p => p.id === pick[1]) ?? (listB === list ? list[1] ?? list[0] : listB[0]);
   // 라인 요약은 서로 다른 라인끼리 비교할 때만(2026-11-26 사용자 '다른 라인끼리면 라인 요약도')
   const lineDiff = !!a?.line && !!b?.line && a.line !== b.line;
   const choose = (i: 0 | 1, id: string) => setPick(p => { const n: [string, string] = [a?.id ?? '', b?.id ?? '']; n[i] = id; return n; });
@@ -66,7 +71,7 @@ export function ProgramCompare() {
       <header className="pcz-title">{eng && <small>{eng} PROGRAM</small>}<h3><i />{category} 프로그램 비교<i /></h3></header>
       <div className="pcz-two">
         {pair.map((p, i) => <div key={i} className={`pcz-card ${i ? "is-b" : "is-a"}`}>
-          <label className="pcz-pick"><b>{p?.name}</b><ChevronDown size={18} /><select value={p?.id ?? ''} aria-label={`프로그램 ${i + 1}`} onChange={e => choose(i as 0 | 1, e.target.value)}>{list.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}</select></label>
+          <label className="pcz-pick"><b>{p?.name}</b><ChevronDown size={18} /><select value={p?.id ?? ''} aria-label={`프로그램 ${i + 1}`} onChange={e => choose(i as 0 | 1, e.target.value)}>{(i ? listB : listA).map(x => <option key={x.id} value={x.id}>{x.name}</option>)}</select></label>
           <div className="pcz-price"><strong>{won(p?.price ?? null)}</strong><small>(부가세 포함)</small></div>
           <div className="pcz-feat">{lineDiff && p?.line ? <span className="pcz-tag">{p.line}</span> : null}</div>
         </div>)}
