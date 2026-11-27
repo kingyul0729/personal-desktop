@@ -5,6 +5,8 @@ import { askConfirm } from './AlertDialog';
 import { SavingMark } from './Feedback';
 import { readWon } from '../koreanAmount';
 import { compareRows, type Cell } from '../programCompare';
+import { EVENT_CAT, TIERS, cellDiff, eventGroups, sameAll, tierPrice } from '../eventCompare';
+import type { PrepaidTier } from '../prepaid';
 import { LENTIGO_ID, PICO_ROW, addonPair, lentigoCount, lentigoProgram, lentigoSizes, lentigoTotal, picoQty, withLentigo, withPicoRow } from '../lentigoCompare';
 
 // 프로그램 비교(2026-11-26 사용자 그림·밤 공통 기준, 상담용): 탭 고르기 → 가운데 제목 → 프로그램 카드 둘(이름 = 고르기, 가격 알약, 라인이 다르면 라인 이름표 —
@@ -65,6 +67,7 @@ export function ProgramCompare() {
 
   if (error) return <div className="pb-empty">{error}</div>;
   if (!programs) return <div className="pb-empty"><SavingMark /></div>;
+  if (category === EVENT_CAT) return <EventCompare programs={programs} cats={cats} onCat={c => { setCat(c); setPick(['', '']); }} />;
   if (!list.length) return <div className="pb-empty">기록 없음</div>;
   const lmode = a?.id === LENTIGO_ID || b?.id === LENTIGO_ID;
   // 흑자 비교에서 스페셜 토닝 기본형을 고르면 등록된 '추가 관리(1개)'(PICO 532 흑자 제거 추가) 상품으로 보여 줌 — 금액을 따로 더하지 않음
@@ -141,6 +144,61 @@ export function ProgramCompare() {
     </div>
   </div>;
 }
+// 이벤트 비교(2026-11-28 사용자 문서 · 그림): '이벤트' 탭을 고르면 왼쪽 이벤트 상품(등록 가격·구성·옵션 그대로) | 오른쪽 전체 프로그램 + 300·400·500만원권 할인 가격
+// 두 쪽은 따로 — 권종만 바꾸면 가격만, 상품을 바꾸면 구성표도. 할인율·할인 금액·계산식은 화면에 안 보임. 계산은 eventCompare.ts
+function EventCompare({ programs, cats, onCat }: { programs: Program[]; cats: string[]; onCat: (c: string) => void }) {
+  const groups = useMemo(() => eventGroups(programs), [programs]);
+  const others = useMemo(() => programs.filter(p => p.category !== EVENT_CAT), [programs]);
+  const otherCats = Array.from(new Set(others.map(p => p.category)));
+  const [ev, setEv] = useState(''); const [opt, setOpt] = useState(0);
+  const [pid, setPid] = useState(''); const [tier, setTier] = useState<PrepaidTier>(300);
+  const [onlyDiff, setOnlyDiff] = useState(false);
+  const g = groups.find(x => x.base === ev) ?? groups[0];
+  const o = g?.options[opt] ?? g?.options[0];
+  const a = o?.program, b = others.find(p => p.id === pid) ?? others[0];
+  const base0 = g?.options[0]?.program.price ?? null;
+  const optText = (x: { label: string; program: Program }, k: number) => `${x.label || '기본'}${k === 0 ? (g!.options.length > 1 ? ' · 기본' : '') : x.program.price != null && base0 != null && x.program.price !== base0 ? ` · ${x.program.price > base0 ? '+' : '−'}${won(Math.abs(x.program.price - base0))}` : ''}`;
+  const allRows = compareRows(a?.items, b?.items);
+  const same = sameAll(allRows);
+  const rows = onlyDiff ? allRows.filter(r => !r.same) : allRows;
+  const cell = (c: Cell | null, x: Cell | null) => <td><div className={cellDiff(c, x) ? 'pct-v is-d' : 'pct-v'}>{c ? <><b>{c.count}</b>{c.subs.map((t, k) => <small key={k} className={x?.subs.includes(t) ? undefined : 'is-d'}>{t}</small>)}</> : <b className="is-none">—</b>}</div></td>;
+  return <div className="pc-wrap">
+    <div className="pcz pcz-ev">
+      <div className="pcz-top">
+        <label className="pc-cat"><select value={EVENT_CAT} aria-label="탭" onChange={e => onCat(e.target.value)}>{cats.map(c => <option key={c} value={c}>{c}</option>)}</select></label>
+      </div>
+      <header className="pcz-title"><small>EVENT PROGRAM</small><h3><i />이벤트 프로그램 비교<i /></h3></header>
+      <div className="pcz-two">
+        <div className="pcz-card is-a">
+          <span className="pcz-kind">이벤트</span>
+          <label className="pcz-pick"><b>{nameView(g?.base)}</b><ChevronDown size={18} /><select value={g?.base ?? ''} aria-label="이벤트" onChange={e => { setEv(e.target.value); setOpt(0); }}>{groups.map(x => <option key={x.base} value={x.base}>{x.base}</option>)}</select></label>
+          {g && g.options.length > 1 ? <label className="pcz-opt"><span>{optText(o!, g.options.indexOf(o!))}</span><ChevronDown size={16} /><select value={g.options.indexOf(o!)} aria-label="이벤트 옵션" onChange={e => setOpt(Number(e.target.value))}>{g.options.map((x, k) => <option key={k} value={k}>{optText(x, k)}</option>)}</select></label> : <div className="pcz-opt is-empty" />}
+          <div className="pcz-price"><strong>{won(a?.price ?? null)}</strong><small>부가세 포함</small></div>
+        </div>
+        <div className="pcz-card is-b">
+          <span className="pcz-kind">선결제권 · 전체 프로그램</span>
+          <label className="pcz-pick"><b>{nameView(b?.name)}</b><ChevronDown size={18} /><select value={b?.id ?? ''} aria-label="프로그램" onChange={e => setPid(e.target.value)}>{otherCats.map(c => <optgroup key={c} label={c}>{others.filter(p => p.category === c).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</optgroup>)}</select></label>
+          <div className="pcz-tiers" role="group" aria-label="선결제권">{TIERS.map(t => <button key={t} type="button" aria-pressed={tier === t} className={tier === t ? 'is-on' : undefined} onClick={() => setTier(t)}>{t}만원권</button>)}</div>
+          <div className="pcz-price"><strong>{won(tierPrice(b?.price ?? null, tier))}</strong><small>{b?.price != null ? `정가 ${won(b.price)} · ` : ''}부가세 포함</small></div>
+        </div>
+      </div>
+      {(a?.items?.length || b?.items?.length) ? <section className="pcz-box">
+        {same ? <>
+          <div className="pcz-head"><h4>시술 구성 동일</h4></div>
+          <table className="pct pct-one"><tbody>{allRows.map((r, k) => <tr key={k}><th scope="row">{r.name}</th><td><div className="pct-v"><b>{r.a?.count}</b>{r.a?.subs.map((t, j) => <small key={j}>{t}</small>)}</div></td></tr>)}</tbody></table>
+        </> : <>
+          <div className="pcz-head"><h4>시술 구성</h4>
+            <label className="pc-only"><input type="checkbox" checked={onlyDiff} onChange={e => setOnlyDiff(e.target.checked)} /> 차이만 보기</label></div>
+          <table className="pct">
+            <colgroup><col className="pct-n" /><col /><col className="pct-n" /></colgroup>
+            <thead><tr><th className="is-a">이벤트</th><th>시술 항목</th><th className="is-b">{tier}만원권</th></tr></thead>
+            <tbody>{rows.map((r, k) => <tr key={k} className={r.same ? undefined : 'is-d'}>{cell(r.a, r.b)}<th scope="row">{r.name}</th>{cell(r.b, r.a)}</tr>)}</tbody>
+          </table>
+        </>}
+      </section> : null}
+    </div>
+  </div>;
+}
 // 설명은 원문 그대로, 문장마다 문단으로 나눔(2026-11-26 밤 사용자 그림)
 // 줄바꿈도 문단으로(2026-11-27 사용자 보톡스 설명 — 줄마다 그대로)
 const sentences = (t: string) => t.split(/\n+|(?<=[.。])\s+/).map(x => x.trim()).filter(Boolean);
@@ -162,7 +220,7 @@ const descView = (t: string, under = false) => {
 const nameView = (n?: string) => { if (!n) return null; const m = n.match(/^(.+?)\s+(추가 관리.*|\([^()]*\dcm[^()]*\))$/); return m ? <>{nameParts(m[1])}<small className="pc-sub">{m[2]}</small></> : nameParts(n); };
 const nameParts = (n?: string) => (n ? n.split(/\s+(?=\+\s|\()/).map((t, k) => <Fragment key={k}>{k ? ' ' : ''}<span className="pc-nw">{t}</span></Fragment>) : null);
 const itemText = (i: { qty: number | null; label?: string }) => (i.qty != null ? `${i.qty}회` : i.label || '포함');
-const CAT_EN: Record<string, string> = { 색소: 'PIGMENT', 홍조: 'REDNESS', 여드름: 'ACNE', 흉터: 'SCAR', 모공: 'PORE', 리프팅: 'LIFTING', 스킨부스터: 'SKIN BOOSTER', 보톡스: 'BOTOX', 필러: 'FILLER' };
+const CAT_EN: Record<string, string> = { 색소: 'PIGMENT', 홍조: 'REDNESS', 여드름: 'ACNE', 흉터: 'SCAR', 모공: 'PORE', 리프팅: 'LIFTING', 스킨부스터: 'SKIN BOOSTER', 보톡스: 'BOTOX', 필러: 'FILLER', 이벤트: 'EVENT' };
 
 // 가격표 [편집] 아래: 고른 탭(이름 = category)의 라인 · 프로그램 자료 — 추가·수정·삭제
 type Draft = { id?: string; name: string; price: string; line: string; desc: string; fit: string; items: { name: string; count: string }[] };
