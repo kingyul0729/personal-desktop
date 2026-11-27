@@ -57,7 +57,7 @@ export function ProgramCompare() {
   if (!programs) return <div className="pb-empty"><SavingMark /></div>;
   if (!list.length) return <div className="pb-empty">기록 없음</div>;
   const pair = [a, b] as const;
-  const allRows = compareRows(a?.items, b?.items);
+  const allRows = compareRows(a?.items, b?.items, { split: category === '흉터' });
   const rows = onlyDiff ? allRows.filter(r => !r.same) : allRows;
   // 다른 것만 강조: 횟수는 상대 칸과 다를 때만, 작은 줄(+ 추가 시술 등)은 상대 칸에 없을 때만 — 좌우 같은 색
   // 다른 것만 강조(2026-11-27 사용자 그림): 횟수가 다르면 양쪽 칸 모두('—' 포함) 같은 연한 바탕, 같은 횟수는 기본 — 한쪽에만 있는 작은 줄(+ 추가 시술 등)만 작은 연한 바탕

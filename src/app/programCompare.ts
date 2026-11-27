@@ -68,7 +68,7 @@ const subsOf = (e: Entry, extra: string[]) => [
 const cellText = (c: Cell | null) => (c ? [c.count, ...c.subs].join('/') : '—');
 
 // 두 프로그램 줄 맞추기: 같은 조합 먼저, 그다음 레이저·시술이 가장 많이 겹치는 것끼리(관리만 겹치는 것은 묶지 않음)
-export function compareRows(aItems?: CompareItem[], bItems?: CompareItem[]): CompareRow[] {
+export function compareRows(aItems?: CompareItem[], bItems?: CompareItem[], opts: { split?: boolean } = {}): CompareRow[] {
   const A = entriesOf(aItems), B = entriesOf(bItems);
   const pairOf = new Map<number, number>(), usedB = new Set<number>();
   const keyOf = (e: Entry) => `${[...e.tokens].sort().join('|')}#${e.solo ? 's' : ''}${e.detail ? 'd' : ''}`;
@@ -86,17 +86,26 @@ export function compareRows(aItems?: CompareItem[], bItems?: CompareItem[]): Com
   for (const c of cands) if (!pairOf.has(c.i) && !usedB.has(c.j)) { pairOf.set(c.i, c.j); usedB.add(c.j); }
 
   type R = { name: string; a: Cell | null; b: Cell | null };
-  const rows: (R & { bi?: number })[] = A.map((e, i) => {
+  const rows: (R & { bi?: number })[] = A.flatMap((e, i): (R & { bi?: number })[] => {
     const j = pairOf.get(i);
-    if (j == null) return { name: e.tokens.join(' + '), a: { count: countText(e), subs: subsOf(e, []) }, b: null };
+    // split(흉터 탭, 2026-11-27 사용자 '각각 따로'): 한쪽에만 더해진 시술이나 S.V가 있으면 시술마다 한 줄, S.V는 횟수 아래 'S/V'
+    if (opts.split && j != null) {
+      const x = B[j];
+      if (e.tokens.join('|') !== x.tokens.join('|') || e.sv.length || x.sv.length) {
+        const all = [...e.tokens, ...x.tokens.filter(t => !e.tokens.includes(t))];
+        const cell = (en: Entry, t: string): Cell | null => (en.tokens.includes(t) ? { count: countText(en), subs: en.sv.includes(t) ? ['S/V'] : [] } : null);
+        return all.map((t, k) => ({ name: t, a: cell(e, t), b: cell(x, t), bi: j }));
+      }
+    }
+    if (j == null) return [{ name: e.tokens.join(' + '), a: { count: countText(e), subs: subsOf(e, []) }, b: null }];
     const x = B[j], common = e.tokens.filter(t => x.tokens.includes(t));
-    return { name: common.join(' + '), a: { count: countText(e), subs: subsOf(e, e.tokens.filter(t => !common.includes(t))) },
-      b: { count: countText(x), subs: subsOf(x, x.tokens.filter(t => !common.includes(t))) }, bi: j };
+    return [{ name: common.join(' + '), a: { count: countText(e), subs: subsOf(e, e.tokens.filter(t => !common.includes(t))) },
+      b: { count: countText(x), subs: subsOf(x, x.tokens.filter(t => !common.includes(t))) }, bi: j }];
   });
   // B에만 있는 줄은 B에서 바로 앞 줄 다음에 — 두 프로그램 순서를 모두 지킴
   B.forEach((x, j) => {
     if (usedB.has(j)) return;
-    let at = 0; for (let k = j - 1; k >= 0; k--) { const r = rows.findIndex(row => row.bi === k); if (r >= 0) { at = r + 1; break; } }
+    let at = 0; for (let k = j - 1; k >= 0; k--) { let r = -1; rows.forEach((row, n) => { if (row.bi === k) r = n; }); if (r >= 0) { at = r + 1; break; } }
     rows.splice(at, 0, { name: x.tokens.join(' + '), a: null, b: { count: countText(x), subs: subsOf(x, []) }, bi: j });
   });
   // 관리 줄은 늘 맨 아래(사용자 그림)

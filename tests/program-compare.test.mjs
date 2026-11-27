@@ -58,3 +58,10 @@ test('user 11-27: 한쪽에만 더해진 시술은 각각, S.V는 이름 옆 S/V
   const r2 = compareRows([{ name: '피코프락셀 + CROSS', qty: 5 }], [{ name: '피코프락셀 + CROSS + 서브시전', qty: 5 }]);
   assert.deepEqual(r2[0].b.subs, ['+ 서브시전']);
 });
+
+test('user 11-27: 흉터는 더해진 시술을 각각 따로 줄, S.V는 S/V', () => {
+  const rows = compareRows([{ name: '피코프락셀', qty: 5 }], [{ name: '피코프락셀 + CROSS + 서브시전 S.V', qty: 5 }, { name: '크라이오 관리 + 모델링팩', qty: 5 }], { split: true });
+  assert.deepEqual(rows.map(r => [r.name, r.a?.count ?? '—', r.b?.count ?? '—', (r.b?.subs ?? []).join()]), [
+    ['피코프락셀', '5회', '5회', ''], ['CROSS', '—', '5회', ''], ['서브시전', '—', '5회', 'S/V'], ['크라이오 관리 + 모델링팩', '—', '5회', ''],
+  ]);
+});
