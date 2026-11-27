@@ -4,7 +4,7 @@ import { KittyDialog } from './KittyDialog';
 import { askConfirm } from './AlertDialog';
 import { SavingMark } from './Feedback';
 import { compareRows, type Cell } from '../programCompare';
-import { EVENT_CAT, TIERS, cellDiff, eventGroups, includeOnly, manwon, rowDiff, sameAll, tierPrice } from '../eventCompare';
+import { EVENT_CAT, TIERS, cellDiff, eventGroups, includeOnly, liveEvents, manwon, rowDiff, sameAll, tierPrice, todayKey } from '../eventCompare';
 import type { PrepaidTier } from '../prepaid';
 import { LENTIGO_ID, PICO_ROW, addonPair, lentigoCount, lentigoProgram, lentigoSizes, lentigoTotal, picoQty, withLentigo, withPicoRow } from '../lentigoCompare';
 
@@ -70,7 +70,7 @@ export function ProgramCompare() {
 
   if (error) return <div className="pb-empty">{error}</div>;
   if (!programs) return <div className="pb-empty"><SavingMark /></div>;
-  if (category === EVENT_CAT) return <EventCompare programs={programs} cats={cats} onCat={c => { setCat(c); setPick(['', '']); }} />;
+  if (category === EVENT_CAT) return <EventCompare programs={programs} lines={data?.lines ?? []} cats={cats} onCat={c => { setCat(c); setPick(['', '']); }} />;
   if (!list.length) return <div className="pb-empty">기록 없음</div>;
   const lmode = a?.id === LENTIGO_ID || b?.id === LENTIGO_ID;
   // 흑자 비교에서 스페셜 토닝 기본형을 고르면 등록된 '추가 관리(1개)'(PICO 532 흑자 제거 추가) 상품으로 보여 줌 — 금액을 따로 더하지 않음
@@ -150,8 +150,12 @@ export function ProgramCompare() {
 }
 // 이벤트 비교(2026-11-28 사용자 문서 · 그림): '이벤트' 탭을 고르면 왼쪽 이벤트 상품(등록 가격·구성·옵션 그대로) | 오른쪽 전체 프로그램 + 300·400·500만원권 할인 가격
 // 두 쪽은 따로 — 권종만 바꾸면 가격만, 상품을 바꾸면 구성표도. 할인율·할인 금액·계산식은 화면에 안 보임. 계산은 eventCompare.ts
-function EventCompare({ programs, cats, onCat }: { programs: Program[]; cats: string[]; onCat: (c: string) => void }) {
-  const groups = useMemo(() => eventGroups(programs), [programs]);
+function EventCompare({ programs, lines, cats, onCat }: { programs: Program[]; lines: ProgramLine[]; cats: string[]; onCat: (c: string) => void }) {
+  const live = useMemo(() => liveEvents(programs, lines, todayKey()), [programs, lines]); // 끝난 달 이벤트는 숨김(자료는 그대로)
+  const [month, setMonth] = useState('');
+  const mon = live.months.includes(month) ? month : live.months[live.months.length - 1] ?? '';
+  const groups = useMemo(() => eventGroups(live.list.filter(p => (p.line ?? '') === mon)), [live, mon]);
+  const subs = Array.from(new Set(groups.map(x => x.sub)));
   const others = useMemo(() => programs.filter(p => p.category !== EVENT_CAT), [programs]);
   const otherCats = Array.from(new Set(others.map(p => p.category)));
   const [ev, setEv] = useState(''); const [opt, setOpt] = useState(0);
@@ -161,8 +165,9 @@ function EventCompare({ programs, cats, onCat }: { programs: Program[]; cats: st
   const o = g?.options[opt] ?? g?.options[0];
   const a = o?.program, b = others.find(p => p.id === pid) ?? others[0];
   const base0 = g?.options[0]?.program.price ?? null;
-  const optText = (x: { label: string; program: Program }, k: number) => `${x.label || '기본'}${k === 0 ? (g!.options.length > 1 ? ' · 기본' : '') : x.program.price != null && base0 != null && x.program.price !== base0 ? ` · ${x.program.price > base0 ? '+' : '−'}${won(Math.abs(x.program.price - base0))}` : ''}`;
-  const allRows = includeOnly(compareRows(a?.items, b?.items)); // 리프팅 이벤트 — LDM 트리플·스킨보톡스·스킨부스터는 '포함'
+  const optText = (x: { label: string; program: Program }, k: number) => `${x.label || '기본'}${k === 0 ? (g!.options.some(y => y.program.price !== base0) ? ' · 기본' : '') : x.program.price != null && base0 != null && x.program.price !== base0 ? ` · ${x.program.price > base0 ? '+' : '−'}${won(Math.abs(x.program.price - base0))}` : ''}`;
+  const rows0 = compareRows(a?.items, b?.items);
+  const allRows = b?.category === '리프팅' ? includeOnly(rows0) : rows0; // 리프팅과 비교할 때 LDM 트리플·스킨보톡스·스킨부스터는 '포함'
   const same = sameAll(allRows);
   const rows = onlyDiff ? allRows.filter(rowDiff) : allRows;
   const cell = (c: Cell | null, x: Cell | null) => <td><div className={cellDiff(c, x) ? 'pct-v is-d' : 'pct-v'}>{c ? <><b>{c.count}</b>{c.subs.map((t, k) => <small key={k} className={x?.subs.includes(t) ? undefined : 'is-d'}>{t}</small>)}</> : <b className="is-none">—</b>}</div></td>;
@@ -170,12 +175,14 @@ function EventCompare({ programs, cats, onCat }: { programs: Program[]; cats: st
     <div className="pcz pcz-ev">
       <div className="pcz-top">
         <label className="pc-cat"><select value={EVENT_CAT} aria-label="탭" onChange={e => onCat(e.target.value)}>{cats.map(c => <option key={c} value={c}>{c}</option>)}</select></label>
+        {live.months.length > 1 ? <label className="pc-cat"><select value={mon} aria-label="달" onChange={e => { setMonth(e.target.value); setEv(''); setOpt(0); }}>{live.months.map(m => <option key={m} value={m}>{m || '이벤트'}</option>)}</select></label> : null}
       </div>
       <header className="pcz-title"><small>EVENT PROGRAM</small><h3><i />이벤트 프로그램 비교<i /></h3></header>
+      {!groups.length ? <div className="pb-empty">기록 없음</div> : <>
       <div className="pcz-two">
         <div className="pcz-card is-a">
-          <span className="pcz-kind">이벤트</span>
-          <label className="pcz-pick"><b>{nameView(g?.base)}</b><ChevronDown size={18} /><select value={g?.base ?? ''} aria-label="이벤트" onChange={e => { setEv(e.target.value); setOpt(0); }}>{groups.map(x => <option key={x.base} value={x.base}>{x.base}</option>)}</select></label>
+          <span className="pcz-kind">{mon || '이벤트'}</span>
+          <label className="pcz-pick"><b>{nameView(g?.base)}</b><ChevronDown size={18} /><select value={g?.base ?? ''} aria-label="이벤트" onChange={e => { setEv(e.target.value); setOpt(0); }}>{subs.map(sb => { const os = groups.filter(x => x.sub === sb).map(x => <option key={x.base} value={x.base}>{x.base}</option>); return sb ? <optgroup key={sb} label={sb}>{os}</optgroup> : os; })}</select></label>
           {g && g.options.length > 1 ? <label className="pcz-opt"><span>{optText(o!, g.options.indexOf(o!))}</span><ChevronDown size={16} /><select value={g.options.indexOf(o!)} aria-label="이벤트 옵션" onChange={e => setOpt(Number(e.target.value))}>{g.options.map((x, k) => <option key={k} value={k}>{optText(x, k)}</option>)}</select></label> : <div className="pcz-opt is-empty" />}
           <div className="pcz-price"><strong>{won(a?.price ?? null)}</strong><small>부가세 포함</small></div>
         </div>
@@ -200,6 +207,7 @@ function EventCompare({ programs, cats, onCat }: { programs: Program[]; cats: st
           </table>
         </>}
       </section> : null}
+      </>}
     </div>
   </div>;
 }

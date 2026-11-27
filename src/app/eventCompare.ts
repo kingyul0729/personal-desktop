@@ -9,9 +9,9 @@ import type { Cell, CompareRow } from './programCompare.ts';
 
 export const EVENT_CAT = '이벤트';
 export const TIERS: PrepaidTier[] = [300, 400, 500];
-type P = { id: string; category: string; name: string; price: number | null };
+type P = { id: string; category: string; name: string; price: number | null; line?: string; fit?: string };
 
-export type EventGroup<T extends P> = { base: string; options: { label: string; program: T }[] };
+export type EventGroup<T extends P> = { base: string; sub: string; options: { label: string; program: T }[] };
 export function eventGroups<T extends P>(programs: T[]): EventGroup<T>[] {
   const out: EventGroup<T>[] = [];
   for (const p of programs) {
@@ -19,7 +19,7 @@ export function eventGroups<T extends P>(programs: T[]): EventGroup<T>[] {
     const m = p.name.match(/^(.*?)\s*\[([^\]]+)\]\s*$/);
     const base = (m ? m[1] : p.name).trim(), label = m ? m[2].trim() : '';
     let g = out.find(x => x.base === base);
-    if (!g) out.push(g = { base, options: [] });
+    if (!g) out.push(g = { base, sub: p.fit?.trim() ?? '', options: [] });
     g.options.push({ label, program: p });
   }
   return out;
@@ -52,4 +52,15 @@ export function includeOnly(rows: CompareRow[]): CompareRow[] {
     const a = r.a ? { count: '포함', subs: [] } : null, b = r.b ? { count: '포함', subs: [] } : null;
     return { ...r, a, b, same: !!a === !!b };
   });
+}
+
+// 달 이벤트 묶음·숨김(2026-11-28 사용자 '삭제보다는 숨김, 달 이벤트로 묶어서'): 이벤트 프로그램의 line = 달 묶음('11월 EVENT'),
+// 그 라인의 특징(feature)에 기간 'YYYY-MM-DD ~ YYYY-MM-DD' — 끝난 달은 고르기에서 숨기만 하고 자료는 그대로. fit = 'EVENT 01 …' 소제목(고르기 묶음)
+type L = { category: string; name: string; feature: string };
+export const periodOf = (t?: string) => { const m = (t ?? '').match(/(\d{4}-\d{2}-\d{2})\s*~\s*(\d{4}-\d{2}-\d{2})/); return m ? { start: m[1], end: m[2] } : null; };
+export const todayKey = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+export function liveEvents<T extends P>(programs: T[], lines: L[], today: string): { months: string[]; list: T[] } {
+  const ended = new Set(lines.filter(l => l.category === EVENT_CAT && (periodOf(l.feature)?.end ?? '9999') < today).map(l => l.name));
+  const list = programs.filter(p => p.category === EVENT_CAT && !ended.has(p.line ?? ''));
+  return { months: Array.from(new Set(list.map(p => p.line ?? ''))), list };
 }
