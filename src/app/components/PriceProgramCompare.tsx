@@ -146,7 +146,7 @@ export function ProgramCompare() {
 const sentences = (t: string) => t.split(/\n+|(?<=[.。])\s+/).map(x => x.trim()).filter(Boolean);
 // 빈 줄로 나눈 묶음은 묶음끼리만 띄우고 묶음 안 줄은 붙여서(2026-11-27 사용자 그림 — 보톡스 설명 두 줄씩)
 const descView = (t: string, under = false) => (/\n/.test(t) // 줄바꿈으로 쓴 글은 줄을 붙이고 빈 줄에서만 띄움
-  ? t.split(/\n\s*\n/).map((g, k, all) => <div key={k} className={under && all.length > 1 && k === all.length - 1 ? 'pcz-dg is-u' : 'pcz-dg'}>{sentences(g).map((x, j) => <p key={j}>{x}</p>)}</div>)
+  ? t.split(/\n\s*\n/).map((g, k, all) => <div key={k} className={under && all.length > 1 && k === all.length - 1 ? 'pcz-dg is-u' : 'pcz-dg'}>{sentences(g).map((x, j) => <p key={j}><span>{x}</span></p>)}</div>)
   : sentences(t).map((x, k) => <p key={k}>{x}</p>));
 // 편집 목록의 횟수 글자(숫자면 N회, 아니면 적은 글자) — 2026-11-27 빠져서 [편집]이 흰 화면이 되던 것 되살림
 // 이름은 '+ 시술'·'(대표 원장님)' 묶음 사이에서만 줄바꿈(2026-11-27 사용자 '문장 띄어쓰기' — '(대표 / 원장님)'처럼 끊기지 않게)

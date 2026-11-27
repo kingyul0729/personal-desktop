@@ -3649,4 +3649,5 @@ button.iv-pinv { cursor: zoom-in; }
 .pct td .pct-v small:only-of-type:not(.is-d) { color: #9aa0a8; }
 .pcz .pcz-card .pcz-note { border-top: 0; }
 .pcz-desc2 .pcz-dg { display: grid; gap: 2px; }
-.pcz-desc2 .pcz-dg.is-u p { text-decoration: underline; text-decoration-color: #9aa0a8; text-decoration-thickness: 1px; text-underline-offset: 5px; }
+/* 톡신 설명: 연한 회색 형광펜(2026-11-27 사용자 '밑줄 말고 연한 형광색처럼, 연한 회색') */
+.pcz-desc2 .pcz-dg.is-u p span { background: #eceef1; padding: 1px 4px; margin: 0 -4px; border-radius: 3px; -webkit-box-decoration-break: clone; box-decoration-break: clone; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
