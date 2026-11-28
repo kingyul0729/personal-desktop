@@ -3,7 +3,7 @@ import { ChevronDown, Minus, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { KittyDialog } from './KittyDialog';
 import { askConfirm } from './AlertDialog';
 import { SavingMark } from './Feedback';
-import { compareRows, type Cell } from '../programCompare';
+import { LIFT_DEV, boostDesc, compareRows, type Cell } from '../programCompare';
 import { EVENT_CAT, PREPAID_CAT, HIDDEN, TIERS, cellDiff, eventGroups, includeOnly, liveEvents, manwon, rowDiff, sameAll, tierPrice } from '../eventCompare';
 import { prepaidDiscountRates, type PrepaidTier } from '../prepaid';
 import { LENTIGO_ID, PICO_ROW, addonPair, lentigoCount, lentigoProgram, lentigoSizes, lentigoTotal, picoQty, withLentigo, withPicoRow } from '../lentigoCompare';
@@ -33,6 +33,7 @@ export async function sendPrograms(body: unknown): Promise<ProgramData> {
 }
 const BOOST = /\s*·\s*리프팅 병행$/;
 const boostName = (p: Program) => p.name.replace(BOOST, '');
+
 export const won = manwon; // 비교 화면 금액은 모두 만원 단위(2026-11-28 사용자)
 export function ProgramCompare() {
   const [data, setData] = useState<ProgramData | null>(null);
@@ -83,7 +84,7 @@ export function ProgramCompare() {
   const withBoost = (p: Program | undefined, i: 0 | 1): Program | undefined => {
     const x = boosters.find(q => q.id === boost[i]);
     if (!p || !x) return p;
-    return { ...p, price: p.price != null && x.price != null ? p.price + x.price : p.price, items: [...(p.items ?? []), ...(x.items ?? [])], desc: [p.desc, x.desc].filter(Boolean).join('\n\n'), boost: boostName(x) } as Program;
+    return { ...p, price: p.price != null && x.price != null ? p.price + x.price : p.price, items: [...(p.items ?? []), ...(x.items ?? [])], desc: [p.desc, boostDesc(x.desc, LIFT_DEV.filter(d => (p.items ?? []).some(it => it.name.includes(d))))].filter(Boolean).join('\n\n'), boost: boostName(x) } as Program;
   };
   const pair = [withBoost(eff(a), 0), withBoost(eff(b), 1)] as const;
   const rows0 = compareRows(view(pair[0])?.items, view(pair[1])?.items, { split: category === '흉터' });

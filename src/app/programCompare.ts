@@ -121,3 +121,12 @@ export function compareRows(aItems?: CompareItem[], bItems?: CompareItem[], opts
   const ordered = [...rows.filter(r => !isCare(r)), ...rows.filter(isCare)];
   return ordered.map(({ name, a, b }) => ({ name, a, b, same: cellText(a) === cellText(b) }));
 }
+
+// 리프팅 병행 설명은 장비마다 따로(2026-11-29 사용자 '울쎄라 + 리바이브 …'): 줄 머리 '[울쎄라] 글' — 고른 리프팅의 장비 줄만, 장비 글이 없으면 머리 없는 글
+export const LIFT_DEV = ['울쎄라', '올리지오', '세르프'];
+export function boostDesc(desc: string | undefined, devices: string[]): string {
+  const tagged = new Map<string, string>(), plain: string[] = [];
+  for (const l of (desc ?? '').split('\n').map(x => x.trim()).filter(Boolean)) { const m = l.match(/^\[([^\]]+)\]\s*(.*)$/); if (m) tagged.set(m[1], m[2]); else plain.push(l); }
+  const own = devices.map(d => tagged.get(d)).filter((x): x is string => !!x);
+  return (own.length ? [...new Set(own)] : plain).join('\n\n');
+}

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { compareRows } from '../src/app/programCompare.ts';
+import { compareRows, boostDesc } from '../src/app/programCompare.ts';
 
 const t = (c) => (c ? [c.count, ...c.subs].join(' / ') : '—');
 const flat = (rows) => rows.map(r => `${t(r.a)} | ${r.name} | ${t(r.b)}${r.same ? '' : ' *'}`);
@@ -98,4 +98,11 @@ test('user 11-29: 자국 지우기 + 카프리 | 6회 — 압출·스케일링�
     ['압출 + 카프리 레이저 + 스케일링', '—', '3회'],
     ['진정관리', '—', '3회'],
   ]);
+});
+
+test('user 11-29: 리프팅 병행 설명은 고른 장비 줄만', () => {
+  const d = '[울쎄라] 가.\n[올리지오] 나.\n기본.';
+  assert.equal(boostDesc(d, ['울쎄라']), '가.');
+  assert.equal(boostDesc(d, ['울쎄라', '올리지오']), '가.\n\n나.');
+  assert.equal(boostDesc(d, ['세르프']), '기본.');
 });
