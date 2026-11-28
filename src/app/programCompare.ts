@@ -11,7 +11,8 @@ export type Cell = { count: string; subs: string[] };
 export type CompareRow = { name: string; a: Cell | null; b: Cell | null; same: boolean };
 
 const CARE = new Set(['LDM 트리플', '비타민 관리']); // 레이저와 함께 하는 관리
-const SUPPORT = CARE; // 관리만 겹치는 조합끼리는 한 줄로 묶지 않음
+// 관리·기본 시술(압출·스케일링·진정관리)만 겹치는 조합끼리는 한 줄로 묶지 않음 — 2026-11-28 사용자 '압출 + 스케일링 / 압출 + 카프리 레이저 + 스케일링은 따로'
+const SUPPORT = new Set([...CARE, '압출', '스케일링', '진정관리']);
 const SV = /\s+S\s?[./]?\s?V\.?$/i;
 const NOTE = /\s*\((부분|전체|얼굴 전체)\)\s*$/;
 const norm = (t: string) => (t === '비타민' ? '비타민 관리' : /^LDM 트리플( 단독)?( 관리)?$/.test(t) ? 'LDM 트리플' : t);
@@ -112,6 +113,7 @@ export function compareRows(aItems?: CompareItem[], bItems?: CompareItem[], opts
   B.forEach((x, j) => {
     if (usedB.has(j)) return;
     let at = 0; for (let k = j - 1; k >= 0; k--) { let r = -1; rows.forEach((row, n) => { if (row.bi === k) r = n; }); if (r >= 0) { at = r + 1; break; } }
+    if (at === 0) { const n = rows.findIndex(row => row.bi != null && row.bi > j); if (n > 0) at = n; } // 앞에 B 줄이 없으면 다음 B 줄 바로 앞(A에만 있는 윗줄 아래)
     rows.splice(at, 0, { name: x.tokens.join(' + '), a: null, b: { count: countOf(x), subs: subsOf(x, []) }, bi: j });
   });
   // 관리 줄은 늘 맨 아래(사용자 그림)

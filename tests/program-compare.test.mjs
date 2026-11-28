@@ -36,7 +36,7 @@ test('user 11-26 밤: 비교 줄 공통 기준 — 같은 조합 한 줄, 한쪽
   ]);
   // 다른 레이저끼리는 따로, 관리는 같은 줄
   assert.deepEqual(flat(compareRows([{ name: '레이저A + LDM 트리플', qty: 5 }], [{ name: '레이저B + LDM 트리플', qty: 5 }])), [
-    '— | 레이저B | 5회 *', '5회 | 레이저A | — *', '5회 | LDM 트리플 | 5회']);
+    '5회 | 레이저A | — *', '— | 레이저B | 5회 *', '5회 | LDM 트리플 | 5회']);
   // 같은 프로그램끼리는 모두 같음, 차이만 보기로 숨을 줄
   const same = [{ name: '압출 + 스케일링', qty: 2 }, { name: 'CO₂', qty: null, label: '포함' }];
   assert.ok(compareRows(same, same).every(x => x.same));
@@ -72,4 +72,16 @@ test('user 11-28: 서비스 통일 · 관리 세부 줄 없음 · 이름 끝 (�
   assert.deepEqual([cap.a, cap.b], [{ count: '2회', subs: ['부분'] }, { count: '2회', subs: ['전체'] }]);
   const sv = compareRows([{ name: '스타룩스 1540 S/V', qty: 1 }], [{ name: '스타룩스 1540', qty: 1 }])[0];
   assert.deepEqual(sv.a, { count: '1회', subs: ['서비스'] });
+});
+
+test('user 11-28: 압출·스케일링만 겹치면 레이저 더한 조합과 따로 줄', () => {
+  const rows = compareRows(
+    [{ name: '압출 + 스케일링', qty: 2 }, { name: '진정관리', qty: 2 }],
+    [{ name: '압출 + 카프리 레이저 + 스케일링', qty: 3 }, { name: '진정관리', qty: 3 }],
+  );
+  assert.deepEqual(rows.map(r => [r.name, r.a?.count ?? '—', r.b?.count ?? '—']), [
+    ['압출 + 스케일링', '2회', '—'],
+    ['압출 + 카프리 레이저 + 스케일링', '—', '3회'],
+    ['진정관리', '2회', '3회'],
+  ]);
 });
