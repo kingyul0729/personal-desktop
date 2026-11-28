@@ -31,6 +31,8 @@ export async function sendPrograms(body: unknown): Promise<ProgramData> {
   if (!r.ok || !d) throw new Error(d?.error || '저장하지 못했어요.');
   return asData(d);
 }
+const BOOST = /\s*·\s*리프팅 병행$/;
+const boostName = (p: Program) => p.name.replace(BOOST, '');
 export const won = manwon; // 비교 화면 금액은 모두 만원 단위(2026-11-28 사용자)
 export function ProgramCompare() {
   const [data, setData] = useState<ProgramData | null>(null);
@@ -41,6 +43,7 @@ export function ProgramCompare() {
   const [onlyDiff, setOnlyDiff] = useState(false);
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [setting, setSetting] = useState(false);
+  const [boost, setBoost] = useState<[string, string]>(['', '']); // 리프팅 탭: 카드마다 더한 스킨부스터(2026-11-29 사용자 그림 — 리프팅 금액 + 스킨부스터 금액, 구성도 합침)
   useEffect(() => { loadPrograms().then(setData).catch(e => setError((e as Error).message)); }, []);
   const cats = useMemo(() => { const c = Array.from(new Set((programs ?? []).map(p => p.category))); return c.length ? [...c, PREPAID_CAT] : c; }, [programs]); // '선결제' = 정가 | 선결제권 할인 비교(2026-11-28 사용자 '선결제 비교 탭 추가')
   const category = cats.includes(cat) ? cat : cats[0] ?? '';
@@ -50,7 +53,9 @@ export function ProgramCompare() {
   const sizes = lentigoSizes(raw);
   const cnt = sizes.length && !lentigoCount(counts) ? { [sizes[0].id]: 1 } : counts;
   const lentigo = lentigoProgram(sizes, cnt, category) as Program | null;
-  const list = withLentigo(raw, lentigo);
+  // 리프팅 병행 스킨부스터('… · 리프팅 병행', 2026-11-29 사용자 그림): 따로 고르는 프로그램이 아니라 리프팅 카드에 더하는 것 — 금액은 더하고 구성은 합침, 설명은 아래에 이어서
+  const boosters = category === '리프팅' ? raw.filter(p => BOOST.test(p.name)) : [];
+  const list = withLentigo(boosters.length ? raw.filter(p => !BOOST.test(p.name)) : raw, lentigo);
   // 리프팅도 왼쪽·오른쪽 모두 전체 프로그램에서 고름(2026-11-28 사용자 '다 보여주는 걸로' — 11-27의 단독 | 조합 나누기 대체)
   // 국산·수입 라인이 둘 다 있는 탭(보톡스·필러, 2026-11-28 사용자 '고정으로 각각 국산 수입'): 왼쪽은 국산, 오른쪽은 수입 — 왼쪽을 바꾸면 오른쪽은 같은 시술의 수입 제품으로
   const kr = (p: Program) => /국산/.test(p.line ?? ''), im = (p: Program) => /수입/.test(p.line ?? '');
@@ -75,7 +80,12 @@ export function ProgramCompare() {
   const eff = (p?: Program) => { if (!p || !lmode || p.id === LENTIGO_ID) return p; const ap = addonPair(p, raw); return ap && p.id === ap.base.id ? ap.plus as Program : p; };
   const view = (p?: Program) => (p && lmode && p.id !== LENTIGO_ID ? withPicoRow(p) as Program : p);
   const sel = [a?.id ?? '', b?.id ?? ''];
-  const pair = [eff(a), eff(b)] as const;
+  const withBoost = (p: Program | undefined, i: 0 | 1): Program | undefined => {
+    const x = boosters.find(q => q.id === boost[i]);
+    if (!p || !x) return p;
+    return { ...p, price: p.price != null && x.price != null ? p.price + x.price : p.price, items: [...(p.items ?? []), ...(x.items ?? [])], desc: [p.desc, x.desc].filter(Boolean).join('\n\n'), boost: boostName(x) } as Program;
+  };
+  const pair = [withBoost(eff(a), 0), withBoost(eff(b), 1)] as const;
   const rows0 = compareRows(view(pair[0])?.items, view(pair[1])?.items, { split: category === '흉터' });
   const allRows = lmode ? [...rows0.filter(r => r.name === PICO_ROW), ...rows0.filter(r => r.name !== PICO_ROW)] : rows0; // 흑자 비교는 PICO 532 줄을 맨 위로
   const step = (id: string, d: number) => setCounts(() => { const n = { ...cnt, [id]: Math.max(0, (cnt[id] ?? 0) + d) }; return lentigoCount(n) ? n : cnt; });
@@ -85,7 +95,8 @@ export function ProgramCompare() {
     if (p?.id === LENTIGO_ID) return (card ? <>{p.name}</> : <>{p.name}<small className="pc-sub">선택한 흑자 {lentigoCount(cnt)}개</small></>);
     const n = lmode ? addN(p) : 0;
     if (n) return <>{nameParts(p!.name.replace(/\s+추가 관리.*$/, ''))}<small className="pc-sub">{card ? `PICO 532 흑자 제거${n > 1 ? ` ${n}개` : ''} 추가` : `PICO 532${n > 1 ? ` ${n}개` : ''} 추가`}</small></>;
-    return nameView(p?.name);
+    const bn = (p as (Program & { boost?: string }) | undefined)?.boost;
+    return bn ? <>{nameView(p?.name)}<small className="pc-sub">+ {bn}</small></> : nameView(p?.name);
   };
   const lt = lentigoTotal(sizes, cnt); // 정상 총액 · 할인율 · 할인 금액 · 최종(5개 이상은 null)
   // 총액 차이 = 두 최종 금액(둘 다 부가세 포함 등록 금액 기준), 흑자 할인 기준이 없으면(5개 이상) 숨김
@@ -114,6 +125,8 @@ export function ProgramCompare() {
             {lt.off ? <span>할인 {Math.round((lt.rate ?? 0) * 100)}% −{won(lt.off)}</span> : null}
             <button type="button" className="pcz-set" aria-expanded={setting} onClick={() => setSetting(v => !v)}>개수·크기 설정</button>
           </div> : null}
+          {boosters.length ? <label className="pcz-boost"><span>스킨부스터</span><select value={boost[i]} aria-label={`스킨부스터 ${i + 1}`} onChange={e => { const v = e.target.value; setBoost(o => { const n: [string, string] = [o[0], o[1]]; n[i] = v; return n; }); }}>
+            <option value="">없음</option>{boosters.map(x => <option key={x.id} value={x.id}>{boostName(x)} · +{won(x.price ?? null)}</option>)}</select><ChevronDown size={15} /></label> : null}
         </div>)}
       </div>
       {lmode && setting && <section className="pcz-box pcz-cnt">
