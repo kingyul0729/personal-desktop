@@ -2,7 +2,7 @@
 // ① 같은 시술·관리 조합은 한 줄, 두 프로그램이 같이 하는 조합은 가운데 이름에 묶어 적음
 // ② 한쪽에만 더해지는 레이저·관리는 그쪽 횟수 아래 '+ 이름'
 // ③ 관리(LDM 트리플·비타민 관리)는 레이저에서 떼어 맨 아래 따로 한 줄(총횟수), 단독·병행이 함께면 아래 세부('○○ 병행 5 · 단독 5')
-// ④ 서비스(이름 끝 'S.V')는 같은 시술 줄에서 횟수 아래 '서비스'
+// ④ 서비스(이름 끝 'S.V')는 같은 시술 줄에서 횟수 아래 '(S.V)' — 작은 줄 표기는 모두 괄호 '(S.V)'(2026-11-28 사용자 '규칙있게')
 // 특정 프로그램 이름을 보지 않고 시술 이름만으로 정함 — 어떤 두 프로그램이든 같은 규칙.
 export type CompareItem = { name: string; qty: number | null; label?: string };
 type Entry = { tokens: string[]; qty: number | null; label?: string; service: boolean; sv: string[]; solo: boolean; detail?: string };
@@ -61,9 +61,9 @@ export function entriesOf(items: CompareItem[] = []): Entry[] {
 }
 
 const subsOf = (e: Entry, extra: string[]) => [
-  ...extra.map(t => `+ ${t}${e.sv.includes(t) ? ' S/V' : ''}`), // 한쪽에만 더해진 시술의 S.V는 이름 옆 'S/V'(2026-11-27 사용자 '서브시전은 S/V 유무 표기')
-  ...(e.service && e.sv.some(t => !extra.includes(t)) ? ['서비스'] : []),
-  ...(e.detail ? e.detail.split(' · ') : e.solo ? ['단독'] : []),
+  ...extra.map(t => `+ ${t}${e.sv.includes(t) ? ' (S.V)' : ''}`), // 한쪽에만 더해진 시술의 S.V는 이름 옆 '(S.V)'(2026-11-27 사용자 '서브시전은 S/V 유무 표기', 11-28 괄호로 통일)
+  ...(e.service && e.sv.some(t => !extra.includes(t)) ? ['(S.V)'] : []),
+  ...(e.detail ? e.detail.split(' · ') : e.solo ? ['단독'] : []).map(t => `(${t})`), // 횟수 아래 작은 줄은 모두 괄호(2026-11-28 사용자 '규칙있게')
 ];
 const cellText = (c: Cell | null) => (c ? [c.count, ...c.subs].join('/') : '—');
 
@@ -88,12 +88,12 @@ export function compareRows(aItems?: CompareItem[], bItems?: CompareItem[], opts
   type R = { name: string; a: Cell | null; b: Cell | null };
   const rows: (R & { bi?: number })[] = A.flatMap((e, i): (R & { bi?: number })[] => {
     const j = pairOf.get(i);
-    // split(흉터 탭, 2026-11-27 사용자 '각각 따로'): 한쪽에만 더해진 시술이나 S.V가 있으면 시술마다 한 줄, S.V는 횟수 아래 'S/V'
+    // split(흉터 탭, 2026-11-27 사용자 '각각 따로'): 한쪽에만 더해진 시술이나 S.V가 있으면 시술마다 한 줄, S.V는 횟수 아래 '(S.V)'
     if (opts.split && j != null) {
       const x = B[j];
       if (e.tokens.join('|') !== x.tokens.join('|') || e.sv.length || x.sv.length) {
         const all = [...e.tokens, ...x.tokens.filter(t => !e.tokens.includes(t))];
-        const cell = (en: Entry, t: string): Cell | null => (en.tokens.includes(t) ? { count: countText(en), subs: en.sv.includes(t) ? ['S/V'] : [] } : null);
+        const cell = (en: Entry, t: string): Cell | null => (en.tokens.includes(t) ? { count: countText(en), subs: en.sv.includes(t) ? ['(S.V)'] : [] } : null);
         return all.map((t, k) => ({ name: t, a: cell(e, t), b: cell(x, t), bi: j }));
       }
     }

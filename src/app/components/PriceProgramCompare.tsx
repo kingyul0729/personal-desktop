@@ -173,7 +173,7 @@ function EventCompare({ programs, lines, onData, cats, onCat }: { programs: Prog
   const a = o?.program, b = others.find(p => p.id === pid) ?? others[0];
   const base0 = g?.options[0]?.program.price ?? null;
   const optText = (x: { label: string; program: Program }, k: number) => `${x.label || '기본'}${k === 0 ? (g!.options.some(y => y.program.price !== base0) ? ' · 기본' : '') : x.program.price != null && base0 != null && x.program.price !== base0 ? ` · ${x.program.price > base0 ? '+' : '−'}${won(Math.abs(x.program.price - base0))}` : ''}`;
-  const rows0 = compareRows(a?.items, b?.items).map(r => ({ ...r, a: r.a && { ...r.a, subs: r.a.subs.filter(t => t !== '단독') }, b: r.b && { ...r.b, subs: r.b.subs.filter(t => t !== '단독') } })); // 이벤트 비교는 '단독' 글자 없이(2026-11-28 사용자)
+  const rows0 = compareRows(a?.items, b?.items).map(r => ({ ...r, a: r.a && { ...r.a, subs: r.a.subs.filter(t => t !== '(단독)') }, b: r.b && { ...r.b, subs: r.b.subs.filter(t => t !== '(단독)') } })); // 이벤트 비교는 '단독' 글자 없이(2026-11-28 사용자)
   const allRows = b?.category === '리프팅' ? includeOnly(rows0) : rows0; // 리프팅과 비교할 때 LDM 트리플·스킨보톡스·스킨부스터는 '포함'
   const same = sameAll(allRows);
   const rows = onlyDiff ? allRows.filter(rowDiff) : allRows;
