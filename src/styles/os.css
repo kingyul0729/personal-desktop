@@ -3691,3 +3691,6 @@ button.iv-pinv { cursor: zoom-in; }
 @container pb (max-width: 520px) { .pcz-pre-note { font-size: 14px; } .pcz-tiers button { padding: 0 8px; font-size: 13px; } }
 /* 이벤트 비교 [정가] 버튼 더해 4개 — 한 줄로(2026-11-28 사용자 시안 2) */
 .pcz-tiers { display: flex; flex-wrap: nowrap; justify-content: center; }
+
+/* 시술 항목 가운데 정렬(2026-11-28 사용자 그림 '중앙정렬') — 세 칸 표의 머리·시술 이름 */
+.pct:not(.pct-one) tbody th[scope="row"], .pct:not(.pct-one) thead th:nth-child(2) { text-align: center; }

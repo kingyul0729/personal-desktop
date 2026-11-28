@@ -60,8 +60,7 @@ export function ProgramCompare() {
   const listB = origin ? list.filter(im) : list;
   const a = listA.find(p => p.id === pick[0]) ?? listA[0];
   const b = listB.find(p => p.id === pick[1]) ?? (origin ? listB.find(p => baseOf(p) === baseOf(a)) ?? listB[0] : listB === list ? list[1] ?? list[0] : listB[0]);
-  // 라인 요약은 서로 다른 라인끼리 비교할 때만(2026-11-26 사용자 '다른 라인끼리면 라인 요약도')
-  const lineDiff = !!a?.line && !!b?.line && a.line !== b.line;
+  // 카드의 라인 이름표는 없앰(2026-11-28 사용자 그림 '삭제')
   // 구성 없는 프로그램끼리(보톡스, 2026-11-27 사용자 그림): 시술 구성 상자·카드 라인 이름표 없이, 설명 제목 = 시술 이름 + 라인 이름, 마지막 설명 묶음(톡신 설명)에 밑줄
   const noItems = !a?.items?.length && !b?.items?.length && a?.id !== LENTIGO_ID && b?.id !== LENTIGO_ID;
   const choose = (i: 0 | 1, id: string) => setPick(() => { const n: [string, string] = [a?.id ?? '', b?.id ?? '']; n[i] = id; if (origin && i === 0) n[1] = ''; return n; });
@@ -115,7 +114,6 @@ export function ProgramCompare() {
             {lt.off ? <span>할인 {Math.round((lt.rate ?? 0) * 100)}% −{won(lt.off)}</span> : null}
             <button type="button" className="pcz-set" aria-expanded={setting} onClick={() => setSetting(v => !v)}>개수·크기 설정</button>
           </div> : null}
-          <div className="pcz-feat">{lineDiff && p?.line && !noItems ? <span className="pcz-tag">{p.line}</span> : null}</div>
         </div>)}
       </div>
       {lmode && setting && <section className="pcz-box pcz-cnt">
