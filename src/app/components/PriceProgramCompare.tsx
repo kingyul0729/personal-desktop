@@ -41,7 +41,7 @@ const docSplit = (n?: string): [string, string] => { const m = (n ?? '').match(D
 // 스킨부스터 고르기 = 권종·옵션과 같은 상자(2026-11-29 사용자 시안 — '스킨부스터 없음' / '힐로웨이브 1회 · +44만원', 이름 아래 '+ 부스터' 글자 없음)
 function BoostBox({ list, value, label, onChange }: { list: Program[]; value: string; label: string; onChange: (v: string) => void }) {
   const cur = list.find(x => x.id === value);
-  return <label className="pcz-opt"><span>{cur ? `${boostName(cur)} · +${won(cur.price ?? null)}` : '스킨부스터 없음'}</span><ChevronDown size={16} /><select value={value} aria-label={label} onChange={e => onChange(e.target.value)}>
+  return <label className="pcz-opt"><span>{cur ? boostName(cur) : '스킨부스터 없음'}</span><ChevronDown size={16} /><select value={value} aria-label={label} onChange={e => onChange(e.target.value)}>
     <option value="">스킨부스터 없음</option>{list.map(x => <option key={x.id} value={x.id}>{boostName(x)} · +{won(x.price ?? null)}</option>)}</select></label>;
 } // 비교 화면 금액은 모두 만원 단위(2026-11-28 사용자)
 export function ProgramCompare() {
