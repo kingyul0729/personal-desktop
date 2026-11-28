@@ -170,7 +170,7 @@ function EventCompare({ programs, lines, onData, cats, onCat }: { programs: Prog
   const others = useMemo(() => programs.filter(p => p.category !== EVENT_CAT), [programs]);
   const otherCats = Array.from(new Set(others.map(p => p.category)));
   const [ev, setEv] = useState(''); const [opt, setOpt] = useState(0);
-  const [pid, setPid] = useState(''); const [tier, setTier] = useState<PrepaidTier>(300);
+  const [pid, setPid] = useState(''); const [tier, setTier] = useState<PrepaidTier | 0>(300); // 0 = 정가(2026-11-28 사용자 시안 2 — 할인 없는 일반 가격)
   const [onlyDiff, setOnlyDiff] = useState(false);
   const g = groups.find(x => x.base === ev) ?? groups[0];
   const o = g?.options[opt] ?? g?.options[0];
@@ -205,8 +205,8 @@ function EventCompare({ programs, lines, onData, cats, onCat }: { programs: Prog
         <div className="pcz-card is-b">
           <span className="pcz-kind">선결제권 · 전체 프로그램</span>
           <label className="pcz-pick"><b>{nameView(b?.name)}</b><ChevronDown size={18} /><select value={b?.id ?? ''} aria-label="프로그램" onChange={e => setPid(e.target.value)}>{otherCats.map(c => <optgroup key={c} label={c}>{others.filter(p => p.category === c).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</optgroup>)}</select></label>
-          <div className="pcz-tiers" role="group" aria-label="선결제권">{TIERS.map(t => <button key={t} type="button" aria-pressed={tier === t} className={tier === t ? 'is-on' : undefined} onClick={() => setTier(t)}>{t}만원권</button>)}</div>
-          <div className="pcz-price"><strong>{won(tierPrice(b?.price ?? null, tier))}</strong><small>{b?.price != null ? `정가 ${won(b.price)} · ` : ''}부가세 포함</small></div>
+          <div className="pcz-tiers" role="group" aria-label="선결제권">{([0, ...TIERS] as (PrepaidTier | 0)[]).map(t => <button key={t} type="button" aria-pressed={tier === t} className={tier === t ? 'is-on' : undefined} onClick={() => setTier(t)}>{t ? `${t}만원권` : '정가'}</button>)}</div>
+          <div className="pcz-price"><strong>{won(tier ? tierPrice(b?.price ?? null, tier) : b?.price ?? null)}</strong><small>{tier && b?.price != null ? `정가 ${won(b.price)} · ` : ''}부가세 포함</small></div>
         </div>
       </div>
       {(a?.items?.length || b?.items?.length) ? <section className="pcz-box">
@@ -218,7 +218,7 @@ function EventCompare({ programs, lines, onData, cats, onCat }: { programs: Prog
             <label className="pc-only"><input type="checkbox" checked={onlyDiff} onChange={e => setOnlyDiff(e.target.checked)} /> 차이만 보기</label></div>
           <table className="pct">
             <colgroup><col className="pct-n" /><col /><col className="pct-n" /></colgroup>
-            <thead><tr><th className="is-a">이벤트</th><th>시술 항목</th><th className="is-b">{tier}만원권</th></tr></thead>
+            <thead><tr><th className="is-a">이벤트</th><th>시술 항목</th><th className="is-b">{tier ? `${tier}만원권` : '정가'}</th></tr></thead>
             <tbody>{rows.map((r, k) => <tr key={k} className={rowDiff(r) ? 'is-d' : undefined}>{cell(r.a, r.b)}<th scope="row">{r.name}</th>{cell(r.b, r.a)}</tr>)}</tbody>
           </table>
         </>}
