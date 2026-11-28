@@ -3748,3 +3748,9 @@ button.pcz-pick { border: 0; background: none; padding: 0; font: inherit; text-a
 .pp-more-list { border-top: 1px solid #eef1f4; }
 .pp-more-list small { font-size: 14px; color: #9aa0a8; font-weight: 400; }
 .pcz-boostname { font-size: 15px; color: #44617c; font-weight: 600; }
+/* 탭▾·달▾ 단추(2026-11-29 — 기본 드롭다운 대신 흰 팝업 ListPicker), 예전 .pc-cat select와 같은 알약 */
+.pc-catbtn { display: inline-flex; align-items: center; gap: 10px; height: 44px; padding: 0 16px 0 18px; border: 1px solid #c9d6e3; border-radius: 999px; background: #fff; font: inherit; font-size: 16px; font-weight: 700; color: #44617c; cursor: pointer; white-space: nowrap; }
+.pc-catbtn svg { color: #7D838B; flex: none; }
+button.pcz-opt { cursor: pointer; font: inherit; font-size: 16px; width: 100%; }
+.pp-list li.pp-group { padding: 12px 12px 4px; font-size: 13px; color: #9aa0a8; font-weight: 600; }
+@container pb (max-width: 520px) { .pc-catbtn { font-size: 14px; padding-left: 14px; } }

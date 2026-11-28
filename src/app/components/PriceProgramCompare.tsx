@@ -3,7 +3,7 @@ import { ChevronDown, Minus, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { KittyDialog } from './KittyDialog';
 import { askConfirm } from './AlertDialog';
 import { SavingMark } from './Feedback';
-import { ProgramPicker } from './ProgramPicker';
+import { ListPicker, ProgramPicker } from './ProgramPicker';
 import { LIFT_DEV, boostDesc, compareRows, type Cell } from '../programCompare';
 import { EVENT_CAT, PREPAID_CAT, HIDDEN, TIERS, cellDiff, eventGroups, includeOnly, liveEvents, manwon, rowDiff, sameAll, tierPrice } from '../eventCompare';
 import { prepaidDiscountRates, type PrepaidTier } from '../prepaid';
@@ -122,7 +122,7 @@ export function ProgramCompare() {
   return <div className="pc-wrap">
     <div className="pcz pcz-evx">
       <div className="pcz-top">
-        <label className="pc-cat"><select value={category} aria-label="탭" onChange={e => { setCat(e.target.value); setPick(['', '']); }}>{cats.map(c => <option key={c} value={c}>{c}</option>)}</select></label>
+        <ListPicker className="pc-catbtn" label="탭" title="탭 선택" value={category} onChange={v => { setCat(v); setPick(['', '']); }} options={cats.map(c => ({ value: c, label: c }))}><span>{category}</span><ChevronDown size={16} /></ListPicker>
       </div>
       <header className="pcz-title">{eng && <small>{eng} PROGRAM</small>}<h3><i />{category} 프로그램 비교<i /></h3></header>
       <div className="pcz-two">
@@ -209,12 +209,8 @@ function EventCompare({ programs, lines, onData, cats, onCat }: { programs: Prog
   return <div className="pc-wrap">
     <div className="pcz pcz-ev pcz-evx">
       <div className="pcz-top">
-        <label className="pc-cat"><select value={EVENT_CAT} aria-label="탭" onChange={e => onCat(e.target.value)}>{cats.map(c => <option key={c} value={c}>{c}</option>)}</select></label>
-        {mon || live.hidden.length ? <label className="pc-cat"><select value={mon} aria-label="달" onChange={e => { setMonth(e.target.value); setEv(''); setOpt(0); }}>
-          {!mon && <option value="">—</option>}
-          {live.months.map(m => <option key={m} value={m}>{m || '이벤트'}</option>)}
-          {live.hidden.length ? <optgroup label="숨긴 달">{live.hidden.map(m => <option key={m} value={m}>{m}</option>)}</optgroup> : null}
-        </select></label> : null}
+        <ListPicker className="pc-catbtn" label="탭" title="탭 선택" value={EVENT_CAT} onChange={onCat} options={cats.map(c => ({ value: c, label: c }))}><span>{EVENT_CAT}</span><ChevronDown size={16} /></ListPicker>
+        {mon || live.hidden.length ? <ListPicker className="pc-catbtn" label="달" title="달 선택" value={mon} onChange={v => { setMonth(v); setEv(''); setOpt(0); }} options={[...live.months.map(m => ({ value: m, label: m || '이벤트' })), ...live.hidden.map(m => ({ value: m, label: m, group: '숨긴 달' }))]}><span>{mon || '—'}</span><ChevronDown size={16} /></ListPicker> : null}
         {mon ? <button type="button" className="pcz-hide" disabled={busy} onClick={() => void toggleHide()}>{isHidden ? '보이기' : '숨기기'}</button> : null}
       </div>
       <header className="pcz-title"><small>EVENT PROGRAM</small><h3><i />이벤트 프로그램 비교<i /></h3></header>
@@ -224,7 +220,7 @@ function EventCompare({ programs, lines, onData, cats, onCat }: { programs: Prog
           <span className="pcz-kind">{mon || '이벤트'}</span>
           <div className="pcz-namebox"><ProgramPicker label="이벤트" value={g?.base ?? ''} onChange={v => { setEv(v); setOpt(0); }} options={subs.flatMap(sb => groups.filter(x => x.sub === sb).map(x => ({ id: x.base, name: x.base, cat: sb })))}><b>{nameView(docSplit(g?.base)[0])}</b></ProgramPicker>
           {docSplit(g?.base)[1] ? <small className="pcz-doc">{docSplit(g?.base)[1]}</small> : null}</div>
-          {g && g.options.length > 1 ? <label className="pcz-opt"><span>{optText(o!, g.options.indexOf(o!))}</span><ChevronDown size={16} /><select value={g.options.indexOf(o!)} aria-label="이벤트 옵션" onChange={e => setOpt(Number(e.target.value))}>{g.options.map((x, k) => <option key={k} value={k}>{optText(x, k)}</option>)}</select></label> : null}
+          {g && g.options.length > 1 ? <ListPicker className="pcz-opt" anchor=".pcz-card" label="이벤트 옵션" title="옵션 선택" value={String(g.options.indexOf(o!))} onChange={v => setOpt(Number(v))} options={g.options.map((x, k) => ({ value: String(k), label: optText(x, k) }))}><span>{optText(o!, g.options.indexOf(o!))}</span><ChevronDown size={16} /></ListPicker> : null}
           <div className="pcz-price"><strong>{won(a?.price ?? null)}</strong><small>부가세 포함</small></div>
         </div>
         <div className="pcz-card is-b">
@@ -265,7 +261,7 @@ function PrepaidCompare({ programs, cats, onCat }: { programs: Program[]; cats: 
   return <div className="pc-wrap">
     <div className="pcz pcz-ev pcz-evx">
       <div className="pcz-top">
-        <label className="pc-cat"><select value={PREPAID_CAT} aria-label="탭" onChange={e => onCat(e.target.value)}>{cats.map(c => <option key={c} value={c}>{c}</option>)}</select></label>
+        <ListPicker className="pc-catbtn" label="탭" title="탭 선택" value={PREPAID_CAT} onChange={onCat} options={cats.map(c => ({ value: c, label: c }))}><span>{PREPAID_CAT}</span><ChevronDown size={16} /></ListPicker>
       </div>
       <header className="pcz-title"><small>PREPAID</small><h3><i />선결제권 비교<i /></h3></header>
       {!list.length ? <div className="pb-empty">기록 없음</div> : <div className="pcz-two">
