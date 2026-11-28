@@ -177,14 +177,21 @@ function EventCompare({ programs, lines, onData, cats, onCat }: { programs: Prog
   };
   const groups = useMemo(() => eventGroups(live.list.filter(p => (p.line ?? '') === mon)), [live, mon]);
   const subs = Array.from(new Set(groups.map(x => x.sub)));
-  const others = useMemo(() => programs.filter(p => p.category !== EVENT_CAT), [programs]);
+  const others = useMemo(() => programs.filter(p => p.category !== EVENT_CAT && !(p.category === '리프팅' && BOOST.test(p.name))), [programs]);
+  // 오른쪽이 리프팅이면 스킨부스터 더하기(2026-11-29 사용자 '여기에는 어떻게 스킨부스터 추가해') — 권종 할인은 리프팅 금액에만, 스킨부스터는 등록 금액(리프팅 고객가) 그대로 더함
+  const boosters = useMemo(() => programs.filter(p => p.category === '리프팅' && BOOST.test(p.name)), [programs]);
+  const [bst, setBst] = useState('');
   const otherCats = Array.from(new Set(others.map(p => p.category)));
   const [ev, setEv] = useState(''); const [opt, setOpt] = useState(0);
   const [pid, setPid] = useState(''); const [tier, setTier] = useState<PrepaidTier | 0>(300); // 0 = 정가(2026-11-28 사용자 시안 2 — 할인 없는 일반 가격)
   const [onlyDiff, setOnlyDiff] = useState(false);
   const g = groups.find(x => x.base === ev) ?? groups[0];
   const o = g?.options[opt] ?? g?.options[0];
-  const a = o?.program, b = others.find(p => p.id === pid) ?? others[0];
+  const a = o?.program, b0 = others.find(p => p.id === pid) ?? others[0];
+  const bx = b0?.category === '리프팅' ? boosters.find(q => q.id === bst) : undefined;
+  const b = b0 && bx ? { ...b0, items: [...(b0.items ?? []), ...(bx.items ?? [])] } as Program : b0;
+  const bPrice = b0?.price == null ? null : (tier ? (tierPrice(b0.price, tier) ?? 0) : b0.price) + (bx?.price ?? 0);
+  const bList = b0?.price == null ? null : b0.price + (bx?.price ?? 0);
   const base0 = g?.options[0]?.program.price ?? null;
   const optText = (x: { label: string; program: Program }, k: number) => `${x.label || '기본'}${k === 0 ? (g!.options.some(y => y.program.price !== base0) ? ' · 기본' : '') : x.program.price != null && base0 != null && x.program.price !== base0 ? ` · ${x.program.price > base0 ? '+' : '−'}${won(Math.abs(x.program.price - base0))}` : ''}`;
   const rows0 = compareRows(a?.items, b?.items).map(r => ({ ...r, a: r.a && { ...r.a, subs: r.a.subs.filter(t => t !== '(단독)') }, b: r.b && { ...r.b, subs: r.b.subs.filter(t => t !== '(단독)') } })); // 이벤트 비교는 '단독' 글자 없이(2026-11-28 사용자)
@@ -214,9 +221,11 @@ function EventCompare({ programs, lines, onData, cats, onCat }: { programs: Prog
         </div>
         <div className="pcz-card is-b">
           <span className="pcz-kind">선결제권 · 전체 프로그램</span>
-          <label className="pcz-pick"><b>{nameView(b?.name)}</b><ChevronDown size={18} /><select value={b?.id ?? ''} aria-label="프로그램" onChange={e => setPid(e.target.value)}>{otherCats.map(c => <optgroup key={c} label={c}>{others.filter(p => p.category === c).map(p => <option key={p.id} value={p.id}>{svName(p.name)}</option>)}</optgroup>)}</select></label>
+          <label className="pcz-pick"><b>{nameView(b0?.name)}{bx ? <small className="pc-sub">+ {boostName(bx)}</small> : null}</b><ChevronDown size={18} /><select value={b?.id ?? ''} aria-label="프로그램" onChange={e => setPid(e.target.value)}>{otherCats.map(c => <optgroup key={c} label={c}>{others.filter(p => p.category === c).map(p => <option key={p.id} value={p.id}>{svName(p.name)}</option>)}</optgroup>)}</select></label>
           <div className="pcz-tiers" role="group" aria-label="선결제권">{([0, ...TIERS] as (PrepaidTier | 0)[]).map(t => <button key={t} type="button" aria-pressed={tier === t} className={tier === t ? 'is-on' : undefined} onClick={() => setTier(t)}>{t ? `${t}만원권` : '정가'}</button>)}</div>
-          <div className="pcz-price"><strong>{won(tier ? tierPrice(b?.price ?? null, tier) : b?.price ?? null)}</strong><small>{tier && b?.price != null ? `정가 ${won(b.price)} · ` : ''}부가세 포함</small></div>
+          <div className="pcz-price"><strong>{won(bPrice)}</strong><small>{tier && bList != null ? `정가 ${won(bList)} · ` : ''}부가세 포함</small>
+          {b0?.category === '리프팅' && boosters.length ? <label className="pcz-boost"><span>스킨부스터</span><select value={bx?.id ?? ''} aria-label="스킨부스터" onChange={e => setBst(e.target.value)}>
+            <option value="">없음</option>{boosters.map(x => <option key={x.id} value={x.id}>{boostName(x)} · +{won(x.price ?? null)}</option>)}</select><ChevronDown size={15} /></label> : null}</div>
         </div>
       </div>
       {(a?.items?.length || b?.items?.length) ? <section className="pcz-box">
