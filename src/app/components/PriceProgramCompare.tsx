@@ -34,7 +34,13 @@ export async function sendPrograms(body: unknown): Promise<ProgramData> {
 const BOOST = /\s*·\s*리프팅 병행$/;
 const boostName = (p: Program) => p.name.replace(BOOST, '');
 
-export const won = manwon; // 비교 화면 금액은 모두 만원 단위(2026-11-28 사용자)
+export const won = manwon;
+// 스킨부스터 고르기 = 이름 바로 아래 작은 글자 하나(2026-11-29 사용자 '지저분해' — 상자 없이, 고르면 '+ 힐로웨이브 1회')
+function BoostPick({ list, value, label, onChange }: { list: Program[]; value: string; label: string; onChange: (v: string) => void }) {
+  const cur = list.find(x => x.id === value);
+  return <label className={cur ? 'pcz-boost is-on' : 'pcz-boost'}><span>{cur ? `+ ${boostName(cur)}` : '+ 스킨부스터'}</span><select value={value} aria-label={label} onChange={e => onChange(e.target.value)}>
+    <option value="">없음</option>{list.map(x => <option key={x.id} value={x.id}>{boostName(x)} · +{won(x.price ?? null)}</option>)}</select></label>;
+} // 비교 화면 금액은 모두 만원 단위(2026-11-28 사용자)
 export function ProgramCompare() {
   const [data, setData] = useState<ProgramData | null>(null);
   const programs = data?.programs ?? null;
@@ -97,7 +103,7 @@ export function ProgramCompare() {
     const n = lmode ? addN(p) : 0;
     if (n) return <>{nameParts(p!.name.replace(/\s+추가 관리.*$/, ''))}<small className="pc-sub">{card ? `PICO 532 흑자 제거${n > 1 ? ` ${n}개` : ''} 추가` : `PICO 532${n > 1 ? ` ${n}개` : ''} 추가`}</small></>;
     const bn = (p as (Program & { boost?: string }) | undefined)?.boost;
-    return bn ? <>{nameView(p?.name)}<small className="pc-sub">+ {bn}</small></> : nameView(p?.name);
+    return bn && !card ? <>{nameView(p?.name)}<small className="pc-sub">+ {bn}</small></> : nameView(p?.name);
   };
   const lt = lentigoTotal(sizes, cnt); // 정상 총액 · 할인율 · 할인 금액 · 최종(5개 이상은 null)
   // 총액 차이 = 두 최종 금액(둘 다 부가세 포함 등록 금액 기준), 흑자 할인 기준이 없으면(5개 이상) 숨김
@@ -120,14 +126,13 @@ export function ProgramCompare() {
       <header className="pcz-title">{eng && <small>{eng} PROGRAM</small>}<h3><i />{category} 프로그램 비교<i /></h3></header>
       <div className="pcz-two">
         {pair.map((p, i) => <div key={i} className={`pcz-card ${i ? "is-b" : "is-a"}`}>
-          <label className="pcz-pick"><b>{title(p, true)}</b><ChevronDown size={18} /><select value={sel[i]} aria-label={`프로그램 ${i + 1}`} onChange={e => choose(i as 0 | 1, e.target.value)}>{(i ? listB : listA).map(x => <option key={x.id} value={x.id}>{svName(x.name)}</option>)}</select></label>
+          <div className="pcz-namebox"><label className="pcz-pick"><b>{title(p, true)}</b><ChevronDown size={18} /><select value={sel[i]} aria-label={`프로그램 ${i + 1}`} onChange={e => choose(i as 0 | 1, e.target.value)}>{(i ? listB : listA).map(x => <option key={x.id} value={x.id}>{svName(x.name)}</option>)}</select></label>
+          {boosters.length ? <BoostPick list={boosters} value={boost[i]} label={`스킨부스터 ${i + 1}`} onChange={v => setBoost(o => { const n: [string, string] = [o[0], o[1]]; n[i] = v; return n; })} /> : null}</div>
           <div className="pcz-price">{p?.id === LENTIGO_ID && lt.final == null ? <strong className="is-check">할인 기준 확인 필요</strong> : <><strong>{won(p?.price ?? null)}</strong><small>부가세 포함</small></>}</div>
           {p?.id === LENTIGO_ID ? <div className="pcz-note">
             {lt.off ? <span>할인 {Math.round((lt.rate ?? 0) * 100)}% −{won(lt.off)}</span> : null}
             <button type="button" className="pcz-set" aria-expanded={setting} onClick={() => setSetting(v => !v)}>개수·크기 설정</button>
           </div> : null}
-          {boosters.length ? <label className="pcz-boost"><span>스킨부스터</span><select value={boost[i]} aria-label={`스킨부스터 ${i + 1}`} onChange={e => { const v = e.target.value; setBoost(o => { const n: [string, string] = [o[0], o[1]]; n[i] = v; return n; }); }}>
-            <option value="">없음</option>{boosters.map(x => <option key={x.id} value={x.id}>{boostName(x)} · +{won(x.price ?? null)}</option>)}</select><ChevronDown size={15} /></label> : null}
         </div>)}
       </div>
       {lmode && setting && <section className="pcz-box pcz-cnt">
@@ -221,11 +226,10 @@ function EventCompare({ programs, lines, onData, cats, onCat }: { programs: Prog
         </div>
         <div className="pcz-card is-b">
           <span className="pcz-kind">선결제권 · 전체 프로그램</span>
-          <label className="pcz-pick"><b>{nameView(b0?.name)}{bx ? <small className="pc-sub">+ {boostName(bx)}</small> : null}</b><ChevronDown size={18} /><select value={b?.id ?? ''} aria-label="프로그램" onChange={e => setPid(e.target.value)}>{otherCats.map(c => <optgroup key={c} label={c}>{others.filter(p => p.category === c).map(p => <option key={p.id} value={p.id}>{svName(p.name)}</option>)}</optgroup>)}</select></label>
+          <div className="pcz-namebox"><label className="pcz-pick"><b>{nameView(b0?.name)}</b><ChevronDown size={18} /><select value={b?.id ?? ''} aria-label="프로그램" onChange={e => setPid(e.target.value)}>{otherCats.map(c => <optgroup key={c} label={c}>{others.filter(p => p.category === c).map(p => <option key={p.id} value={p.id}>{svName(p.name)}</option>)}</optgroup>)}</select></label>
+          {b0?.category === '리프팅' && boosters.length ? <BoostPick list={boosters} value={bx?.id ?? ''} label="스킨부스터" onChange={setBst} /> : null}</div>
           <div className="pcz-tiers" role="group" aria-label="선결제권">{([0, ...TIERS] as (PrepaidTier | 0)[]).map(t => <button key={t} type="button" aria-pressed={tier === t} className={tier === t ? 'is-on' : undefined} onClick={() => setTier(t)}>{t ? `${t}만원권` : '정가'}</button>)}</div>
-          <div className="pcz-price"><strong>{won(bPrice)}</strong><small>{tier && bList != null ? `정가 ${won(bList)} · ` : ''}부가세 포함</small>
-          {b0?.category === '리프팅' && boosters.length ? <label className="pcz-boost"><span>스킨부스터</span><select value={bx?.id ?? ''} aria-label="스킨부스터" onChange={e => setBst(e.target.value)}>
-            <option value="">없음</option>{boosters.map(x => <option key={x.id} value={x.id}>{boostName(x)} · +{won(x.price ?? null)}</option>)}</select><ChevronDown size={15} /></label> : null}</div>
+          <div className="pcz-price"><strong>{won(bPrice)}</strong><small>{tier && bList != null ? `정가 ${won(bList)} · ` : ''}부가세 포함</small></div>
         </div>
       </div>
       {(a?.items?.length || b?.items?.length) ? <section className="pcz-box">

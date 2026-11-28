@@ -3695,7 +3695,8 @@ button.iv-pinv { cursor: zoom-in; }
 /* 시술 항목 가운데 정렬(2026-11-28 사용자 그림 '중앙정렬') — 세 칸 표의 머리·시술 이름 */
 .pct:not(.pct-one) tbody th[scope="row"], .pct:not(.pct-one) thead th:nth-child(2) { text-align: center; }
 
-/* 리프팅 + 스킨부스터 더하기(2026-11-29 사용자 그림): 카드 아래 작은 고르기, 금액은 합친 금액 */
-.pcz-boost { position: relative; display: inline-flex; align-items: center; gap: 6px; margin: 8px auto 0; padding: 6px 12px; border: 1px solid #d5dde6; border-radius: 999px; background: #fff; font-size: 14px; color: #44617c; justify-self: center; align-self: center; }
-.pcz-boost span { color: #6b7280; }
-.pcz-boost select { appearance: none; -webkit-appearance: none; border: 0; background: none; font: inherit; font-weight: 600; color: #1f2328; padding: 0 2px; cursor: pointer; max-width: 220px; }
+/* 리프팅 + 스킨부스터 더하기(2026-11-29 사용자 그림 → 같은 날 '지저분해'로 상자 없이): 이름 바로 아래 작은 글자 하나, 누르면 고르기 */
+.pcz-namebox { display: grid; justify-items: center; gap: 2px; align-self: center; min-width: 0; }
+.pcz-boost { position: relative; display: inline-block; font-size: 14px; color: #9aa0a8; cursor: pointer; }
+.pcz-boost.is-on { color: #44617c; font-weight: 600; }
+.pcz-boost select { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; font-size: 16px; cursor: pointer; }
