@@ -6,15 +6,17 @@ import { pickItems, uniq, type PickOption } from '../programPick';
 // 프로그램 이름을 누르면 뜨는 흰 선택 팝업(2026-11-29 사용자 — 검은 기본 드롭다운 대신): 묶음 → 시술 종류 → 일반/리프팅 고객 → 목록, 고르면 닫힘
 // 카드 바로 아래(화면 밖으로 안 나가게 자리 맞춤), 목록만 팝업 안에서 스크롤
 const ETC = '그 외';
-export function ProgramPicker({ options, value, onChange, label, children, show = (n: string) => n }: { options: PickOption[]; value: string; onChange: (id: string) => void; label: string; children: ReactNode; show?: (name: string) => string }) {
+export type PickExtra = { title: string; none: string; value: string; onChange: (id: string) => void; options: { id: string; label: string; note?: string }[]; when?: (cat: string) => boolean };
+export function ProgramPicker({ options, value, onChange, label, children, show = (n: string) => n, extra }: { options: PickOption[]; value: string; onChange: (id: string) => void; label: string; children: ReactNode; show?: (name: string) => string; extra?: PickExtra }) {
   const [open, setOpen] = useState(false);
   const btn = useRef<HTMLButtonElement>(null);
   const items = useMemo(() => pickItems(options), [options]);
   const cur = items.find(x => x.id === value) ?? items[0];
   const [cat, setCat] = useState(''); const [kind, setKind] = useState(''); const [lift, setLift] = useState(false); const [doc, setDoc] = useState('');
+  const [more, setMore] = useState(false); // 아래 접힘 칸(스킨부스터 더하기)
   const [pos, setPos] = useState<{ left: number; top: number; width: number; maxH: number } | null>(null);
   const kindOf = (k: string) => k || ETC;
-  const openIt = () => { if (!cur) return; setCat(cur.cat); setKind(kindOf(cur.kind)); setLift(cur.lift); setDoc(cur.doc); setOpen(true); };
+  const openIt = () => { if (!cur) return; setCat(cur.cat); setKind(kindOf(cur.kind)); setLift(cur.lift); setDoc(cur.doc); setMore(false); setOpen(true); };
   const place = () => {
     const r = btn.current?.closest('.pcz-card')?.getBoundingClientRect() ?? btn.current?.getBoundingClientRect();
     if (!r) return;
@@ -50,11 +52,15 @@ export function ProgramPicker({ options, value, onChange, label, children, show 
       <div className="pp-scrim" onClick={() => setOpen(false)} />
       <div className="pp-pop" role="dialog" aria-label={label} style={{ left: pos.left, top: pos.top, width: pos.width, maxHeight: pos.maxH }}>
         <div className="pp-head"><b>프로그램 선택</b><button type="button" aria-label="닫기" onClick={() => setOpen(false)}><X size={18} /></button></div>
-        {cats.length > 1 ? <div className="pp-row pp-cats">{cats.map(c => <button key={c} type="button" className={c === cat ? 'is-on' : undefined} onClick={() => { setCat(c); setKind(''); }}>{c || ETC}</button>)}</div> : null}
-        {kinds.length > 1 ? <div className="pp-row">{kinds.map(x => <button key={x} type="button" className={x === k ? 'is-on' : undefined} onClick={() => setKind(x)}>{x}</button>)}</div> : null}
-        {hasLift ? <div className="pp-row pp-two">{[false, true].map(v => <button key={String(v)} type="button" className={v === lift ? 'is-on' : undefined} onClick={() => setLift(v)}>{v ? '리프팅 고객' : '일반'}</button>)}</div> : null}
-        {docs.length > 1 ? <div className="pp-row pp-two">{docs.map(v => <button key={v} type="button" className={v === d ? 'is-on' : undefined} onClick={() => setDoc(v)}>{v || '기본'}</button>)}</div> : null}
-        <ul className="pp-list">{list.map(x => <li key={x.id}><button type="button" className={x.id === value ? 'is-on' : undefined} onClick={() => pick(x.id)}><span>{show(x.label)}</span>{x.id === value ? <Check size={18} /> : null}</button></li>)}</ul>
+        {!more && cats.length > 1 ? <div className="pp-row pp-cats">{cats.map(c => <button key={c} type="button" className={c === cat ? 'is-on' : undefined} onClick={() => { setCat(c); setKind(''); }}>{c || ETC}</button>)}</div> : null}
+        {!more && kinds.length > 1 ? <div className="pp-row">{kinds.map(x => <button key={x} type="button" className={x === k ? 'is-on' : undefined} onClick={() => setKind(x)}>{x}</button>)}</div> : null}
+        {!more && hasLift ? <div className="pp-row pp-two">{[false, true].map(v => <button key={String(v)} type="button" className={v === lift ? 'is-on' : undefined} onClick={() => setLift(v)}>{v ? '리프팅 고객' : '일반'}</button>)}</div> : null}
+        {!more && docs.length > 1 ? <div className="pp-row pp-two">{docs.map(v => <button key={v} type="button" className={v === d ? 'is-on' : undefined} onClick={() => setDoc(v)}>{v || '기본'}</button>)}</div> : null}
+        {more ? null : <ul className="pp-list">{list.map(x => <li key={x.id}><button type="button" className={x.id === value ? 'is-on' : undefined} onClick={() => pick(x.id)}><span>{show(x.label)}</span>{x.id === value ? <Check size={18} /> : null}</button></li>)}</ul>}
+        {extra && (!extra.when || extra.when(cat)) ? (() => { const on = extra.options.find(o => o.id === extra.value); return <div className={more ? 'pp-more is-open' : 'pp-more'}>
+          <button type="button" className="pp-more-head" aria-expanded={more} onClick={() => setMore(v => !v)}><b>{extra.title}</b><span className={on ? 'is-on' : undefined}>{on ? on.label : extra.none}</span><ChevronDown size={18} /></button>
+          {more ? <ul className="pp-list pp-more-list">{[{ id: '', label: extra.none, note: '' }, ...extra.options].map(o => <li key={o.id || '-'}><button type="button" className={o.id === extra.value ? 'is-on' : undefined} onClick={() => { extra.onChange(o.id); setMore(false); }}><span>{o.label}{o.note ? <small> {o.note}</small> : null}</span>{o.id === extra.value ? <Check size={18} /> : null}</button></li>)}</ul> : null}
+        </div>; })() : null}
       </div>
     </>, document.body) : null}
   </>;

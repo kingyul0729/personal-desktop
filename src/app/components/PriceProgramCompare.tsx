@@ -39,12 +39,9 @@ export const won = manwon;
 // 이름 끝 '(대표 원장님)' 같은 원장님 괄호는 이름 아래 작은 회색 줄(2026-11-29 사용자 시안 — 이벤트 비교 카드)
 const DOC = /\s*\(([^()]*원장님)\)\s*$/;
 const docSplit = (n?: string): [string, string] => { const m = (n ?? '').match(DOC); return m ? [(n ?? '').replace(DOC, ''), m[1]] : [n ?? '', '']; };
-// 스킨부스터 고르기 = 권종·옵션과 같은 상자(2026-11-29 사용자 시안 — '스킨부스터 없음' / '힐로웨이브 1회 · +44만원', 이름 아래 '+ 부스터' 글자 없음)
-function BoostBox({ list, value, label, onChange }: { list: Program[]; value: string; label: string; onChange: (v: string) => void }) {
-  const cur = list.find(x => x.id === value);
-  return <label className="pcz-opt"><span>{cur ? boostName(cur) : '스킨부스터 없음'}</span><ChevronDown size={16} /><select value={value} aria-label={label} onChange={e => onChange(e.target.value)}>
-    <option value="">스킨부스터 없음</option>{list.map(x => <option key={x.id} value={x.id}>{boostName(x)} · +{won(x.price ?? null)}</option>)}</select></label>;
-} // 비교 화면 금액은 모두 만원 단위(2026-11-28 사용자)
+// 스킨부스터 더하기는 프로그램 선택 팝업 안 접힘 칸에서(2026-11-29 사용자 '아코디언으로, 안에서 다 해결' — 카드의 스킨부스터 상자 대신), 카드엔 이름 아래 '+ 힐로웨이브 1회'
+const boostExtra = (list: Program[], value: string, onChange: (v: string) => void, when?: (cat: string) => boolean) => ({ title: '스킨부스터', none: '없음', value, onChange, when, options: list.map(x => ({ id: x.id, label: boostName(x), note: `+${won(x.price ?? null)}` })) });
+// 비교 화면 금액은 모두 만원 단위(2026-11-28 사용자)
 export function ProgramCompare() {
   const [data, setData] = useState<ProgramData | null>(null);
   const programs = data?.programs ?? null;
@@ -130,9 +127,9 @@ export function ProgramCompare() {
       <header className="pcz-title">{eng && <small>{eng} PROGRAM</small>}<h3><i />{category} 프로그램 비교<i /></h3></header>
       <div className="pcz-two">
         {pair.map((p, i) => <div key={i} className={`pcz-card ${i ? "is-b" : "is-a"}`}>
-          {(() => { const plain = p && p.id !== LENTIGO_ID && !(lmode && addN(p)); const [nm, doc] = plain ? docSplit(p!.name) : ['', '']; return <div className="pcz-namebox"><ProgramPicker label={`프로그램 ${i + 1}`} value={sel[i]} onChange={v => choose(i as 0 | 1, v)} show={svName} options={(i ? listB : listA).map(x => ({ id: x.id, name: x.name }))}><b>{plain ? nameView(nm) : title(p, true)}</b></ProgramPicker>
-          {doc ? <small className="pcz-doc">{doc}</small> : null}</div>; })()}
-          {boosters.length ? <BoostBox list={boosters} value={boost[i]} label={`스킨부스터 ${i + 1}`} onChange={v => setBoost(o => { const n: [string, string] = [o[0], o[1]]; n[i] = v; return n; })} /> : null}
+          {(() => { const plain = p && p.id !== LENTIGO_ID && !(lmode && addN(p)); const [nm, doc] = plain ? docSplit(p!.name) : ['', '']; return <div className="pcz-namebox"><ProgramPicker label={`프로그램 ${i + 1}`} value={sel[i]} onChange={v => choose(i as 0 | 1, v)} show={svName} options={(i ? listB : listA).map(x => ({ id: x.id, name: x.name }))} extra={boosters.length ? boostExtra(boosters, boost[i], v => setBoost(o => { const n: [string, string] = [o[0], o[1]]; n[i] = v; return n; })) : undefined}><b>{plain ? nameView(nm) : title(p, true)}</b></ProgramPicker>
+          {doc ? <small className="pcz-doc">{doc}</small> : null}
+          {(p as (Program & { boost?: string }) | undefined)?.boost ? <small className="pcz-boostname">+ {(p as Program & { boost?: string }).boost}</small> : null}</div>; })()}
           {p?.id === LENTIGO_ID ? <div className="pcz-note">
             {lt.off ? <span>할인 {Math.round((lt.rate ?? 0) * 100)}% −{won(lt.off)}</span> : null}
             <button type="button" className="pcz-set" aria-expanded={setting} onClick={() => setSetting(v => !v)}>개수·크기 설정</button>
@@ -232,10 +229,10 @@ function EventCompare({ programs, lines, onData, cats, onCat }: { programs: Prog
         </div>
         <div className="pcz-card is-b">
           <span className="pcz-kind">선결제권 · 전체 프로그램</span>
-          <div className="pcz-namebox"><ProgramPicker label="프로그램" value={b0?.id ?? ''} onChange={setPid} show={svName} options={otherCats.flatMap(c => others.filter(p => p.category === c).map(p => ({ id: p.id, name: p.name, cat: c })))}><b>{nameView(docSplit(b0?.name)[0])}</b></ProgramPicker>
-          {docSplit(b0?.name)[1] ? <small className="pcz-doc">{docSplit(b0?.name)[1]}</small> : null}</div>
+          <div className="pcz-namebox"><ProgramPicker label="프로그램" value={b0?.id ?? ''} onChange={setPid} show={svName} options={otherCats.flatMap(c => others.filter(p => p.category === c).map(p => ({ id: p.id, name: p.name, cat: c })))} extra={boosters.length ? boostExtra(boosters, bst, setBst, c => c === '리프팅') : undefined}><b>{nameView(docSplit(b0?.name)[0])}</b></ProgramPicker>
+          {docSplit(b0?.name)[1] ? <small className="pcz-doc">{docSplit(b0?.name)[1]}</small> : null}
+          {bx ? <small className="pcz-boostname">+ {boostName(bx)}</small> : null}</div>
           <div className="pcz-tiers" role="group" aria-label="선결제권">{([0, ...TIERS] as (PrepaidTier | 0)[]).map(t => <button key={t} type="button" aria-pressed={tier === t} className={tier === t ? 'is-on' : undefined} onClick={() => setTier(t)}>{t ? `${t}만` : '정가'}</button>)}</div>
-          {b0?.category === '리프팅' && boosters.length ? <BoostBox list={boosters} value={bx?.id ?? ''} label="스킨부스터" onChange={setBst} /> : null}
           <div className="pcz-price"><strong>{won(bPrice)}</strong><small>{tier && bList != null ? `정가 ${won(bList)} · ` : ''}부가세 포함</small></div>
         </div>
       </div>
