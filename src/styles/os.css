@@ -3700,3 +3700,16 @@ button.iv-pinv { cursor: zoom-in; }
 .pcz-boost { position: relative; display: inline-block; font-size: 14px; color: #9aa0a8; cursor: pointer; }
 .pcz-boost.is-on { color: #44617c; font-weight: 600; }
 .pcz-boost select { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; font-size: 16px; cursor: pointer; }
+
+/* 이벤트 비교 카드 정돈(2026-11-29 사용자 시안 '답답·지저분'): 왼쪽 정렬, 고르는 것은 위에 차례로, 얇은 선 아래 가격만 — 두 카드 가격 높이 같게, 카드 바탕 거의 흰색, 강조색은 고른 버튼에만 */
+.pcz-evx .pcz-two { grid-template-rows: none; align-items: stretch; }
+.pcz-evx .pcz-card, .pcz-evx .pcz-card.is-a, .pcz-evx .pcz-card.is-b { grid-row: auto; display: flex; flex-direction: column; align-items: stretch; gap: 14px; text-align: left; padding: 20px 22px; background: #fff; border: 1px solid #e3e7ec; border-radius: 16px; }
+.pcz-evx .pcz-namebox { justify-items: start; align-self: stretch; gap: 4px; }
+.pcz-evx .pcz-pick b { text-align: left; }
+.pcz-doc { font-size: 15px; color: #7D838B; }
+.pcz-evx .pcz-tiers { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; justify-self: stretch; }
+.pcz-evx .pcz-tiers button { min-height: 40px; padding: 0 4px; border-radius: 10px; font-size: 15px; background: #fff; border: 1px solid #dfe4ea; color: #1f2328; }
+.pcz-evx .pcz-tiers button.is-on { background: #557591; border-color: #557591; color: #fff; }
+.pcz-evx .pcz-opt { background: #fff; }
+.pcz-evx .pcz-price { margin-top: auto; padding: 16px 0 0; border-top: 1px solid #eef1f4; border-radius: 0; background: none; align-self: stretch; }
+@container pb (max-width: 520px) { .pcz-evx .pcz-card { padding: 16px 14px; } .pcz-evx .pcz-tiers { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

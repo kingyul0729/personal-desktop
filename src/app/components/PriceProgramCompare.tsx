@@ -35,6 +35,9 @@ const BOOST = /\s*·\s*리프팅 병행$/;
 const boostName = (p: Program) => p.name.replace(BOOST, '');
 
 export const won = manwon;
+// 이름 끝 '(대표 원장님)' 같은 원장님 괄호는 이름 아래 작은 회색 줄(2026-11-29 사용자 시안 — 이벤트 비교 카드)
+const DOC = /\s*\(([^()]*원장님)\)\s*$/;
+const docSplit = (n?: string): [string, string] => { const m = (n ?? '').match(DOC); return m ? [(n ?? '').replace(DOC, ''), m[1]] : [n ?? '', '']; };
 // 스킨부스터 고르기 = 이름 바로 아래 작은 글자 하나(2026-11-29 사용자 '지저분해' — 상자 없이, 고르면 '+ 힐로웨이브 1회')
 function BoostPick({ list, value, label, onChange }: { list: Program[]; value: string; label: string; onChange: (v: string) => void }) {
   const cur = list.find(x => x.id === value);
@@ -205,7 +208,7 @@ function EventCompare({ programs, lines, onData, cats, onCat }: { programs: Prog
   const rows = onlyDiff ? allRows.filter(rowDiff) : allRows;
   const cell = (c: Cell | null, x: Cell | null) => <td><div className={cellDiff(c, x) ? 'pct-v is-d' : 'pct-v'}>{c ? <><b>{c.count}</b>{c.subs.map((t, k) => <small key={k} className={x?.subs.includes(t) ? undefined : 'is-d'}>{t}</small>)}</> : <b className="is-none">—</b>}</div></td>;
   return <div className="pc-wrap">
-    <div className="pcz pcz-ev">
+    <div className="pcz pcz-ev pcz-evx">
       <div className="pcz-top">
         <label className="pc-cat"><select value={EVENT_CAT} aria-label="탭" onChange={e => onCat(e.target.value)}>{cats.map(c => <option key={c} value={c}>{c}</option>)}</select></label>
         {mon || live.hidden.length ? <label className="pc-cat"><select value={mon} aria-label="달" onChange={e => { setMonth(e.target.value); setEv(''); setOpt(0); }}>
@@ -220,15 +223,18 @@ function EventCompare({ programs, lines, onData, cats, onCat }: { programs: Prog
       <div className="pcz-two">
         <div className="pcz-card is-a">
           <span className="pcz-kind">{mon || '이벤트'}</span>
-          <label className="pcz-pick"><b>{nameView(g?.base)}</b><ChevronDown size={18} /><select value={g?.base ?? ''} aria-label="이벤트" onChange={e => { setEv(e.target.value); setOpt(0); }}>{subs.map(sb => { const os = groups.filter(x => x.sub === sb).map(x => <option key={x.base} value={x.base}>{x.base}</option>); return sb ? <optgroup key={sb} label={sb}>{os}</optgroup> : os; })}</select></label>
-          {g && g.options.length > 1 ? <label className="pcz-opt"><span>{optText(o!, g.options.indexOf(o!))}</span><ChevronDown size={16} /><select value={g.options.indexOf(o!)} aria-label="이벤트 옵션" onChange={e => setOpt(Number(e.target.value))}>{g.options.map((x, k) => <option key={k} value={k}>{optText(x, k)}</option>)}</select></label> : <div className="pcz-opt is-empty" />}
+          <div className="pcz-namebox"><label className="pcz-pick"><b>{nameView(docSplit(g?.base)[0])}</b><ChevronDown size={18} /><select value={g?.base ?? ''} aria-label="이벤트" onChange={e => { setEv(e.target.value); setOpt(0); }}>{subs.map(sb => { const os = groups.filter(x => x.sub === sb).map(x => <option key={x.base} value={x.base}>{x.base}</option>); return sb ? <optgroup key={sb} label={sb}>{os}</optgroup> : os; })}</select></label>
+          {docSplit(g?.base)[1] ? <small className="pcz-doc">{docSplit(g?.base)[1]}</small> : null}</div>
+          {g && g.options.length > 1 ? <label className="pcz-opt"><span>{optText(o!, g.options.indexOf(o!))}</span><ChevronDown size={16} /><select value={g.options.indexOf(o!)} aria-label="이벤트 옵션" onChange={e => setOpt(Number(e.target.value))}>{g.options.map((x, k) => <option key={k} value={k}>{optText(x, k)}</option>)}</select></label> : null}
           <div className="pcz-price"><strong>{won(a?.price ?? null)}</strong><small>부가세 포함</small></div>
         </div>
         <div className="pcz-card is-b">
           <span className="pcz-kind">선결제권 · 전체 프로그램</span>
-          <div className="pcz-namebox"><label className="pcz-pick"><b>{nameView(b0?.name)}</b><ChevronDown size={18} /><select value={b?.id ?? ''} aria-label="프로그램" onChange={e => setPid(e.target.value)}>{otherCats.map(c => <optgroup key={c} label={c}>{others.filter(p => p.category === c).map(p => <option key={p.id} value={p.id}>{svName(p.name)}</option>)}</optgroup>)}</select></label>
-          {b0?.category === '리프팅' && boosters.length ? <BoostPick list={boosters} value={bx?.id ?? ''} label="스킨부스터" onChange={setBst} /> : null}</div>
-          <div className="pcz-tiers" role="group" aria-label="선결제권">{([0, ...TIERS] as (PrepaidTier | 0)[]).map(t => <button key={t} type="button" aria-pressed={tier === t} className={tier === t ? 'is-on' : undefined} onClick={() => setTier(t)}>{t ? `${t}만원권` : '정가'}</button>)}</div>
+          <div className="pcz-namebox"><label className="pcz-pick"><b>{nameView(docSplit(b0?.name)[0])}</b><ChevronDown size={18} /><select value={b?.id ?? ''} aria-label="프로그램" onChange={e => setPid(e.target.value)}>{otherCats.map(c => <optgroup key={c} label={c}>{others.filter(p => p.category === c).map(p => <option key={p.id} value={p.id}>{svName(p.name)}</option>)}</optgroup>)}</select></label>
+          {docSplit(b0?.name)[1] ? <small className="pcz-doc">{docSplit(b0?.name)[1]}</small> : null}</div>
+          <div className="pcz-tiers" role="group" aria-label="선결제권">{([0, ...TIERS] as (PrepaidTier | 0)[]).map(t => <button key={t} type="button" aria-pressed={tier === t} className={tier === t ? 'is-on' : undefined} onClick={() => setTier(t)}>{t ? `${t}만` : '정가'}</button>)}</div>
+          {b0?.category === '리프팅' && boosters.length ? <label className="pcz-opt"><span>{bx ? `${boostName(bx)} · +${won(bx.price ?? null)}` : '스킨부스터 없음'}</span><ChevronDown size={16} /><select value={bx?.id ?? ''} aria-label="스킨부스터" onChange={e => setBst(e.target.value)}>
+            <option value="">스킨부스터 없음</option>{boosters.map(x => <option key={x.id} value={x.id}>{boostName(x)} · +{won(x.price ?? null)}</option>)}</select></label> : null}
           <div className="pcz-price"><strong>{won(bPrice)}</strong><small>{tier && bList != null ? `정가 ${won(bList)} · ` : ''}부가세 포함</small></div>
         </div>
       </div>
