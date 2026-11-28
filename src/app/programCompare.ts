@@ -113,7 +113,7 @@ export function compareRows(aItems?: CompareItem[], bItems?: CompareItem[], opts
   B.forEach((x, j) => {
     if (usedB.has(j)) return;
     let at = 0; for (let k = j - 1; k >= 0; k--) { let r = -1; rows.forEach((row, n) => { if (row.bi === k) r = n; }); if (r >= 0) { at = r + 1; break; } }
-    if (at === 0) { const n = rows.findIndex(row => row.bi != null && row.bi > j); if (n > 0) at = n; } // 앞에 B 줄이 없으면 다음 B 줄 바로 앞(A에만 있는 윗줄 아래)
+    if (at === 0) { const n = rows.findIndex(row => row.bi != null && row.bi > j); at = n < 0 ? rows.length : n; } // 앞에 B 줄이 없으면 다음 B 줄 바로 앞(A에만 있는 윗줄 아래)
     rows.splice(at, 0, { name: x.tokens.join(' + '), a: null, b: { count: countOf(x), subs: subsOf(x, []) }, bi: j });
   });
   // 관리 줄은 늘 맨 아래(사용자 그림)
