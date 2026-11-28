@@ -51,15 +51,13 @@ export function ProgramCompare() {
   const cnt = sizes.length && !lentigoCount(counts) ? { [sizes[0].id]: 1 } : counts;
   const lentigo = lentigoProgram(sizes, cnt, category) as Program | null;
   const list = withLentigo(raw, lentigo);
-  // 리프팅만(2026-11-27 사용자): 왼쪽은 시술 하나(이름에 ' + ' 없음), 오른쪽은 리프팅 두 개(' + ' 있음) 중에서 고름 — 한쪽이 비면 전체
-  const lift = category === '리프팅';
-  const combo = (p: Program) => p.name.includes(' + ');
+  // 리프팅도 왼쪽·오른쪽 모두 전체 프로그램에서 고름(2026-11-28 사용자 '다 보여주는 걸로' — 11-27의 단독 | 조합 나누기 대체)
   // 국산·수입 라인이 둘 다 있는 탭(보톡스·필러, 2026-11-28 사용자 '고정으로 각각 국산 수입'): 왼쪽은 국산, 오른쪽은 수입 — 왼쪽을 바꾸면 오른쪽은 같은 시술의 수입 제품으로
   const kr = (p: Program) => /국산/.test(p.line ?? ''), im = (p: Program) => /수입/.test(p.line ?? '');
   const origin = list.some(kr) && list.some(im);
   const baseOf = (p?: Program) => (p?.name ?? '').replace(/\s*\([^()]*\)$/, '');
-  const listA = origin ? list.filter(kr) : lift && list.some(p => !combo(p)) && list.some(combo) ? list.filter(p => !combo(p)) : list;
-  const listB = origin ? list.filter(im) : listA === list ? list : list.filter(combo);
+  const listA = origin ? list.filter(kr) : list;
+  const listB = origin ? list.filter(im) : list;
   const a = listA.find(p => p.id === pick[0]) ?? listA[0];
   const b = listB.find(p => p.id === pick[1]) ?? (origin ? listB.find(p => baseOf(p) === baseOf(a)) ?? listB[0] : listB === list ? list[1] ?? list[0] : listB[0]);
   // 라인 요약은 서로 다른 라인끼리 비교할 때만(2026-11-26 사용자 '다른 라인끼리면 라인 요약도')
