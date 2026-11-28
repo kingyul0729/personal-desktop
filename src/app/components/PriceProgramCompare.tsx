@@ -38,11 +38,11 @@ export const won = manwon;
 // 이름 끝 '(대표 원장님)' 같은 원장님 괄호는 이름 아래 작은 회색 줄(2026-11-29 사용자 시안 — 이벤트 비교 카드)
 const DOC = /\s*\(([^()]*원장님)\)\s*$/;
 const docSplit = (n?: string): [string, string] => { const m = (n ?? '').match(DOC); return m ? [(n ?? '').replace(DOC, ''), m[1]] : [n ?? '', '']; };
-// 스킨부스터 고르기 = 이름 바로 아래 작은 글자 하나(2026-11-29 사용자 '지저분해' — 상자 없이, 고르면 '+ 힐로웨이브 1회')
-function BoostPick({ list, value, label, onChange }: { list: Program[]; value: string; label: string; onChange: (v: string) => void }) {
+// 스킨부스터 고르기 = 권종·옵션과 같은 상자(2026-11-29 사용자 시안 — '스킨부스터 없음' / '힐로웨이브 1회 · +44만원', 이름 아래 '+ 부스터' 글자 없음)
+function BoostBox({ list, value, label, onChange }: { list: Program[]; value: string; label: string; onChange: (v: string) => void }) {
   const cur = list.find(x => x.id === value);
-  return <label className={cur ? 'pcz-boost is-on' : 'pcz-boost'}><span>{cur ? `+ ${boostName(cur)}` : '+ 스킨부스터'}</span><select value={value} aria-label={label} onChange={e => onChange(e.target.value)}>
-    <option value="">없음</option>{list.map(x => <option key={x.id} value={x.id}>{boostName(x)} · +{won(x.price ?? null)}</option>)}</select></label>;
+  return <label className="pcz-opt"><span>{cur ? `${boostName(cur)} · +${won(cur.price ?? null)}` : '스킨부스터 없음'}</span><ChevronDown size={16} /><select value={value} aria-label={label} onChange={e => onChange(e.target.value)}>
+    <option value="">스킨부스터 없음</option>{list.map(x => <option key={x.id} value={x.id}>{boostName(x)} · +{won(x.price ?? null)}</option>)}</select></label>;
 } // 비교 화면 금액은 모두 만원 단위(2026-11-28 사용자)
 export function ProgramCompare() {
   const [data, setData] = useState<ProgramData | null>(null);
@@ -122,20 +122,21 @@ export function ProgramCompare() {
   const tcell = (c: Cell | null, o: Cell | null) => { const diff = cellDiff(c, o); /* '포함'·'1회'처럼 상세 정도만 다른 칸은 차이 아님 */ return <td><div className={diff ? 'pct-v is-d' : 'pct-v'}>{c ? <><b>{c.count}</b>{c.subs.map((t, k) => <small key={k} className={o?.subs.includes(t) ? undefined : 'is-d'}>{t}</small>)}</> : <b className="is-none">—</b>}</div></td>; };
   const eng = CAT_EN[category];
   return <div className="pc-wrap">
-    <div className="pcz">
+    <div className="pcz pcz-evx">
       <div className="pcz-top">
         <label className="pc-cat"><select value={category} aria-label="탭" onChange={e => { setCat(e.target.value); setPick(['', '']); }}>{cats.map(c => <option key={c} value={c}>{c}</option>)}</select></label>
       </div>
       <header className="pcz-title">{eng && <small>{eng} PROGRAM</small>}<h3><i />{category} 프로그램 비교<i /></h3></header>
       <div className="pcz-two">
         {pair.map((p, i) => <div key={i} className={`pcz-card ${i ? "is-b" : "is-a"}`}>
-          <div className="pcz-namebox"><label className="pcz-pick"><b>{title(p, true)}</b><ChevronDown size={18} /><select value={sel[i]} aria-label={`프로그램 ${i + 1}`} onChange={e => choose(i as 0 | 1, e.target.value)}>{(i ? listB : listA).map(x => <option key={x.id} value={x.id}>{svName(x.name)}</option>)}</select></label>
-          {boosters.length ? <BoostPick list={boosters} value={boost[i]} label={`스킨부스터 ${i + 1}`} onChange={v => setBoost(o => { const n: [string, string] = [o[0], o[1]]; n[i] = v; return n; })} /> : null}</div>
-          <div className="pcz-price">{p?.id === LENTIGO_ID && lt.final == null ? <strong className="is-check">할인 기준 확인 필요</strong> : <><strong>{won(p?.price ?? null)}</strong><small>부가세 포함</small></>}</div>
+          {(() => { const plain = p && p.id !== LENTIGO_ID && !(lmode && addN(p)); const [nm, doc] = plain ? docSplit(p!.name) : ['', '']; return <div className="pcz-namebox"><label className="pcz-pick"><b>{plain ? nameView(nm) : title(p, true)}</b><ChevronDown size={18} /><select value={sel[i]} aria-label={`프로그램 ${i + 1}`} onChange={e => choose(i as 0 | 1, e.target.value)}>{(i ? listB : listA).map(x => <option key={x.id} value={x.id}>{svName(x.name)}</option>)}</select></label>
+          {doc ? <small className="pcz-doc">{doc}</small> : null}</div>; })()}
+          {boosters.length ? <BoostBox list={boosters} value={boost[i]} label={`스킨부스터 ${i + 1}`} onChange={v => setBoost(o => { const n: [string, string] = [o[0], o[1]]; n[i] = v; return n; })} /> : null}
           {p?.id === LENTIGO_ID ? <div className="pcz-note">
             {lt.off ? <span>할인 {Math.round((lt.rate ?? 0) * 100)}% −{won(lt.off)}</span> : null}
             <button type="button" className="pcz-set" aria-expanded={setting} onClick={() => setSetting(v => !v)}>개수·크기 설정</button>
           </div> : null}
+          <div className="pcz-price">{p?.id === LENTIGO_ID && lt.final == null ? <strong className="is-check">할인 기준 확인 필요</strong> : <><strong>{won(p?.price ?? null)}</strong><small>부가세 포함</small></>}</div>
         </div>)}
       </div>
       {lmode && setting && <section className="pcz-box pcz-cnt">
@@ -233,8 +234,7 @@ function EventCompare({ programs, lines, onData, cats, onCat }: { programs: Prog
           <div className="pcz-namebox"><label className="pcz-pick"><b>{nameView(docSplit(b0?.name)[0])}</b><ChevronDown size={18} /><select value={b?.id ?? ''} aria-label="프로그램" onChange={e => setPid(e.target.value)}>{otherCats.map(c => <optgroup key={c} label={c}>{others.filter(p => p.category === c).map(p => <option key={p.id} value={p.id}>{svName(p.name)}</option>)}</optgroup>)}</select></label>
           {docSplit(b0?.name)[1] ? <small className="pcz-doc">{docSplit(b0?.name)[1]}</small> : null}</div>
           <div className="pcz-tiers" role="group" aria-label="선결제권">{([0, ...TIERS] as (PrepaidTier | 0)[]).map(t => <button key={t} type="button" aria-pressed={tier === t} className={tier === t ? 'is-on' : undefined} onClick={() => setTier(t)}>{t ? `${t}만` : '정가'}</button>)}</div>
-          {b0?.category === '리프팅' && boosters.length ? <label className="pcz-opt"><span>{bx ? `${boostName(bx)} · +${won(bx.price ?? null)}` : '스킨부스터 없음'}</span><ChevronDown size={16} /><select value={bx?.id ?? ''} aria-label="스킨부스터" onChange={e => setBst(e.target.value)}>
-            <option value="">스킨부스터 없음</option>{boosters.map(x => <option key={x.id} value={x.id}>{boostName(x)} · +{won(x.price ?? null)}</option>)}</select></label> : null}
+          {b0?.category === '리프팅' && boosters.length ? <BoostBox list={boosters} value={bx?.id ?? ''} label="스킨부스터" onChange={setBst} /> : null}
           <div className="pcz-price"><strong>{won(bPrice)}</strong><small>{tier && bList != null ? `정가 ${won(bList)} · ` : ''}부가세 포함</small></div>
         </div>
       </div>
@@ -265,7 +265,7 @@ function PrepaidCompare({ programs, cats, onCat }: { programs: Program[]; cats: 
   const b = list.find(p => p.id === pick[1]) ?? a; // 처음엔 오른쪽도 같은 프로그램
   const opts = () => groups.map(c => <optgroup key={c} label={c}>{list.filter(p => p.category === c).map(p => <option key={p.id} value={p.id}>{svName(p.name)}</option>)}</optgroup>);
   return <div className="pc-wrap">
-    <div className="pcz pcz-ev">
+    <div className="pcz pcz-ev pcz-evx">
       <div className="pcz-top">
         <label className="pc-cat"><select value={PREPAID_CAT} aria-label="탭" onChange={e => onCat(e.target.value)}>{cats.map(c => <option key={c} value={c}>{c}</option>)}</select></label>
       </div>
@@ -273,14 +273,15 @@ function PrepaidCompare({ programs, cats, onCat }: { programs: Program[]; cats: 
       {!list.length ? <div className="pb-empty">기록 없음</div> : <div className="pcz-two">
         <div className="pcz-card is-a">
           <span className="pcz-kind">전체 프로그램</span>
-          <label className="pcz-pick"><b>{nameView(a?.name)}</b><ChevronDown size={18} /><select value={a?.id ?? ''} aria-label="프로그램 1" onChange={e => setPick(p => [e.target.value, p[1]])}>{opts()}</select></label>
-          <div className="pcz-opt is-empty" />
+          <div className="pcz-namebox"><label className="pcz-pick"><b>{nameView(docSplit(a?.name)[0])}</b><ChevronDown size={18} /><select value={a?.id ?? ''} aria-label="프로그램 1" onChange={e => setPick(p => [e.target.value, p[1]])}>{opts()}</select></label>
+          {docSplit(a?.name)[1] ? <small className="pcz-doc">{docSplit(a?.name)[1]}</small> : null}</div>
           <div className="pcz-price"><strong>{won(a?.price ?? null)}</strong><small>부가세 포함</small></div>
         </div>
         <div className="pcz-card is-b">
           <span className="pcz-kind">선결제권</span>
-          <label className="pcz-pick"><b>{nameView(b?.name)}</b><ChevronDown size={18} /><select value={b?.id ?? ''} aria-label="프로그램 2" onChange={e => setPick(p => [p[0] || (a?.id ?? ''), e.target.value])}>{opts()}</select></label>
-          <div className="pcz-tiers" role="group" aria-label="선결제권">{TIERS.map(t => <button key={t} type="button" aria-pressed={tier === t} className={tier === t ? 'is-on' : undefined} onClick={() => setTier(t)}>{t}만원권</button>)}</div>
+          <div className="pcz-namebox"><label className="pcz-pick"><b>{nameView(docSplit(b?.name)[0])}</b><ChevronDown size={18} /><select value={b?.id ?? ''} aria-label="프로그램 2" onChange={e => setPick(p => [p[0] || (a?.id ?? ''), e.target.value])}>{opts()}</select></label>
+          {docSplit(b?.name)[1] ? <small className="pcz-doc">{docSplit(b?.name)[1]}</small> : null}</div>
+          <div className="pcz-tiers" role="group" aria-label="선결제권">{TIERS.map(t => <button key={t} type="button" aria-pressed={tier === t} className={tier === t ? 'is-on' : undefined} onClick={() => setTier(t)}>{t}만</button>)}</div>
           <div className="pcz-price"><strong>{won(tierPrice(b?.price ?? null, tier))}</strong><small>부가세 포함</small></div>
         </div>
         <div className="pcz-pre-note" />
