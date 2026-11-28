@@ -84,7 +84,7 @@ export function ProgramCompare() {
   const withBoost = (p: Program | undefined, i: 0 | 1): Program | undefined => {
     const x = boosters.find(q => q.id === boost[i]);
     if (!p || !x) return p;
-    return { ...p, price: p.price != null && x.price != null ? p.price + x.price : p.price, items: [...(p.items ?? []), ...(x.items ?? [])], desc: [p.desc, boostDesc(x.desc, LIFT_DEV.filter(d => (p.items ?? []).some(it => it.name.includes(d))))].filter(Boolean).join('\n\n'), boost: boostName(x) } as Program;
+    return { ...p, price: p.price != null && x.price != null ? p.price + x.price : p.price, items: [...(p.items ?? []), ...(x.items ?? [])], desc: boostDesc(x.desc, LIFT_DEV.filter(d => (p.items ?? []).some(it => it.name.includes(d)))) || p.desc, boost: boostName(x) } as Program; // 스킨부스터를 더하면 리프팅 설명 대신 병행 설명만(2026-11-29 사용자 그림)
   };
   const pair = [withBoost(eff(a), 0), withBoost(eff(b), 1)] as const;
   const rows0 = compareRows(view(pair[0])?.items, view(pair[1])?.items, { split: category === '흉터' });
