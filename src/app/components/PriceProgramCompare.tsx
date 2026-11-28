@@ -108,7 +108,7 @@ export function ProgramCompare() {
       <header className="pcz-title">{eng && <small>{eng} PROGRAM</small>}<h3><i />{category} 프로그램 비교<i /></h3></header>
       <div className="pcz-two">
         {pair.map((p, i) => <div key={i} className={`pcz-card ${i ? "is-b" : "is-a"}`}>
-          <label className="pcz-pick"><b>{title(p, true)}</b><ChevronDown size={18} /><select value={sel[i]} aria-label={`프로그램 ${i + 1}`} onChange={e => choose(i as 0 | 1, e.target.value)}>{(i ? listB : listA).map(x => <option key={x.id} value={x.id}>{x.name}</option>)}</select></label>
+          <label className="pcz-pick"><b>{title(p, true)}</b><ChevronDown size={18} /><select value={sel[i]} aria-label={`프로그램 ${i + 1}`} onChange={e => choose(i as 0 | 1, e.target.value)}>{(i ? listB : listA).map(x => <option key={x.id} value={x.id}>{svName(x.name)}</option>)}</select></label>
           <div className="pcz-price">{p?.id === LENTIGO_ID && lt.final == null ? <strong className="is-check">할인 기준 확인 필요</strong> : <><strong>{won(p?.price ?? null)}</strong><small>부가세 포함</small></>}</div>
           {p?.id === LENTIGO_ID ? <div className="pcz-note">
             {lt.off ? <span>할인 {Math.round((lt.rate ?? 0) * 100)}% −{won(lt.off)}</span> : null}
@@ -200,7 +200,7 @@ function EventCompare({ programs, lines, onData, cats, onCat }: { programs: Prog
         </div>
         <div className="pcz-card is-b">
           <span className="pcz-kind">선결제권 · 전체 프로그램</span>
-          <label className="pcz-pick"><b>{nameView(b?.name)}</b><ChevronDown size={18} /><select value={b?.id ?? ''} aria-label="프로그램" onChange={e => setPid(e.target.value)}>{otherCats.map(c => <optgroup key={c} label={c}>{others.filter(p => p.category === c).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</optgroup>)}</select></label>
+          <label className="pcz-pick"><b>{nameView(b?.name)}</b><ChevronDown size={18} /><select value={b?.id ?? ''} aria-label="프로그램" onChange={e => setPid(e.target.value)}>{otherCats.map(c => <optgroup key={c} label={c}>{others.filter(p => p.category === c).map(p => <option key={p.id} value={p.id}>{svName(p.name)}</option>)}</optgroup>)}</select></label>
           <div className="pcz-tiers" role="group" aria-label="선결제권">{([0, ...TIERS] as (PrepaidTier | 0)[]).map(t => <button key={t} type="button" aria-pressed={tier === t} className={tier === t ? 'is-on' : undefined} onClick={() => setTier(t)}>{t ? `${t}만원권` : '정가'}</button>)}</div>
           <div className="pcz-price"><strong>{won(tier ? tierPrice(b?.price ?? null, tier) : b?.price ?? null)}</strong><small>{tier && b?.price != null ? `정가 ${won(b.price)} · ` : ''}부가세 포함</small></div>
         </div>
@@ -230,7 +230,7 @@ function PrepaidCompare({ programs, cats, onCat }: { programs: Program[]; cats: 
   const [pick, setPick] = useState<[string, string]>(['', '']); const [tier, setTier] = useState<PrepaidTier>(300);
   const a = list.find(p => p.id === pick[0]) ?? list[0];
   const b = list.find(p => p.id === pick[1]) ?? a; // 처음엔 오른쪽도 같은 프로그램
-  const opts = () => groups.map(c => <optgroup key={c} label={c}>{list.filter(p => p.category === c).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</optgroup>);
+  const opts = () => groups.map(c => <optgroup key={c} label={c}>{list.filter(p => p.category === c).map(p => <option key={p.id} value={p.id}>{svName(p.name)}</option>)}</optgroup>);
   return <div className="pc-wrap">
     <div className="pcz pcz-ev">
       <div className="pcz-top">
@@ -274,7 +274,9 @@ const descView = (t: string, under = false) => {
 // 편집 목록의 횟수 글자(숫자면 N회, 아니면 적은 글자) — 2026-11-27 빠져서 [편집]이 흰 화면이 되던 것 되살림
 // 이름은 '+ 시술'·'(대표 원장님)' 묶음 사이에서만 줄바꿈(2026-11-27 사용자 '문장 띄어쓰기' — '(대표 / 원장님)'처럼 끊기지 않게)
 // '추가 관리'·흑자 크기 '(1cm 이하)'는 이름 아래 작은 연회색 줄로(2026-11-27 사용자 — 오른쪽 제목이 길어지지 않게)
-const nameView = (n?: string) => { if (!n) return null; const m = n.match(/^(.+?)\s+(추가 관리.*|\([^()]*\dcm[^()]*\))$/); return m ? <>{nameParts(m[1])}<small className="pc-sub">{m[2]}</small></> : nameParts(n); };
+// 이름의 S.V·S/V는 '서비스'로, 끝 괄호에 서비스가 들면 이름 아래 작은 줄로(2026-11-28 사용자 'S/V·S.V·서비스 → 서비스 통일 · 글씨 줄이기')
+export const svName = (n: string) => n.replace(/\bS\s?[./]\s?V\b\.?/g, '서비스');
+const nameView = (n?: string) => { if (!n) return null; n = svName(n); const m = n.match(/^(.+?)\s+(추가 관리.*|\([^()]*\dcm[^()]*\)|\([^()]*서비스[^()]*\))$/); return m ? <>{nameParts(m[1])}<small className="pc-sub">{m[2]}</small></> : nameParts(n); };
 const nameParts = (n?: string) => (n ? n.split(/\s+(?=\+\s|\()/).map((t, k) => <Fragment key={k}>{k ? ' ' : ''}<span className="pc-nw">{t}</span></Fragment>) : null);
 const itemText = (i: { qty: number | null; label?: string }) => (i.qty != null ? `${i.qty}회` : i.label || '포함');
 const CAT_EN: Record<string, string> = { 색소: 'PIGMENT', 홍조: 'REDNESS', 여드름: 'ACNE', 흉터: 'SCAR', 모공: 'PORE', 리프팅: 'LIFTING', 스킨부스터: 'SKIN BOOSTER', 보톡스: 'BOTOX', 필러: 'FILLER', 이벤트: 'EVENT' };

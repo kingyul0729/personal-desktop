@@ -12,7 +12,7 @@ test('user 11-26 밤: 비교 줄 공통 기준 — 같은 조합 한 줄, 한쪽
     [{ name: '레이저A + 비타민', qty: 5 }, { name: '레이저C + 비타민 관리', qty: 5 }],
     [{ name: '레이저A + LDM 트리플', qty: 5 }, { name: '레이저B S.V', qty: 1 }])), [
     '5회 | 레이저A | 5회',
-    '— | 레이저B | 포함 *',
+    '— | 레이저B | 1회 / 서비스 *',
     '5회 | 레이저C | — *',
     '— | LDM 트리플 | 5회 *',
     '10회 | 비타민 관리 | — *',
@@ -26,13 +26,13 @@ test('user 11-26 밤: 비교 줄 공통 기준 — 같은 조합 한 줄, 한쪽
     '10회 | LDM 트리플 | 10회',
   ]);
   // 같은 시술의 서비스 여부는 같은 줄
-  assert.deepEqual(flat(compareRows([{ name: '레이저B', qty: 1 }], [{ name: '레이저B S.V', qty: 1 }])), ['1회 | 레이저B | 포함 *']);
+  assert.deepEqual(flat(compareRows([{ name: '레이저B', qty: 1 }], [{ name: '레이저B S.V', qty: 1 }])), ['1회 | 레이저B | 1회 / 서비스 *']);
   // 한 프로그램 안에서 LDM 단독·병행 → 한 줄 총횟수 + 세부, 다른 쪽 단독만이면 '단독'
   assert.deepEqual(flat(compareRows(
     [{ name: '레이저E + LDM 트리플', qty: 5 }, { name: 'LDM 트리플 단독 관리', qty: 5 }],
     [{ name: 'LDM 트리플 관리', qty: 10 }])), [
     '5회 | 레이저E | — *',
-    '10회 / (레이저E 병행 5) / (단독 5) | LDM 트리플 | 10회 / (단독) *',
+    '10회 | LDM 트리플 | 10회',
   ]);
   // 다른 레이저끼리는 따로, 관리는 같은 줄
   assert.deepEqual(flat(compareRows([{ name: '레이저A + LDM 트리플', qty: 5 }], [{ name: '레이저B + LDM 트리플', qty: 5 }])), [
@@ -48,13 +48,13 @@ test('user 11-27: 리프팅 S.V 관리는 서비스만(단독 아님), 샷 수�
     [{ name: '울쎄라', label: '300샷' }, { name: '올리지오', label: '600샷' }, { name: '스킨보톡스 S.V', qty: 1 }, { name: 'LDM 트리플 S.V', qty: 1 }],
   );
   const ldm = rows.find(r => r.name === 'LDM 트리플');
-  assert.deepEqual(ldm.b, { count: '포함', subs: [] });
+  assert.deepEqual(ldm.b, { count: '1회', subs: ['서비스'] });
   assert.equal(rows.find(r => r.name === '울쎄라').same, true);
 });
 
 test('user 11-27: 한쪽에만 더해진 시술은 각각, S.V는 이름 옆 S/V', () => {
   const rows = compareRows([{ name: '피코프락셀', qty: 5 }], [{ name: '피코프락셀 + CROSS + 서브시전 S.V', qty: 5 }]);
-  assert.deepEqual(rows[0].b.subs, ['+ CROSS', '+ 서브시전 (S.V)']);
+  assert.deepEqual(rows[0].b.subs, ['+ CROSS', '+ 서브시전 서비스']);
   const r2 = compareRows([{ name: '피코프락셀 + CROSS', qty: 5 }], [{ name: '피코프락셀 + CROSS + 서브시전', qty: 5 }]);
   assert.deepEqual(r2[0].b.subs, ['+ 서브시전']);
 });
@@ -62,6 +62,14 @@ test('user 11-27: 한쪽에만 더해진 시술은 각각, S.V는 이름 옆 S/V
 test('user 11-27: 흉터는 더해진 시술을 각각 따로 줄, S.V는 S/V', () => {
   const rows = compareRows([{ name: '피코프락셀', qty: 5 }], [{ name: '피코프락셀 + CROSS + 서브시전 S.V', qty: 5 }, { name: '크라이오 관리 + 모델링팩', qty: 5 }], { split: true });
   assert.deepEqual(rows.map(r => [r.name, r.a?.count ?? '—', r.b?.count ?? '—', (r.b?.subs ?? []).join()]), [
-    ['피코프락셀', '5회', '5회', ''], ['CROSS', '—', '5회', ''], ['서브시전', '—', '5회', '(S.V)'], ['크라이오 관리 + 모델링팩', '—', '5회', ''],
+    ['피코프락셀', '5회', '5회', ''], ['CROSS', '—', '5회', ''], ['서브시전', '—', '5회', '서비스'], ['크라이오 관리 + 모델링팩', '—', '5회', ''],
   ]);
+});
+
+test('user 11-28: 서비스 통일 · 관리 세부 줄 없음 · 이름 끝 (부분)/(전체)는 작은 줄', () => {
+  const rows = compareRows([{ name: '압출 + 스케일링', qty: 2 }, { name: '카프리 레이저 (부분)', qty: 2 }], [{ name: '압출 + 스케일링', qty: 2 }, { name: '카프리 레이저 (얼굴 전체)', qty: 2 }]);
+  const cap = rows.find(r => r.name === '카프리 레이저');
+  assert.deepEqual([cap.a, cap.b], [{ count: '2회', subs: ['부분'] }, { count: '2회', subs: ['전체'] }]);
+  const sv = compareRows([{ name: '스타룩스 1540 S/V', qty: 1 }], [{ name: '스타룩스 1540', qty: 1 }])[0];
+  assert.deepEqual(sv.a, { count: '1회', subs: ['서비스'] });
 });

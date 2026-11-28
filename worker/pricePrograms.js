@@ -85,6 +85,14 @@ export async function handlePrograms(request, env, owner) {
       stmts.push(st(env, 'DELETE FROM price_programs WHERE owner = ? AND category = ?', owner, c), st(env, 'DELETE FROM price_program_lines WHERE owner = ? AND category = ?', owner, c));
       for (const m of [pid, lid]) for (const k of [...m.keys()]) if (k.startsWith(`${c}\u0000`)) m.delete(k);
     }
+    // drop_programs: 같은 탭에 이름만 다른 겹친 줄(예전 이름이 다시 들어간 것)을 지움 — 이 파일에 든 이름은 안 지움(2026-11-28 사용자 '선택 2가지임')
+    const keepNames = new Set(programs.map(p => key(clean(p?.category), clean(p?.name))));
+    for (const d of (Array.isArray(body.drop_programs) ? body.drop_programs : []).slice(0, 100)) {
+      const k = key(clean(d?.category), clean(d?.name));
+      if (!clean(d?.name) || keepNames.has(k) || !pid.has(k)) continue;
+      stmts.push(st(env, 'DELETE FROM price_programs WHERE id = ? AND owner = ?', pid.get(k), owner));
+      pid.delete(k);
+    }
     lines.forEach((l, i) => {
       const category = clean(l?.category), name = clean(l?.name), feature = clean(l?.feature, TEXT), fit = clean(l?.fit, TEXT);
       if (!category || !name) return;
