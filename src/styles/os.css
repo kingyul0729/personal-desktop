@@ -3717,3 +3717,22 @@ button.iv-pinv { cursor: zoom-in; }
 .pcz-evx .pcz-two { grid-template-rows: none; align-items: stretch; }
 .pcz-evx .pcz-card .pcz-note { align-self: flex-start; }
 .pcz-evx .pcz-pre-note { margin-top: 0; }
+
+/* 프로그램 고르기 팝업(2026-11-29 사용자 — 검은 기본 드롭다운 대신 흰 선택 팝업, `ProgramPicker`): 카드 바로 아래, 목록만 안에서 스크롤 */
+button.pcz-pick { border: 0; background: none; padding: 0; font: inherit; text-align: left; }
+.pp-scrim { position: fixed; inset: 0; z-index: 900; background: transparent; }
+.pp-pop { position: fixed; z-index: 901; display: flex; flex-direction: column; min-height: 0; background: #fff; border: 1px solid #dfe4ea; border-radius: 16px; box-shadow: 0 12px 32px rgba(31, 35, 40, .12); padding: 14px 14px 10px; font-family: Inter, Pretendard, "Noto Sans KR", system-ui, sans-serif; color: #1f2328; }
+.pp-head { display: flex; align-items: center; justify-content: space-between; padding: 2px 4px 10px; }
+.pp-head b { font-size: 17px; font-weight: 700; }
+.pp-head button { width: 36px; height: 36px; display: grid; place-items: center; border: 0; background: none; border-radius: 999px; color: #7D838B; cursor: pointer; }
+.pp-row { display: flex; gap: 6px; padding: 0 0 10px; overflow-x: auto; flex: none; scrollbar-width: none; }
+.pp-row::-webkit-scrollbar { display: none; }
+.pp-row button { flex: none; min-height: 38px; padding: 0 14px; border: 1px solid #e3e7ec; border-radius: 999px; background: #fff; font: inherit; font-size: 15px; color: #4b5259; white-space: nowrap; cursor: pointer; }
+.pp-row button.is-on { background: #ecf1f6; border-color: #c9d6e3; color: #44617c; font-weight: 700; }
+.pp-cats button { font-size: 14px; min-height: 34px; }
+.pp-two { display: grid; grid-template-columns: 1fr 1fr; }
+.pp-list { list-style: none; margin: 0; padding: 0; overflow-y: auto; min-height: 0; flex: 1 1 auto; border-top: 1px solid #eef1f4; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
+.pp-list li + li { border-top: 1px solid #f1f3f5; }
+.pp-list button { width: 100%; min-height: 50px; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; border: 0; background: none; font: inherit; font-size: 16px; color: #1f2328; text-align: left; word-break: keep-all; cursor: pointer; border-radius: 10px; }
+.pp-list button.is-on { font-weight: 700; color: #44617c; background: #f5f8fb; }
+.pp-list button svg { flex: none; color: #557591; }

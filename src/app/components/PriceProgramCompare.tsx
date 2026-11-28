@@ -3,6 +3,7 @@ import { ChevronDown, Minus, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { KittyDialog } from './KittyDialog';
 import { askConfirm } from './AlertDialog';
 import { SavingMark } from './Feedback';
+import { ProgramPicker } from './ProgramPicker';
 import { LIFT_DEV, boostDesc, compareRows, type Cell } from '../programCompare';
 import { EVENT_CAT, PREPAID_CAT, HIDDEN, TIERS, cellDiff, eventGroups, includeOnly, liveEvents, manwon, rowDiff, sameAll, tierPrice } from '../eventCompare';
 import { prepaidDiscountRates, type PrepaidTier } from '../prepaid';
@@ -129,7 +130,7 @@ export function ProgramCompare() {
       <header className="pcz-title">{eng && <small>{eng} PROGRAM</small>}<h3><i />{category} 프로그램 비교<i /></h3></header>
       <div className="pcz-two">
         {pair.map((p, i) => <div key={i} className={`pcz-card ${i ? "is-b" : "is-a"}`}>
-          {(() => { const plain = p && p.id !== LENTIGO_ID && !(lmode && addN(p)); const [nm, doc] = plain ? docSplit(p!.name) : ['', '']; return <div className="pcz-namebox"><label className="pcz-pick"><b>{plain ? nameView(nm) : title(p, true)}</b><ChevronDown size={18} /><select value={sel[i]} aria-label={`프로그램 ${i + 1}`} onChange={e => choose(i as 0 | 1, e.target.value)}>{(i ? listB : listA).map(x => <option key={x.id} value={x.id}>{svName(x.name)}</option>)}</select></label>
+          {(() => { const plain = p && p.id !== LENTIGO_ID && !(lmode && addN(p)); const [nm, doc] = plain ? docSplit(p!.name) : ['', '']; return <div className="pcz-namebox"><ProgramPicker label={`프로그램 ${i + 1}`} value={sel[i]} onChange={v => choose(i as 0 | 1, v)} show={svName} options={(i ? listB : listA).map(x => ({ id: x.id, name: x.name }))}><b>{plain ? nameView(nm) : title(p, true)}</b></ProgramPicker>
           {doc ? <small className="pcz-doc">{doc}</small> : null}</div>; })()}
           {boosters.length ? <BoostBox list={boosters} value={boost[i]} label={`스킨부스터 ${i + 1}`} onChange={v => setBoost(o => { const n: [string, string] = [o[0], o[1]]; n[i] = v; return n; })} /> : null}
           {p?.id === LENTIGO_ID ? <div className="pcz-note">
@@ -224,14 +225,14 @@ function EventCompare({ programs, lines, onData, cats, onCat }: { programs: Prog
       <div className="pcz-two">
         <div className="pcz-card is-a">
           <span className="pcz-kind">{mon || '이벤트'}</span>
-          <div className="pcz-namebox"><label className="pcz-pick"><b>{nameView(docSplit(g?.base)[0])}</b><ChevronDown size={18} /><select value={g?.base ?? ''} aria-label="이벤트" onChange={e => { setEv(e.target.value); setOpt(0); }}>{subs.map(sb => { const os = groups.filter(x => x.sub === sb).map(x => <option key={x.base} value={x.base}>{x.base}</option>); return sb ? <optgroup key={sb} label={sb}>{os}</optgroup> : os; })}</select></label>
+          <div className="pcz-namebox"><ProgramPicker label="이벤트" value={g?.base ?? ''} onChange={v => { setEv(v); setOpt(0); }} options={subs.flatMap(sb => groups.filter(x => x.sub === sb).map(x => ({ id: x.base, name: x.base, cat: sb })))}><b>{nameView(docSplit(g?.base)[0])}</b></ProgramPicker>
           {docSplit(g?.base)[1] ? <small className="pcz-doc">{docSplit(g?.base)[1]}</small> : null}</div>
           {g && g.options.length > 1 ? <label className="pcz-opt"><span>{optText(o!, g.options.indexOf(o!))}</span><ChevronDown size={16} /><select value={g.options.indexOf(o!)} aria-label="이벤트 옵션" onChange={e => setOpt(Number(e.target.value))}>{g.options.map((x, k) => <option key={k} value={k}>{optText(x, k)}</option>)}</select></label> : null}
           <div className="pcz-price"><strong>{won(a?.price ?? null)}</strong><small>부가세 포함</small></div>
         </div>
         <div className="pcz-card is-b">
           <span className="pcz-kind">선결제권 · 전체 프로그램</span>
-          <div className="pcz-namebox"><label className="pcz-pick"><b>{nameView(docSplit(b0?.name)[0])}</b><ChevronDown size={18} /><select value={b?.id ?? ''} aria-label="프로그램" onChange={e => setPid(e.target.value)}>{otherCats.map(c => <optgroup key={c} label={c}>{others.filter(p => p.category === c).map(p => <option key={p.id} value={p.id}>{svName(p.name)}</option>)}</optgroup>)}</select></label>
+          <div className="pcz-namebox"><ProgramPicker label="프로그램" value={b0?.id ?? ''} onChange={setPid} show={svName} options={otherCats.flatMap(c => others.filter(p => p.category === c).map(p => ({ id: p.id, name: p.name, cat: c })))}><b>{nameView(docSplit(b0?.name)[0])}</b></ProgramPicker>
           {docSplit(b0?.name)[1] ? <small className="pcz-doc">{docSplit(b0?.name)[1]}</small> : null}</div>
           <div className="pcz-tiers" role="group" aria-label="선결제권">{([0, ...TIERS] as (PrepaidTier | 0)[]).map(t => <button key={t} type="button" aria-pressed={tier === t} className={tier === t ? 'is-on' : undefined} onClick={() => setTier(t)}>{t ? `${t}만` : '정가'}</button>)}</div>
           {b0?.category === '리프팅' && boosters.length ? <BoostBox list={boosters} value={bx?.id ?? ''} label="스킨부스터" onChange={setBst} /> : null}
@@ -263,7 +264,7 @@ function PrepaidCompare({ programs, cats, onCat }: { programs: Program[]; cats: 
   const [pick, setPick] = useState<[string, string]>(['', '']); const [tier, setTier] = useState<PrepaidTier>(300);
   const a = list.find(p => p.id === pick[0]) ?? list[0];
   const b = list.find(p => p.id === pick[1]) ?? a; // 처음엔 오른쪽도 같은 프로그램
-  const opts = () => groups.map(c => <optgroup key={c} label={c}>{list.filter(p => p.category === c).map(p => <option key={p.id} value={p.id}>{svName(p.name)}</option>)}</optgroup>);
+  const popts = groups.flatMap(c => list.filter(p => p.category === c).map(p => ({ id: p.id, name: p.name, cat: c })));
   return <div className="pc-wrap">
     <div className="pcz pcz-ev pcz-evx">
       <div className="pcz-top">
@@ -273,13 +274,13 @@ function PrepaidCompare({ programs, cats, onCat }: { programs: Program[]; cats: 
       {!list.length ? <div className="pb-empty">기록 없음</div> : <div className="pcz-two">
         <div className="pcz-card is-a">
           <span className="pcz-kind">전체 프로그램</span>
-          <div className="pcz-namebox"><label className="pcz-pick"><b>{nameView(docSplit(a?.name)[0])}</b><ChevronDown size={18} /><select value={a?.id ?? ''} aria-label="프로그램 1" onChange={e => setPick(p => [e.target.value, p[1]])}>{opts()}</select></label>
+          <div className="pcz-namebox"><ProgramPicker label="프로그램 1" value={a?.id ?? ''} onChange={v => setPick(p => [v, p[1]])} show={svName} options={popts}><b>{nameView(docSplit(a?.name)[0])}</b></ProgramPicker>
           {docSplit(a?.name)[1] ? <small className="pcz-doc">{docSplit(a?.name)[1]}</small> : null}</div>
           <div className="pcz-price"><strong>{won(a?.price ?? null)}</strong><small>부가세 포함</small></div>
         </div>
         <div className="pcz-card is-b">
           <span className="pcz-kind">선결제권</span>
-          <div className="pcz-namebox"><label className="pcz-pick"><b>{nameView(docSplit(b?.name)[0])}</b><ChevronDown size={18} /><select value={b?.id ?? ''} aria-label="프로그램 2" onChange={e => setPick(p => [p[0] || (a?.id ?? ''), e.target.value])}>{opts()}</select></label>
+          <div className="pcz-namebox"><ProgramPicker label="프로그램 2" value={b?.id ?? ''} onChange={v => setPick(p => [p[0] || (a?.id ?? ''), v])} show={svName} options={popts}><b>{nameView(docSplit(b?.name)[0])}</b></ProgramPicker>
           {docSplit(b?.name)[1] ? <small className="pcz-doc">{docSplit(b?.name)[1]}</small> : null}</div>
           <div className="pcz-tiers" role="group" aria-label="선결제권">{TIERS.map(t => <button key={t} type="button" aria-pressed={tier === t} className={tier === t ? 'is-on' : undefined} onClick={() => setTier(t)}>{t}만</button>)}</div>
           <div className="pcz-price"><strong>{won(tierPrice(b?.price ?? null, tier))}</strong><small>부가세 포함</small></div>
