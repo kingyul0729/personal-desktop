@@ -2,7 +2,7 @@
 // ① 같은 시술·관리 조합은 한 줄, 두 프로그램이 같이 하는 조합은 가운데 이름에 묶어 적음
 // ② 한쪽에만 더해지는 레이저·관리는 그쪽 횟수 아래 '+ 이름'
 // ③ 관리(LDM 트리플·비타민 관리)는 레이저에서 떼어 맨 아래 따로 한 줄(총횟수), 단독·병행이 함께면 아래 세부('○○ 병행 5 · 단독 5')
-// ④ 서비스(이름 끝 'S.V')는 같은 시술 줄에서 횟수 아래 '(S.V)' — 작은 줄 표기는 모두 괄호 '(S.V)'(2026-11-28 사용자 '규칙있게')
+// ④ 서비스(이름 끝 'S.V')는 같은 시술 줄에서 횟수 대신 '포함'(11-28) — 작은 줄 표기는 모두 괄호 '(S.V)'(2026-11-28 사용자 '규칙있게')
 // 특정 프로그램 이름을 보지 않고 시술 이름만으로 정함 — 어떤 두 프로그램이든 같은 규칙.
 export type CompareItem = { name: string; qty: number | null; label?: string };
 type Entry = { tokens: string[]; qty: number | null; label?: string; service: boolean; sv: string[]; solo: boolean; detail?: string };
@@ -14,6 +14,9 @@ const SUPPORT = CARE; // 관리만 겹치는 조합끼리는 한 줄로 묶지 �
 const SV = /\s+S\.?\s?V\.?$/i;
 const norm = (t: string) => (t === '비타민' ? '비타민 관리' : /^LDM 트리플( 단독)?( 관리)?$/.test(t) ? 'LDM 트리플' : t);
 const countText = (e: { qty: number | null; label?: string }) => (e.qty != null ? `${e.qty}회` : e.label || '포함');
+// 서비스(S.V) 시술은 횟수 대신 '포함'(2026-11-28 사용자 그림 '1회 서비스' → '포함') — 한쪽에만 더해진 시술은 '+ 이름 (S.V)' 그대로
+const svOwn = (e: Entry, extra: string[]) => e.service && e.sv.some(t => !extra.includes(t));
+const countOf = (e: Entry, extra: string[] = []) => (svOwn(e, extra) ? '포함' : countText(e));
 const sumInto = (to: Entry, x: { qty: number | null; label?: string }) => {
   if (to.qty != null && x.qty != null) to.qty += x.qty;
   else if (to.qty == null && x.qty != null) { to.qty = x.qty; delete to.label; }
@@ -62,7 +65,6 @@ export function entriesOf(items: CompareItem[] = []): Entry[] {
 
 const subsOf = (e: Entry, extra: string[]) => [
   ...extra.map(t => `+ ${t}${e.sv.includes(t) ? ' (S.V)' : ''}`), // 한쪽에만 더해진 시술의 S.V는 이름 옆 '(S.V)'(2026-11-27 사용자 '서브시전은 S/V 유무 표기', 11-28 괄호로 통일)
-  ...(e.service && e.sv.some(t => !extra.includes(t)) ? ['(S.V)'] : []),
   ...(e.detail ? e.detail.split(' · ') : e.solo ? ['단독'] : []).map(t => `(${t})`), // 횟수 아래 작은 줄은 모두 괄호(2026-11-28 사용자 '규칙있게')
 ];
 const cellText = (c: Cell | null) => (c ? [c.count, ...c.subs].join('/') : '—');
@@ -97,16 +99,16 @@ export function compareRows(aItems?: CompareItem[], bItems?: CompareItem[], opts
         return all.map((t, k) => ({ name: t, a: cell(e, t), b: cell(x, t), bi: j }));
       }
     }
-    if (j == null) return [{ name: e.tokens.join(' + '), a: { count: countText(e), subs: subsOf(e, []) }, b: null }];
+    if (j == null) return [{ name: e.tokens.join(' + '), a: { count: countOf(e), subs: subsOf(e, []) }, b: null }];
     const x = B[j], common = e.tokens.filter(t => x.tokens.includes(t));
-    return [{ name: common.join(' + '), a: { count: countText(e), subs: subsOf(e, e.tokens.filter(t => !common.includes(t))) },
-      b: { count: countText(x), subs: subsOf(x, x.tokens.filter(t => !common.includes(t))) }, bi: j }];
+    return [{ name: common.join(' + '), a: { count: countOf(e, e.tokens.filter(t => !common.includes(t))), subs: subsOf(e, e.tokens.filter(t => !common.includes(t))) },
+      b: { count: countOf(x, x.tokens.filter(t => !common.includes(t))), subs: subsOf(x, x.tokens.filter(t => !common.includes(t))) }, bi: j }];
   });
   // B에만 있는 줄은 B에서 바로 앞 줄 다음에 — 두 프로그램 순서를 모두 지킴
   B.forEach((x, j) => {
     if (usedB.has(j)) return;
     let at = 0; for (let k = j - 1; k >= 0; k--) { let r = -1; rows.forEach((row, n) => { if (row.bi === k) r = n; }); if (r >= 0) { at = r + 1; break; } }
-    rows.splice(at, 0, { name: x.tokens.join(' + '), a: null, b: { count: countText(x), subs: subsOf(x, []) }, bi: j });
+    rows.splice(at, 0, { name: x.tokens.join(' + '), a: null, b: { count: countOf(x), subs: subsOf(x, []) }, bi: j });
   });
   // 관리 줄은 늘 맨 아래(사용자 그림)
   const isCare = (r: R) => CARE.has(r.name);
